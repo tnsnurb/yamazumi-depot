@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yamazumi — Журнал перемещений</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <header class="app-header">
+        <div class="header-left">
+            <h1 class="header-title">📋 Журнал перемещений</h1>
+        </div>
+        <div class="header-right">
+            <a href="/map.html" class="btn-icon" title="Карта депо">🗺️</a>
+            <button class="btn-icon" onclick="exportJournal()" title="Экспорт">📥</button>
+            <div class="user-info">
+                <span id="userName">—</span>
+                <button class="btn-icon" onclick="logout()" title="Выход">🚪</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="journal-container">
+        <div class="journal-filters">
+            <input type="text" id="filterLoco" placeholder="Номер локомотива..." oninput="applyFilters()">
+            <select id="filterAction" onchange="applyFilters()">
+                <option value="">Все действия</option>
+                <option value="add">Добавление</option>
+                <option value="move">Перемещение</option>
+                <option value="remove">Удаление</option>
+            </select>
+            <button class="btn-secondary" onclick="loadMovements()">🔄 Обновить</button>
+        </div>
+
+        <div class="journal-table-wrapper">
+            <table class="journal-table">
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>Дата / Время</th>
+                        <th>Локомотив</th>
+                        <th>Действие</th>
+                        <th>Откуда</th>
+                        <th>Куда</th>
+                        <th>Пользователь</th>
+                    </tr>
+                </thead>
+                <tbody id="journalBody">
+                    <tr>
+                        <td colspan="7" class="loading-cell">Загрузка...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="journal-pagination">
+            <button class="btn-secondary" id="prevBtn" onclick="prevPage()" disabled>← Назад</button>
+            <span id="pageInfo">Страница 1</span>
+            <button class="btn-secondary" id="nextBtn" onclick="nextPage()">Вперёд →</button>
+        </div>
+    </main>
+
+    <footer class="app-footer">
+        <span>© 2026 Yamazumi Locomotive Depot. All rights reserved.</span>
+    </footer>
+
+    <script src="/js/journal.js"></script>
+</body>
+
+</html>
