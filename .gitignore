@@ -1,7 +1,5 @@
 node_modules/
 .env
-dist/
-.DS_Store
-frontend/node_modules/
+*.log
 frontend/dist/
-frontend/.env
+.DS_Store
