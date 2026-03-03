@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { Header } from "@/components/common/Header"
-import { Trash2, Plus, Edit, KeyRound, ShieldAlert, FileDown, Upload, BookOpen, Search, Wrench, Lock, ArrowDown, ArrowUp, Activity, Loader2, MapPin, Warehouse } from "lucide-react"
+import { Trash2, Plus, Edit, KeyRound, ShieldAlert, FileDown, Upload, BookOpen, Search, Wrench, Lock, ArrowDown, ArrowUp, Activity, Loader2, MapPin, Warehouse, ClipboardList } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -23,6 +22,8 @@ interface User {
     barcode?: string
     is_active?: boolean
     location_id?: number | null
+    specialization?: string | null
+    total_points?: number
 }
 
 interface Role {
@@ -52,6 +53,16 @@ interface AuditLog {
     user: { username: string, full_name: string, locations?: { name: string } }
 }
 
+interface RemarkTemplate {
+    id: number
+    text: string
+    specialization: string
+    priority: string
+    category: string
+    estimated_hours: number | null
+    usage_count: number
+}
+
 const PERMISSIONS = [
     { key: 'can_view_map', label: 'Карта Депо', desc: 'Доступ к просмотру локомотивов на путях' },
     { key: 'can_view_journal', label: 'Просмотр Журнала', desc: 'Просмотр истории перемещений' },
@@ -60,6 +71,15 @@ const PERMISSIONS = [
     { key: 'can_complete_remarks', label: 'Работа с Замечаниями', desc: 'Разрешено отмечать замечания как устраненные' },
     { key: 'can_edit_catalog', label: 'Справочник Локомотивов', desc: 'Управление записями в справочнике' },
     { key: 'can_manage_users', label: 'Управление Пользователями', desc: 'Настройка профилей, ролей и прав' },
+] as const;
+
+const SPECIALIZATIONS = [
+    { value: "none", label: "Нет специализации" },
+    { value: "Электрик", label: "Электрик" },
+    { value: "Ходовик", label: "Ходовик" },
+    { value: "Автоматчик", label: "Автоматчик" },
+    { value: "Дизелист", label: "Дизелист" },
+    { value: "Обтирщик", label: "Обтирщик" },
 ] as const;
 export default function Admin() {
     const navigate = useNavigate()
@@ -77,6 +97,7 @@ export default function Admin() {
                 fetchRepairTypes()
                 fetchAuditLogs()
                 fetchLocations()
+                fetchRemarkTemplates()
             }
         })
     }, [navigate])
@@ -175,6 +196,7 @@ export default function Admin() {
     const [addRole, setAddRole] = useState("employee")
     const [addBarcode, setAddBarcode] = useState("")
     const [addLocationId, setAddLocationId] = useState<string>("1")
+    const [addSpecialization, setAddSpecialization] = useState("none")
 
     const [editUsername, setEditUsername] = useState("")
     const [editFullName, setEditFullName] = useState("")
@@ -183,6 +205,8 @@ export default function Admin() {
     const [editIsActive, setEditIsActive] = useState(true)
     const [editPassword, setEditPassword] = useState("")
     const [editLocationId, setEditLocationId] = useState<string>("1")
+    const [editSpecialization, setEditSpecialization] = useState("none")
+    const [editPoints, setEditPoints] = useState<number>(0)
 
     const [adminUser, setAdminUser] = useState<any>(null)
 
@@ -247,6 +271,26 @@ export default function Admin() {
     const [logsPage, setLogsPage] = useState(1)
     const LOGS_PER_PAGE = 20
 
+    // --- REMARK TEMPLATES STATE ---
+    const [remarkTemplates, setRemarkTemplates] = useState<RemarkTemplate[]>([])
+    const [isLoadingTemplates, setIsLoadingTemplates] = useState(true)
+    const [templateSearch, setTemplateSearch] = useState("")
+
+    const [isAddTemplateOpen, setIsAddTemplateOpen] = useState(false)
+    const [addTemplateText, setAddTemplateText] = useState("")
+    const [addTemplateSpecialization, setAddTemplateSpecialization] = useState("none")
+    const [addTemplatePriority, setAddTemplatePriority] = useState("medium")
+    const [addTemplateCategory, setAddTemplateCategory] = useState("")
+    const [addTemplateHours, setAddTemplateHours] = useState("")
+
+    const [isEditTemplateOpen, setIsEditTemplateOpen] = useState(false)
+    const [editTemplateData, setEditTemplateData] = useState<RemarkTemplate | null>(null)
+    const [editTemplateText, setEditTemplateText] = useState("")
+    const [editTemplateSpecialization, setEditTemplateSpecialization] = useState("none")
+    const [editTemplatePriority, setEditTemplatePriority] = useState("medium")
+    const [editTemplateCategory, setEditTemplateCategory] = useState("")
+    const [editTemplateHours, setEditTemplateHours] = useState("")
+
     // ================================= FETCHERS =================================
 
     const fetchUsers = async () => {
@@ -289,6 +333,85 @@ export default function Admin() {
         fetchAuditLogs(logsPage)
     }, [logsPage])
 
+    const fetchRemarkTemplates = async () => {
+        setIsLoadingTemplates(true)
+        const res = await fetch('/api/remark-templates')
+        if (res.ok) setRemarkTemplates(await res.json())
+        setIsLoadingTemplates(false)
+    }
+
+    const handleCreateTemplate = async (e: React.FormEvent) => {
+        e.preventDefault()
+        try {
+            console.log("Creating template with:", { addTemplateText, addTemplateSpecialization, addTemplatePriority, addTemplateCategory, addTemplateHours });
+            const res = await fetch('/api/remark-templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: addTemplateText,
+                    specialization: addTemplateSpecialization,
+                    priority: addTemplatePriority,
+                    category: addTemplateCategory,
+                    estimated_hours: parseFloat(addTemplateHours) || null
+                })
+            })
+            if (res.ok) {
+                toast.success('Шаблон добавлен')
+                setIsAddTemplateOpen(false)
+                setAddTemplateText(""); setAddTemplateSpecialization("none"); setAddTemplatePriority("medium"); setAddTemplateCategory(""); setAddTemplateHours("")
+                fetchRemarkTemplates()
+            } else {
+                const err = await res.json()
+                toast.error(err.error || 'Ошибка добавления')
+            }
+        } catch (error: any) {
+            console.error("Create template error:", error);
+            toast.error(`Сетевая ошибка при добавлении: ${error.name} - ${error.message}`)
+        }
+    }
+
+    const handleUpdateTemplate = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!editTemplateData) return
+        try {
+            console.log("Updating template with:", { editTemplateText, editTemplateSpecialization, editTemplatePriority, editTemplateCategory, editTemplateHours });
+            const res = await fetch(`/api/remark-templates/${editTemplateData.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: editTemplateText,
+                    specialization: editTemplateSpecialization,
+                    priority: editTemplatePriority,
+                    category: editTemplateCategory,
+                    estimated_hours: parseFloat(editTemplateHours) || null
+                })
+            })
+            if (res.ok) {
+                toast.success('Шаблон обновлен')
+                setIsEditTemplateOpen(false)
+                fetchRemarkTemplates()
+            } else {
+                const err = await res.json()
+                toast.error(err.error || 'Ошибка обновления')
+            }
+        } catch (error: any) {
+            console.error("Update template error:", error);
+            toast.error(`Сетевая ошибка при обновлении: ${error.name} - ${error.message}`)
+        }
+    }
+
+    const handleDeleteTemplate = async (id: number, text: string) => {
+        if (!confirm(`Удалить шаблон "${text}"?`)) return
+        const res = await fetch(`/api/remark-templates/${id}`, { method: 'DELETE' })
+        if (res.ok) {
+            toast.success('Шаблон удален')
+            fetchRemarkTemplates()
+        } else {
+            const err = await res.json()
+            toast.error(err.error || 'Ошибка удаления')
+        }
+    }
+
     // ================================= USERS ACTIONS =================================
 
     const handleCreateUser = async (e: React.FormEvent) => {
@@ -299,7 +422,8 @@ export default function Admin() {
             password: addPassword,
             role: addRole,
             barcode: addBarcode,
-            location_id: parseInt(addLocationId) || 1
+            location_id: parseInt(addLocationId) || 1,
+            specialization: addSpecialization || null
         }
         const res = await fetch('/api/users', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
@@ -308,7 +432,7 @@ export default function Admin() {
             toast.success('Пользователь создан')
             setIsAddUserOpen(false)
             fetchUsers()
-            setAddUsername(""); setAddFullName(""); setAddPassword(""); setAddRole("employee"); setAddBarcode(""); setAddLocationId("1")
+            setAddUsername(""); setAddFullName(""); setAddPassword(""); setAddRole("employee"); setAddBarcode(""); setAddLocationId("1"); setAddSpecialization("")
         } else {
             const err = await res.json()
             toast.error(err.error || 'Ошибка создания')
@@ -323,6 +447,8 @@ export default function Admin() {
         setEditBarcode(u.barcode || "")
         setEditIsActive(u.is_active !== false)
         setEditLocationId(u.location_id?.toString() || "1")
+        setEditSpecialization(u.specialization || "")
+        setEditPoints(u.total_points || 0)
         setEditPassword("")
         setIsEditUserOpen(true)
     }
@@ -337,7 +463,9 @@ export default function Admin() {
             role: editRole,
             barcode: editBarcode,
             is_active: editIsActive,
-            location_id: parseInt(editLocationId) || 1
+            location_id: parseInt(editLocationId) || 1,
+            specialization: editSpecialization || null,
+            total_points: editPoints
         }
         if (editPassword) payload.password = editPassword
 
@@ -560,10 +688,8 @@ export default function Admin() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <Header />
-
-            <main className="flex-1 p-3 md:p-6 flex flex-col items-center overflow-x-hidden">
+        <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
+            <main className="flex-1 w-full p-3 md:p-6 flex flex-col items-center">
                 <div className="w-full max-w-6xl space-y-4 md:space-y-6">
                     <div className="flex justify-between items-center">
                         <h1 className="text-xl md:text-2xl font-bold text-slate-900 border-b-2 border-indigo-500 pb-1 pr-4 inline-block">
@@ -575,6 +701,7 @@ export default function Admin() {
                         <div className="overflow-x-auto pb-2 scrollbar-none">
                             <TabsList className="mb-2 w-max min-w-full justify-start md:w-full md:justify-center">
                                 <TabsTrigger value="users" className="flex items-center gap-2"><KeyRound className="w-4 h-4" /> <span className="hidden sm:inline">Сотрудники</span><span className="sm:hidden">Люди</span></TabsTrigger>
+                                <TabsTrigger value="remarkTemplates" className="flex items-center gap-2"><ClipboardList className="w-4 h-4" /> <span className="hidden sm:inline">Шаблоны замечаний</span><span className="sm:hidden">Шаблоны</span></TabsTrigger>
                                 <TabsTrigger value="roles" className="flex items-center gap-2"><ShieldAlert className="w-4 h-4" /> <span className="hidden sm:inline">Роли</span><span className="sm:hidden">Роли</span></TabsTrigger>
                                 <TabsTrigger value="catalog" className="flex items-center gap-2"><BookOpen className="w-4 h-4" /> <span className="hidden sm:inline">Справочник номеров</span><span className="sm:hidden">Номера</span></TabsTrigger>
                                 <TabsTrigger value="repairTypes" className="flex items-center gap-2"><Wrench className="w-4 h-4" /> <span className="hidden sm:inline">Типы ремонта</span><span className="sm:hidden">Ремонт</span></TabsTrigger>
@@ -645,6 +772,11 @@ export default function Admin() {
                                                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] md:text-xs font-medium border ${u.role === 'admin' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                                                                 {roles.find(r => r.name === u.role)?.description || u.role}
                                                             </span>
+                                                            {u.specialization && (
+                                                                <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] md:text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200">
+                                                                    {u.specialization}
+                                                                </span>
+                                                            )}
                                                         </TableCell>
                                                         <TableCell className="font-mono text-[10px] md:text-xs text-slate-500 px-2 md:px-4">{u.barcode || '—'}</TableCell>
                                                         <TableCell className="text-slate-500 text-xs px-2 md:px-4 whitespace-nowrap">{new Date(u.created_at).toLocaleDateString('ru-RU')}</TableCell>
@@ -838,6 +970,88 @@ export default function Admin() {
                             </div>
                         </TabsContent>
 
+                        {/* REMARK TEMPLATES TAB */}
+                        <TabsContent value="remarkTemplates" className="space-y-4 outline-none">
+                            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-white p-3 md:p-4 rounded-xl shadow-sm border border-slate-200">
+                                <div className="w-full sm:flex-1 sm:max-w-xs relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <Input placeholder="Поиск в шаблонах..." value={templateSearch} onChange={e => setTemplateSearch(e.target.value)} className="pl-9 h-9" />
+                                </div>
+                                <Button onClick={() => setIsAddTemplateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 gap-2 h-9 text-xs sm:ml-auto">
+                                    <Plus className="w-4 h-4" /> Добавить шаблон
+                                </Button>
+                            </div>
+
+                            <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                <div className="overflow-x-auto scrollbar-thin">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-slate-50">
+                                                <TableHead className="w-16 px-2 md:px-4">ID</TableHead>
+                                                <TableHead className="px-2 md:px-4">Текст замечания</TableHead>
+                                                <TableHead className="px-2 md:px-4">Специализация</TableHead>
+                                                <TableHead className="px-2 md:px-4">Приоритет</TableHead>
+                                                <TableHead className="px-2 md:px-4">Категория</TableHead>
+                                                <TableHead className="w-20 text-center px-2 md:px-4">Использ.</TableHead>
+                                                <TableHead className="text-right px-2 md:px-4 sticky right-0 bg-slate-50">Действия</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {isLoadingTemplates ? (
+                                                Array(5).fill(0).map((_, i) => (
+                                                    <TableRow key={`rt-${i}`}><TableCell><Skeleton className="h-4 w-8" /></TableCell><TableCell><Skeleton className="h-4 w-48" /></TableCell><TableCell><Skeleton className="h-4 w-24" /></TableCell><TableCell><Skeleton className="h-4 w-16" /></TableCell><TableCell><Skeleton className="h-4 w-24" /></TableCell><TableCell><Skeleton className="h-4 w-8" /></TableCell><TableCell><Skeleton className="h-8 w-16 ml-auto" /></TableCell></TableRow>
+                                                ))
+                                            ) : remarkTemplates.length === 0 ? (
+                                                <TableRow><TableCell colSpan={7} className="text-center py-8 text-slate-500">Шаблоны не найдены</TableCell></TableRow>
+                                            ) : (
+                                                remarkTemplates
+                                                    .filter(t => t.text.toLowerCase().includes(templateSearch.toLowerCase()) || (t.specialization || "").toLowerCase().includes(templateSearch.toLowerCase()))
+                                                    .map(t => (
+                                                        <TableRow key={t.id} className="hover:bg-slate-50 transition-colors">
+                                                            <TableCell className="text-slate-500 font-mono text-xs px-2 md:px-4">{t.id}</TableCell>
+                                                            <TableCell className="font-medium text-slate-900 text-sm px-2 md:px-4">{t.text}</TableCell>
+                                                            <TableCell className="px-2 md:px-4">
+                                                                {t.specialization && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] md:text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                                        {t.specialization}
+                                                                    </span>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="px-2 md:px-4">
+                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] md:text-xs font-medium border ${t.priority === 'high' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                                                    t.priority === 'medium' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                                                        'bg-slate-50 text-slate-700 border-slate-200'
+                                                                    }`}>
+                                                                    {t.priority === 'high' ? 'Высокий' : t.priority === 'medium' ? 'Средний' : 'Низкий'}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-slate-600 text-xs px-2 md:px-4">{t.category || '—'}</TableCell>
+                                                            <TableCell className="text-center text-slate-500 text-xs px-2 md:px-4">{t.usage_count}</TableCell>
+                                                            <TableCell className="text-right px-2 md:px-4 space-x-1 sticky right-0 bg-white/95 backdrop-blur-sm">
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-600" onClick={() => {
+                                                                    setEditTemplateData(t);
+                                                                    setEditTemplateText(t.text);
+                                                                    setEditTemplateSpecialization(t.specialization || "none");
+                                                                    setEditTemplatePriority(t.priority || "medium");
+                                                                    setEditTemplateCategory(t.category || "");
+                                                                    setEditTemplateHours(t.estimated_hours?.toString() || "");
+                                                                    setIsEditTemplateOpen(true);
+                                                                }}>
+                                                                    <Edit className="w-3.5 h-3.5" />
+                                                                </Button>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:text-rose-600" onClick={() => handleDeleteTemplate(t.id, t.text)}>
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </div>
+                        </TabsContent>
+
                         {/* AUDIT LOGS TAB */}
                         <TabsContent value="audit" className="space-y-4 outline-none">
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -914,6 +1128,15 @@ export default function Admin() {
                             </Select>
                         </div>
                         <div className="space-y-2">
+                            <Label>Специализация (для слесарей)</Label>
+                            <Select value={addSpecialization} onValueChange={setAddSpecialization}>
+                                <SelectTrigger><SelectValue placeholder="Выберите специализацию" /></SelectTrigger>
+                                <SelectContent>
+                                    {SPECIALIZATIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
                             <Label>Временный пароль *</Label>
                             <div className="flex gap-2">
                                 <Input required value={addPassword} onChange={e => setAddPassword(e.target.value)} />
@@ -922,6 +1145,71 @@ export default function Admin() {
                         </div>
                         <div className="space-y-2"><Label>Штрих-код</Label><Input value={addBarcode} onChange={e => setAddBarcode(e.target.value)} /></div>
                         <DialogFooter><Button type="button" variant="outline" onClick={() => setIsAddUserOpen(false)}>Отмена</Button><Button type="submit">Создать</Button></DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* REMARK TEMPLATE DIALOGS */}
+            <Dialog open={isAddTemplateOpen} onOpenChange={setIsAddTemplateOpen}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>Новый шаблон замечания</DialogTitle></DialogHeader>
+                    <form onSubmit={handleCreateTemplate} className="space-y-4 pt-2">
+                        <div className="space-y-2"><Label>Текст замечания *</Label><Input required value={addTemplateText} onChange={e => setAddTemplateText(e.target.value)} placeholder="Например: Теч масла ТК" /></div>
+                        <div className="space-y-2">
+                            <Label>Специализация</Label>
+                            <Select value={addTemplateSpecialization} onValueChange={setAddTemplateSpecialization}>
+                                <SelectTrigger><SelectValue placeholder="Выберите специализацию" /></SelectTrigger>
+                                <SelectContent>
+                                    {SPECIALIZATIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Приоритет</Label>
+                            <Select value={addTemplatePriority} onValueChange={setAddTemplatePriority}>
+                                <SelectTrigger><SelectValue placeholder="Выберите приоритет" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="high">Высокий</SelectItem>
+                                    <SelectItem value="medium">Средний</SelectItem>
+                                    <SelectItem value="low">Низкий</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2"><Label>Категория</Label><Input value={addTemplateCategory} onChange={e => setAddTemplateCategory(e.target.value)} placeholder="Например: Дизель" /></div>
+                        <div className="space-y-2"><Label>Норма часов (Примерно)</Label><Input type="number" step="0.5" value={addTemplateHours} onChange={e => setAddTemplateHours(e.target.value)} placeholder="1.5" /></div>
+                        <DialogFooter><Button type="button" variant="outline" onClick={() => setIsAddTemplateOpen(false)}>Отмена</Button><Button type="submit">Создать</Button></DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isEditTemplateOpen} onOpenChange={setIsEditTemplateOpen}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>Редактировать шаблон</DialogTitle></DialogHeader>
+                    <form onSubmit={handleUpdateTemplate} className="space-y-4 pt-2">
+                        <div className="space-y-2"><Label>Текст замечания *</Label><Input required value={editTemplateText} onChange={e => setEditTemplateText(e.target.value)} /></div>
+                        <div className="space-y-2">
+                            <Label>Специализация</Label>
+                            <Select value={editTemplateSpecialization} onValueChange={setEditTemplateSpecialization}>
+                                <SelectTrigger><SelectValue placeholder="Выберите специализацию" /></SelectTrigger>
+                                <SelectContent>
+                                    {SPECIALIZATIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Приоритет</Label>
+                            <Select value={editTemplatePriority} onValueChange={setEditTemplatePriority}>
+                                <SelectTrigger><SelectValue placeholder="Выберите приоритет" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="high">Высокий</SelectItem>
+                                    <SelectItem value="medium">Средний</SelectItem>
+                                    <SelectItem value="low">Низкий</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2"><Label>Категория</Label><Input value={editTemplateCategory} onChange={e => setEditTemplateCategory(e.target.value)} /></div>
+                        <div className="space-y-2"><Label>Норма часов</Label><Input type="number" step="0.5" value={editTemplateHours} onChange={e => setEditTemplateHours(e.target.value)} /></div>
+                        <DialogFooter><Button type="button" variant="outline" onClick={() => setIsEditTemplateOpen(false)}>Отмена</Button><Button type="submit">Сохранить</Button></DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
@@ -936,7 +1224,7 @@ export default function Admin() {
                         <div className="space-y-2">
                             <Label>Роль</Label>
                             <Select value={editRole} onValueChange={setEditRole} disabled={editUserData?.username === 'admin'}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder="Выберите роль" /></SelectTrigger>
                                 <SelectContent>{roles.map(r => <SelectItem key={r.id} value={r.name}>{r.description || r.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
@@ -946,6 +1234,19 @@ export default function Admin() {
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>{locations.map(l => <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>)}</SelectContent>
                             </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Специализация</Label>
+                            <Select value={editSpecialization} onValueChange={setEditSpecialization}>
+                                <SelectTrigger><SelectValue placeholder="Выберите специализацию" /></SelectTrigger>
+                                <SelectContent>
+                                    {SPECIALIZATIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Баллы (Всего)</Label>
+                            <Input type="number" value={editPoints} onChange={e => setEditPoints(parseInt(e.target.value) || 0)} />
                         </div>
                         <div className="space-y-2">
                             <Label>Новый пароль (оставьте пустым, чтобы не менять)</Label>

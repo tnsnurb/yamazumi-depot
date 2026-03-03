@@ -16,6 +16,8 @@ const ActiveRemarks = lazy(() => import("./pages/ActiveRemarks"))
 import { ProtectedRoute } from "./components/common/ProtectedRoute"
 import { MobileNav } from "./components/common/MobileNav"
 
+import DashboardLayout from "./components/layout/DashboardLayout"
+
 function App() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -60,27 +62,18 @@ function App() {
         <Routes>
           <Route path="/" element={<Login />} />
 
-          <Route element={<ProtectedRoute reqPerm="can_view_map" />}>
-            <Route path="/map" element={<Map />} />
-          </Route>
-
-          <Route element={<ProtectedRoute reqPerm="can_view_journal" />}>
-            <Route path="/journal" element={<Journal />} />
-          </Route>
-
-          <Route element={<ProtectedRoute reqPerm="can_view_dashboard" />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-          </Route>
-
-          <Route element={<ProtectedRoute reqPerm="can_manage_users" />}>
-            <Route path="/admin" element={<Admin />} />
-          </Route>
-
+          {/* Protected Routes wrapped in DashboardLayout */}
           <Route element={<ProtectedRoute />}>
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/remarks" element={<ActiveRemarks />} />
-            <Route path="/locomotive/:id/remarks" element={<LocomotiveRemarks />} />
-            <Route path="/history/:number" element={<History />} />
+            <Route element={<DashboardLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/map" element={<Map />} />
+              <Route path="/journal" element={<Journal />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/remarks" element={<ActiveRemarks />} />
+              <Route path="/locomotive/:id/remarks" element={<LocomotiveRemarks />} />
+              <Route path="/history/:number" element={<History />} />
+            </Route>
           </Route>
 
           <Route path="/kiosk" element={<Kiosk />} />

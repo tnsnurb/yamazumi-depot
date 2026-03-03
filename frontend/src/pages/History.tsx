@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from "react"
 import { useParams, Link } from "react-router-dom"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Header } from "@/components/common/Header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -134,10 +133,8 @@ export default function History() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <Header />
-
-            <main className="flex-1 p-6 flex flex-col items-center">
+        <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
+            <main className="flex-1 w-full p-6 flex flex-col items-center">
                 <div className="w-full max-w-5xl">
                     <div className="flex items-center gap-4 mb-6">
                         <Button variant="ghost" size="icon" asChild>
@@ -170,44 +167,91 @@ export default function History() {
                             ) : movements.length === 0 ? (
                                 <div className="text-center text-slate-400 py-8">Нет записей</div>
                             ) : (
-                                <div ref={parentRef} className="max-h-[600px] overflow-auto relative rounded-b-xl">
-                                    <Table>
-                                        <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
-                                            <TableRow>
-                                                <TableHead className="w-12">№</TableHead>
-                                                <TableHead>Дата</TableHead>
-                                                <TableHead>Действие</TableHead>
-                                                <TableHead>Откуда</TableHead>
-                                                <TableHead>Куда</TableHead>
-                                                <TableHead>Пользователь</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {paddingTop > 0 && (
+                                <div ref={parentRef} className="max-h-[800px] overflow-auto relative rounded-b-xl border-t md:border-t-0 mt-4 md:mt-0">
+                                    {/* Table View (Desktop) */}
+                                    <div className="hidden md:block">
+                                        <Table>
+                                            <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
                                                 <TableRow>
-                                                    <TableCell style={{ height: `${paddingTop}px`, padding: 0 }} colSpan={6} />
+                                                    <TableHead className="w-12">№</TableHead>
+                                                    <TableHead>Дата</TableHead>
+                                                    <TableHead>Действие</TableHead>
+                                                    <TableHead>Откуда</TableHead>
+                                                    <TableHead>Куда</TableHead>
+                                                    <TableHead>Пользователь</TableHead>
                                                 </TableRow>
-                                            )}
-                                            {virtualItems.map((virtualRow) => {
-                                                const m = movements[virtualRow.index]
-                                                return (
-                                                    <TableRow key={m.id} ref={rowVirtualizer.measureElement} data-index={virtualRow.index}>
-                                                        <TableCell className="text-slate-400 text-xs py-3">{movements.length - virtualRow.index}</TableCell>
-                                                        <TableCell className="text-sm py-3">{new Date(m.moved_at).toLocaleString('ru-RU')}</TableCell>
-                                                        <TableCell className="py-3">{renderActionBadge(m.action)}</TableCell>
-                                                        <TableCell className="text-sm py-3">{formatLocation(m.from_track, m.from_position)}</TableCell>
-                                                        <TableCell className="text-sm py-3">{formatLocation(m.to_track, m.to_position)}</TableCell>
-                                                        <TableCell className="text-sm text-slate-500 py-3">{m.moved_by}</TableCell>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {paddingTop > 0 && (
+                                                    <TableRow>
+                                                        <TableCell style={{ height: `${paddingTop}px`, padding: 0 }} colSpan={6} />
                                                     </TableRow>
-                                                )
-                                            })}
-                                            {paddingBottom > 0 && (
-                                                <TableRow>
-                                                    <TableCell style={{ height: `${paddingBottom}px`, padding: 0 }} colSpan={6} />
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
+                                                )}
+                                                {virtualItems.map((virtualRow) => {
+                                                    const m = movements[virtualRow.index]
+                                                    return (
+                                                        <TableRow key={m.id} ref={rowVirtualizer.measureElement} data-index={virtualRow.index}>
+                                                            <TableCell className="text-slate-400 text-xs py-3">{movements.length - virtualRow.index}</TableCell>
+                                                            <TableCell className="text-sm py-3">{new Date(m.moved_at).toLocaleString('ru-RU')}</TableCell>
+                                                            <TableCell className="py-3">{renderActionBadge(m.action)}</TableCell>
+                                                            <TableCell className="text-sm py-3">{formatLocation(m.from_track, m.from_position)}</TableCell>
+                                                            <TableCell className="text-sm py-3">{formatLocation(m.to_track, m.to_position)}</TableCell>
+                                                            <TableCell className="text-sm text-slate-500 py-3">{m.moved_by}</TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })}
+                                                {paddingBottom > 0 && (
+                                                    <TableRow>
+                                                        <TableCell style={{ height: `${paddingBottom}px`, padding: 0 }} colSpan={6} />
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+
+                                    {/* Card View (Mobile) */}
+                                    <div className="md:hidden space-y-3 p-4">
+                                        {virtualItems.map((virtualRow) => {
+                                            const m = movements[virtualRow.index]
+                                            return (
+                                                <div
+                                                    key={m.id}
+                                                    ref={rowVirtualizer.measureElement}
+                                                    data-index={virtualRow.index}
+                                                    className="bg-slate-50 border rounded-xl p-3 shadow-sm"
+                                                >
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <span className="text-[10px] text-slate-400 font-mono">#{movements.length - virtualRow.index}</span>
+                                                        <span className="text-[10px] font-medium text-slate-500">
+                                                            {new Date(m.moved_at).toLocaleString('ru-RU', {
+                                                                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                    <div className="mb-3">
+                                                        {renderActionBadge(m.action)}
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                                        <div>
+                                                            <div className="text-slate-400 mb-0.5">Откуда:</div>
+                                                            <div className="font-medium text-slate-700 truncate">
+                                                                {formatLocation(m.from_track, m.from_position)}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-slate-400 mb-0.5">Куда:</div>
+                                                            <div className="font-medium text-slate-700 truncate">
+                                                                {formatLocation(m.to_track, m.to_position)}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-3 pt-2 border-t border-slate-200 flex items-center justify-between">
+                                                        <span className="text-[10px] text-slate-400 text-right w-full">Исполнитель: {m.moved_by}</span>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
                                 </div>
                             )}
                         </CardContent>

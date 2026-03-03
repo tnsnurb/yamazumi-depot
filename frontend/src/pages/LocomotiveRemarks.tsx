@@ -1,13 +1,49 @@
 import { useEffect, useState } from "react"
 import imageCompression from 'browser-image-compression'
 import { useParams, useNavigate } from "react-router-dom"
-import { Header } from "@/components/common/Header"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, CheckCircle2, ClipboardPaste, MessageSquare, Send, Download, FileText, Camera, History, Tag, AlertCircle, ChevronDown } from "lucide-react"
+import {
+    ChevronLeft,
+    CheckCircle2,
+    AlertCircle,
+    Tag,
+    ChevronDown,
+    MessageSquare,
+    Camera,
+    History,
+    Send,
+    Download,
+    ClipboardPaste,
+    FileText,
+    BookOpen,
+    Search,
+    Loader2,
+} from "lucide-react"
 import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import {
+    Item,
+    ItemGroup,
+    ItemTitle,
+} from "@/components/ui/item"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import * as XLSX from "xlsx"
 
 interface RemarkComment {
@@ -57,6 +93,12 @@ interface Remark {
         full_name: string;
         username: string;
     } | null;
+    assigned_to?: number | null;
+    assigned_user?: {
+        full_name: string;
+        username: string;
+        specialization: string | null;
+    } | null;
 }
 
 export default function LocomotiveRemarks() {
@@ -68,6 +110,18 @@ export default function LocomotiveRemarks() {
     const [isPasteOpen, setIsPasteOpen] = useState(false)
     const [pasteText, setPasteText] = useState("")
     const [confirmRemark, setConfirmRemark] = useState<Remark | null>(null)
+
+    // Catalog state
+    const [catalogTemplates, setCatalogTemplates] = useState<any[]>([])
+    const [isCatalogOpen, setIsCatalogOpen] = useState(false)
+    const [templateSearch, setTemplateSearch] = useState("")
+    useEffect(() => {
+        setAddedTemplateIds([])
+    }, [templateSearch])
+    const [isAddManualOpen, setIsAddManualOpen] = useState(false)
+    const [manualText, setManualText] = useState("")
+    const [manualPriority, setManualPriority] = useState("medium")
+    const [manualCategory, setManualCategory] = useState("")
 
     const [user, setUser] = useState<any>(null)
 
@@ -89,6 +143,14 @@ export default function LocomotiveRemarks() {
     const [history, setHistory] = useState<Record<string, RemarkHistory[]>>({})
     const [loadingHistory, setLoadingHistory] = useState<string | null>(null)
 
+    // Users for assignment
+    const [allUsers, setAllUsers] = useState<any[]>([])
+
+    // Loading states for UX
+    const [isSubmittingTemplate, setIsSubmittingTemplate] = useState(false)
+    const [submittingTemplateId, setSubmittingTemplateId] = useState<number | null>(null)
+    const [addedTemplateIds, setAddedTemplateIds] = useState<number[]>([])
+
     useEffect(() => {
         fetch('/api/me').then(res => res.json()).then(data => {
             if (data.user) setUser(data.user)
@@ -99,8 +161,28 @@ export default function LocomotiveRemarks() {
         if (locomotiveId) {
             fetchRemarks()
             fetchLocomotive()
+            fetchUsers()
+            fetchCatalogTemplates()
         }
     }, [locomotiveId])
+
+    const fetchUsers = async () => {
+        try {
+            const res = await fetch('/api/public/users')
+            if (res.ok) {
+                setAllUsers(await res.json())
+            }
+        } catch (e) {
+            console.error("Error fetching users:", e)
+        }
+    }
+
+    const fetchCatalogTemplates = async () => {
+        try {
+            const res = await fetch('/api/remark-templates')
+            if (res.ok) setCatalogTemplates(await res.json())
+        } catch (e) { console.error(e) }
+    }
 
     const fetchLocomotive = async () => {
         try {
@@ -126,6 +208,32 @@ export default function LocomotiveRemarks() {
             toast.error("Ошибка сети")
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const assignWorker = async (remarkId: string, userId: number | null) => {
+        try {
+            const res = await fetch(`/api/remarks/${remarkId}/assign`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assigned_to: userId })
+            });
+
+            if (res.ok) {
+                const updated = await res.json();
+                setRemarks(prev => prev.map(r => r.id === remarkId ? { ...r, assigned_to: updated.assigned_to, assigned_user: updated.assigned_user } : r));
+                toast.success(userId ? "Исполнитель назначен" : "Назначение снято");
+
+                // Refresh history if open
+                if (expandedRemarkId === remarkId && activeTab === 'history') {
+                    fetchHistory(remarkId);
+                }
+            } else {
+                const error = await res.json();
+                toast.error(error.error || "Ошибка назначения");
+            }
+        } catch (e) {
+            toast.error("Ошибка сети");
         }
     }
 
@@ -157,6 +265,62 @@ export default function LocomotiveRemarks() {
                 fetchRemarks()
             } else {
                 toast.error("Ошибка при добавлении замечаний")
+            }
+        } catch (e) {
+            toast.error("Ошибка сети")
+        }
+    }
+
+    const handleAddFromTemplate = async (templateId: number) => {
+        if (isSubmittingTemplate) return
+        setIsSubmittingTemplate(true)
+        setSubmittingTemplateId(templateId)
+        try {
+            const res = await fetch(`/api/locomotives/${locomotiveId}/remarks/template`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ template_id: templateId })
+            })
+
+            if (res.ok) {
+                toast.success("Замечание добавлено")
+                await fetchRemarks()
+                setAddedTemplateIds(prev => [...prev, templateId])
+            } else {
+                toast.error("Ошибка при добавлении")
+            }
+        } catch (e) {
+            toast.error("Ошибка сети")
+        } finally {
+            setIsSubmittingTemplate(false)
+            setSubmittingTemplateId(null)
+        }
+    }
+
+    const handleManualSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!manualText.trim()) return
+
+        try {
+            const res = await fetch(`/api/locomotives/${locomotiveId}/remarks`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    text: manualText,
+                    priority: manualPriority,
+                    category: manualCategory
+                })
+            })
+
+            if (res.ok) {
+                toast.success("Замечание добавлено")
+                setManualText("")
+                setManualCategory("")
+                setManualPriority("medium")
+                setIsAddManualOpen(false)
+                fetchRemarks()
+            } else {
+                toast.error("Ошибка при добавлении")
             }
         } catch (e) {
             toast.error("Ошибка сети")
@@ -447,14 +611,12 @@ export default function LocomotiveRemarks() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <Header />
-
-            <main className="flex-1 p-4 md:p-6 max-w-5xl w-full mx-auto">
+        <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
+            <main className="flex-1 w-full p-4 md:p-6 max-w-5xl mx-auto">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                     <div className="flex items-start gap-3 md:gap-4">
                         <Button variant="ghost" size="icon" onClick={() => navigate('/map')} className="shrink-0 -ml-2 md:ml-0">
-                            <ArrowLeft className="w-5 h-5 text-slate-500" />
+                            <ChevronLeft className="w-5 h-5 text-slate-500" />
                         </Button>
                         <div className="min-w-0">
                             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 truncate">
@@ -481,9 +643,17 @@ export default function LocomotiveRemarks() {
 
                     <div className="flex flex-wrap gap-2 w-full md:w-auto">
                         {(user?.role === 'admin' || user?.permissions?.can_edit_catalog || user?.permissions?.can_complete_remarks) && (
-                            <Button onClick={() => setIsPasteOpen(true)} className="gap-2 bg-indigo-600 hover:bg-indigo-700 flex-1 md:flex-none h-9 text-sm">
-                                <ClipboardPaste className="w-4 h-4" /> <span className="hidden xs:inline">Из Excel</span><span className="xs:hidden">Excel</span>
-                            </Button>
+                            <>
+                                <Button onClick={() => setIsAddManualOpen(true)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 flex-1 md:flex-none h-9 text-sm">
+                                    <Tag className="w-4 h-4" /> Добавить
+                                </Button>
+                                <Button onClick={() => setIsCatalogOpen(true)} className="gap-2 bg-amber-500 hover:bg-amber-600 flex-1 md:flex-none h-9 text-sm text-white">
+                                    <BookOpen className="w-4 h-4" /> Каталог
+                                </Button>
+                                <Button onClick={() => setIsPasteOpen(true)} className="gap-2 bg-indigo-600 hover:bg-indigo-700 flex-1 md:flex-none h-9 text-sm">
+                                    <ClipboardPaste className="w-4 h-4" /> <span className="hidden xs:inline">Из Excel</span><span className="xs:hidden">Excel</span>
+                                </Button>
+                            </>
                         )}
                         {remarks.length > 0 && (
                             <div className="flex gap-2 flex-1 md:flex-none">
@@ -532,40 +702,42 @@ export default function LocomotiveRemarks() {
                     })
 
                     return (
-                        <div className="bg-white border rounded-xl shadow-sm p-3 md:p-4 mb-4">
-                            <div className="flex flex-wrap items-center gap-x-4 md:gap-x-6 gap-y-2">
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-xs md:text-sm text-slate-500">Всего:</span>
-                                    <span className="text-xs md:text-sm font-bold text-slate-900">{total}</span>
+                        <div className="bg-white border rounded-xl shadow-sm p-3 md:p-6 mb-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 mb-4">
+                                <div className="space-y-1">
+                                    <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Всего</span>
+                                    <div className="text-xl md:text-2xl font-black text-slate-900">{total}</div>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-xs md:text-sm text-slate-500">Выполнено:</span>
-                                    <span className="text-xs md:text-sm font-bold text-green-600">{completed}</span>
+                                <div className="space-y-1">
+                                    <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Выполнено</span>
+                                    <div className="text-xl md:text-2xl font-black text-green-600">{completed}</div>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-xs md:text-sm text-slate-500">Осталось:</span>
-                                    <span className="text-xs md:text-sm font-bold text-amber-600">{remaining}</span>
+                                <div className="space-y-1">
+                                    <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Осталось</span>
+                                    <div className="text-xl md:text-2xl font-black text-amber-600">{remaining}</div>
                                 </div>
-                                <div className="flex-1 min-w-[80px] md:min-w-[120px]">
-                                    <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2.5">
-                                        <div
-                                            className="bg-green-500 h-1.5 md:h-2.5 rounded-full transition-all duration-500"
-                                            style={{ width: `${percent}%` }}
-                                        />
-                                    </div>
+                                <div className="space-y-1">
+                                    <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Прогресс</span>
+                                    <div className="text-xl md:text-2xl font-black text-indigo-600">{percent}%</div>
                                 </div>
-                                <span className="text-[10px] md:text-xs font-medium text-slate-500">{percent}%</span>
+                            </div>
+
+                            <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2 mb-4">
+                                <div
+                                    className="bg-green-500 h-1.5 md:h-2 rounded-full transition-all duration-700"
+                                    style={{ width: `${percent}%` }}
+                                />
                             </div>
 
                             {Object.keys(completedBy).length > 0 && (
-                                <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-2 md:gap-3">
-                                    <span className="text-[10px] md:text-xs text-slate-400">Выполнили:</span>
+                                <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 md:gap-3">
+                                    <span className="text-[10px] md:text-xs text-slate-400 w-full md:w-auto mb-1 md:mb-0">Выполнили:</span>
                                     {Object.entries(completedBy)
                                         .sort((a, b) => b[1] - a[1])
                                         .map(([name, count]) => (
-                                            <span key={name} className="inline-flex items-center gap-1.5 text-[10px] md:text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
-                                                <span className="font-medium">{name}</span>
-                                                <span className="bg-green-200 text-green-800 rounded-full px-1.5 text-[9px] md:text-[10px] font-bold">{count}</span>
+                                            <span key={name} className="inline-flex items-center gap-1.5 text-[10px] md:text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg">
+                                                <span className="font-semibold">{name}</span>
+                                                <span className="bg-white text-slate-900 rounded-md px-1.5 text-[9px] md:text-[10px] font-black border border-slate-200">{count}</span>
                                             </span>
                                         ))}
                                 </div>
@@ -591,39 +763,71 @@ export default function LocomotiveRemarks() {
                             )}
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-3 p-3 md:p-0 md:divide-y md:divide-slate-100 bg-slate-50 md:bg-white">
+                        <ItemGroup className="flex flex-col gap-3 p-3 md:p-0">
                             {sortedRemarks.map((remark, idx) => (
-                                <div
-                                    key={remark.id}
-                                    className={`bg-white md:bg-transparent rounded-xl md:rounded-none border md:border-none shadow-sm md:shadow-none overflow-hidden transition-all ${remark.is_completed ? 'opacity-80' : ''}`}
-                                >
-                                    <div
-                                        className={`p-4 md:p-4 flex gap-3 md:gap-4 transition-colors ${remark.is_completed ? 'bg-slate-50/50' : 'hover:bg-slate-50'}`}
+                                <div key={remark.id}>
+                                    <Item
+                                        variant="outline"
+                                        className={`bg-white border-slate-200 shadow-sm rounded-xl overflow-hidden p-3 md:p-4 min-h-0 flex-col md:flex-row items-stretch md:items-center ${remark.is_completed ? 'opacity-80' : ''}`}
                                     >
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-start gap-2 md:gap-3">
-                                                <span className="text-slate-400 font-mono text-xs md:text-sm mt-0.5 w-5 md:w-6 text-right shrink-0">{idx + 1}.</span>
-                                                <div className="flex flex-col gap-1 min-w-0">
-                                                    <p className={`text-sm ${remark.is_completed ? 'text-slate-400 line-through font-normal' : 'text-slate-900 font-medium'}`}>
-                                                        {remark.text}
-                                                    </p>
-                                                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                                                        {remark.created_by && (
-                                                            <div className="text-[9px] md:text-[10px] text-slate-400 font-medium">
-                                                                Добавил(а): {remark.created_by.full_name}
-                                                            </div>
-                                                        )}
+                                        <div className="flex items-start gap-4 flex-1">
+                                            <div className="text-slate-400 font-mono text-xs md:text-base mt-0.5 w-6 md:w-8 shrink-0 pt-1">
+                                                {idx + 1}.
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <ItemTitle className={`text-base whitespace-normal leading-snug line-clamp-none ${remark.is_completed ? 'text-slate-400 line-through font-normal' : 'text-slate-900 font-semibold'}`}>
+                                                    {remark.text}
+                                                </ItemTitle>
 
-                                                        {/* Priority & Category Interactive Badges */}
+                                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                    {remark.created_by && (
+                                                        <div className="text-[11px] md:text-xs text-slate-400 font-medium whitespace-nowrap">
+                                                            Добавил(а): {remark.created_by.full_name}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Worker Assignment Dropdown */}
+                                                    <div className="flex items-center gap-1">
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild>
-                                                                <button className={`inline-flex items-center gap-1 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded border transition-colors ${remark.priority === 'high' ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
+                                                                <button className={`inline-flex items-center gap-1.5 text-[11px] md:text-xs px-2.5 py-1 rounded-full border transition-all ${remark.assigned_user ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200 border-dashed hover:border-slate-300'}`}>
+                                                                    <div className={`w-2 h-2 rounded-full ${remark.assigned_user ? 'bg-indigo-500 animate-pulse' : 'bg-slate-300'}`} />
+                                                                    {remark.assigned_user ? (
+                                                                        <span className="font-semibold">{remark.assigned_user.full_name} {remark.assigned_user.specialization ? `(${remark.assigned_user.specialization})` : ''}</span>
+                                                                    ) : (
+                                                                        <span>Назначить</span>
+                                                                    )}
+                                                                    <ChevronDown className="w-3 h-3 opacity-50" />
+                                                                </button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="start" className="w-[180px] max-h-[300px] overflow-y-auto">
+                                                                <DropdownMenuItem onClick={() => assignWorker(remark.id, null)} className="italic text-slate-400">
+                                                                    Без исполнителя
+                                                                </DropdownMenuItem>
+                                                                <div className="h-px bg-slate-100 my-1" />
+                                                                {allUsers.map((u: any) => (
+                                                                    <DropdownMenuItem key={u.id} onClick={() => assignWorker(remark.id, u.id)} className="flex flex-col items-start gap-0.5 py-2">
+                                                                        <span className="font-medium text-xs">{u.full_name}</span>
+                                                                        {u.specialization && (
+                                                                            <span className="text-[10px] text-slate-400">{u.specialization}</span>
+                                                                        )}
+                                                                    </DropdownMenuItem>
+                                                                ))}
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </div>
+
+                                                    {/* Priority & Category Interactive Badges */}
+                                                    <div className="flex gap-1.5">
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <button className={`inline-flex items-center gap-1 text-[11px] md:text-xs px-2 py-1 rounded border transition-colors ${remark.priority === 'high' ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
                                                                     remark.priority === 'low' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' :
                                                                         'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
                                                                     }`}>
-                                                                    <AlertCircle className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                                                                    <AlertCircle className="w-3.5 h-3.5" />
                                                                     {remark.priority === 'high' ? 'Высокий' : remark.priority === 'low' ? 'Низкий' : 'Средний'}
-                                                                    <ChevronDown className="w-2.5 h-2.5 md:w-3 md:h-3 opacity-50" />
+                                                                    <ChevronDown className="w-3 h-3 opacity-50" />
                                                                 </button>
                                                             </DropdownMenuTrigger>
                                                             <DropdownMenuContent align="start">
@@ -635,10 +839,10 @@ export default function LocomotiveRemarks() {
 
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild>
-                                                                <button className="inline-flex items-center gap-1 text-[9px] md:text-[10px] px-1.5 py-0.5 rounded border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 transition-colors">
-                                                                    <Tag className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                                                                <button className="inline-flex items-center gap-1 text-[11px] md:text-xs px-2 py-1 rounded border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 transition-colors">
+                                                                    <Tag className="w-3.5 h-3.5" />
                                                                     {remark.category || 'Без категории'}
-                                                                    <ChevronDown className="w-2.5 h-2.5 md:w-3 md:h-3 opacity-50" />
+                                                                    <ChevronDown className="w-3 h-3 opacity-50" />
                                                                 </button>
                                                             </DropdownMenuTrigger>
                                                             <DropdownMenuContent align="start">
@@ -651,72 +855,81 @@ export default function LocomotiveRemarks() {
                                                         </DropdownMenu>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            {remark.is_completed && remark.completed_by && (
-                                                <div className="mt-2 ml-7 md:ml-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] md:text-xs text-slate-500 bg-white border px-2 py-1 inline-flex rounded-md shadow-sm">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <CheckCircle2 className="w-3 md:w-3.5 h-3 md:h-3.5 text-green-500" />
-                                                        <span className="font-medium text-slate-700">{remark.completed_by.full_name}</span>
-                                                    </div>
-                                                    <span className="hidden md:inline text-slate-400">•</span>
-                                                    <span>{new Date(remark.completed_at!).toLocaleString('ru-RU', {
-                                                        day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                    })}</span>
-                                                </div>
-                                            )}
 
-                                            {/* Action Tabs - Optimized for touch */}
-                                            <div className="mt-4 ml-0 md:ml-10 flex flex-wrap gap-2">
+                                                {remark.is_completed && remark.completed_by && (
+                                                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm text-slate-500 bg-green-50/50 border border-green-100 px-2.5 py-1.5 inline-flex rounded-md shadow-sm">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <CheckCircle2 className="w-3.5 md:w-4 h-3.5 md:h-4 text-green-600" />
+                                                            <span className="font-semibold text-green-800">{remark.completed_by.full_name}</span>
+                                                        </div>
+                                                        <span className="hidden md:inline text-green-300">•</span>
+                                                        <span className="text-green-600 font-medium">{new Date(remark.completed_at!).toLocaleString('ru-RU', {
+                                                            day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                        })}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <button
+                                                onClick={() => toggleCompletion(remark)}
+                                                className={`w-12 md:w-10 h-12 md:h-10 flex items-center justify-center rounded-xl border shadow-sm transition-all md:hidden ${remark.is_completed
+                                                    ? 'bg-green-500 border-green-500 text-white shadow-green-200 shadow-lg'
+                                                    : 'bg-white border-slate-200 text-slate-300 active:scale-95'
+                                                    }`}
+                                            >
+                                                <CheckCircle2 className="w-6 md:w-5 h-6 md:h-5" />
+                                            </button>
+                                        </div>
+
+                                        <div className="mt-4 md:mt-0 flex items-center justify-between md:ml-4">
+                                            <div className="flex gap-2 flex-1 md:flex-none">
                                                 <button
                                                     onClick={() => toggleExpanded(remark.id, 'comments')}
-                                                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 text-xs px-3 py-2.5 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeTab === 'comments'
-                                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                                                        : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
+                                                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 text-[13px] md:text-sm px-4 md:px-4 py-3 md:py-2 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeTab === 'comments'
+                                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                                        : 'bg-white text-slate-600 border-slate-200 shadow-sm active:bg-slate-50'
                                                         }`}
                                                 >
                                                     <MessageSquare className="w-4 h-4" />
-                                                    <span>
-                                                        {comments[remark.id]?.length
-                                                            ? `Чат (${comments[remark.id].length})`
-                                                            : 'Чат'}
+                                                    <span className="font-bold">
+                                                        {comments[remark.id]?.length ? `Чат (${comments[remark.id].length})` : 'Чат'}
                                                     </span>
                                                 </button>
 
                                                 <button
                                                     onClick={() => toggleExpanded(remark.id, 'photos')}
-                                                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 text-xs px-3 py-2.5 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeTab === 'photos'
-                                                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                                        : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
+                                                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 text-[13px] md:text-sm px-4 md:px-4 py-3 md:py-2 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeTab === 'photos'
+                                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                                        : 'bg-white text-slate-600 border-slate-200 shadow-sm active:bg-slate-50'
                                                         }`}
                                                 >
-                                                    <Camera className="w-4 h-4" />
-                                                    <span>Фото {photos[remark.id]?.length ? `(${photos[remark.id].length})` : ''}</span>
+                                                    <Camera className="w-4.5 h-4.5" />
+                                                    <span className="font-bold">Фото {photos[remark.id]?.length ? `(${photos[remark.id].length})` : ''}</span>
                                                 </button>
 
                                                 <button
                                                     onClick={() => toggleExpanded(remark.id, 'history')}
-                                                    className={`flex-none inline-flex items-center justify-center p-2.5 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeTab === 'history'
-                                                        ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
-                                                        : 'bg-slate-50 text-slate-600 border-slate-200 active:bg-slate-100'
+                                                    className={`hidden md:inline-flex flex-none items-center justify-center w-11 h-11 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeTab === 'history'
+                                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                                        : 'bg-white text-slate-600 border-slate-200 shadow-sm active:bg-slate-50'
                                                         }`}
                                                     title="История"
                                                 >
-                                                    <History className="w-4 h-4" />
+                                                    <History className="w-4.5 h-4.5" />
                                                 </button>
                                             </div>
-                                        </div>
-                                        <div className="shrink-0 flex items-start pt-1">
+
                                             <button
                                                 onClick={() => toggleCompletion(remark)}
-                                                className={`w-12 h-12 md:w-10 md:h-10 flex items-center justify-center rounded-2xl md:rounded-full border shadow-sm transition-all ${remark.is_completed
-                                                    ? 'bg-green-500 border-green-500 text-white hover:bg-green-600'
-                                                    : 'bg-white border-slate-200 text-slate-400 hover:border-green-500 hover:text-green-500 active:scale-95'
+                                                className={`hidden md:flex w-10 h-10 ml-3 items-center justify-center rounded-xl border shadow-sm transition-all ${remark.is_completed
+                                                    ? 'bg-green-500 border-green-500 text-white hover:bg-green-600 shadow-green-200 shadow-lg'
+                                                    : 'bg-white border-slate-200 text-slate-300 hover:border-green-400 hover:text-green-500'
                                                     }`}
                                             >
-                                                <CheckCircle2 className="w-6 h-6 md:w-5 md:h-5" />
+                                                <CheckCircle2 className="w-5 h-5" />
                                             </button>
                                         </div>
-                                    </div>
+                                    </Item>
 
                                     {/* Expanded Panel */}
                                     {expandedRemarkId === remark.id && (
@@ -856,7 +1069,7 @@ export default function LocomotiveRemarks() {
                                     )}
                                 </div>
                             ))}
-                        </div>
+                        </ItemGroup>
                     )}
                 </div>
 
@@ -924,6 +1137,106 @@ export default function LocomotiveRemarks() {
                                 <ClipboardPaste className="w-4 h-4 mr-2" /> Добавить {pasteText.split('\n').filter(l => l.trim()).length || ''} строк
                             </Button>
                         </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Add Catalog Remark Dialog */}
+                <Dialog open={isCatalogOpen} onOpenChange={(open) => {
+                    setIsCatalogOpen(open)
+                    if (!open) setAddedTemplateIds([])
+                }}>
+                    <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col p-6">
+                        <DialogHeader>
+                            <DialogTitle>Каталог типовых замечаний</DialogTitle>
+                            <DialogDescription>Выберите замечание из списка для быстрого добавления</DialogDescription>
+                        </DialogHeader>
+                        <div className="relative my-4">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input
+                                placeholder="Поиск по тексту или специализации..."
+                                value={templateSearch}
+                                onChange={e => setTemplateSearch(e.target.value)}
+                                className="pl-9"
+                            />
+                        </div>
+                        <div className="flex-1 overflow-y-auto pr-2 space-y-2 py-2 scrollbar-thin">
+                            {catalogTemplates
+                                .filter(t => t.text.toLowerCase().includes(templateSearch.toLowerCase()) || (t.specialization || "").toLowerCase().includes(templateSearch.toLowerCase()))
+                                .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))
+                                .map(t => (
+                                    <button
+                                        key={t.id}
+                                        disabled={isSubmittingTemplate}
+                                        onClick={() => handleAddFromTemplate(t.id)}
+                                        className={`w-full text-left p-3 rounded-lg border transition-all group flex flex-col gap-1 ${submittingTemplateId === t.id
+                                            ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-100 ring-offset-0'
+                                            : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50'
+                                            } ${isSubmittingTemplate ? 'opacity-80 cursor-wait' : ''}`}
+                                    >
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`font-medium ${submittingTemplateId === t.id ? 'text-indigo-700' : 'text-slate-900'} group-hover:text-indigo-700`}>{t.text}</span>
+                                                {submittingTemplateId === t.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />}
+                                                {addedTemplateIds.includes(t.id) && (
+                                                    <span className="flex items-center text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold ml-2">
+                                                        <CheckCircle2 className="w-3 h-3 mr-1" /> Добавлено
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {t.priority === 'high' && <span className="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">High</span>}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {t.specialization && <span className="text-[10px] text-indigo-600 font-semibold">{t.specialization}</span>}
+                                            {t.category && <span className="text-[10px] text-slate-400">/ {t.category}</span>}
+                                            <span className="text-[9px] text-slate-300 ml-auto leading-none">Использовано: {t.usage_count || 0}</span>
+                                        </div>
+                                    </button>
+                                ))
+                            }
+                            {catalogTemplates.length === 0 && <div className="p-8 text-center text-slate-500">Загрузка каталога или каталог пуст...</div>}
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Add Manual Remark Dialog */}
+                <Dialog open={isAddManualOpen} onOpenChange={setIsAddManualOpen}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle>Добавить замечание</DialogTitle>
+                        </DialogHeader>
+                        <form onSubmit={handleManualSubmit} className="space-y-4 pt-2">
+                            <div className="space-y-2">
+                                <Label>Текст замечания</Label>
+                                <Textarea
+                                    required
+                                    value={manualText}
+                                    onChange={e => setManualText(e.target.value)}
+                                    placeholder="Введите описание проблемы..."
+                                    className="min-h-[100px]"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Приоритет</Label>
+                                    <Select value={manualPriority} onValueChange={setManualPriority}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="low">Низкий</SelectItem>
+                                            <SelectItem value="medium">Средний</SelectItem>
+                                            <SelectItem value="high">Высокий</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Категория</Label>
+                                    <Input value={manualCategory} onChange={e => setManualCategory(e.target.value)} placeholder="Дизель, Электрика..." />
+                                </div>
+                            </div>
+                            <DialogFooter className="pt-4">
+                                <Button type="button" variant="outline" onClick={() => setIsAddManualOpen(false)}>Отмена</Button>
+                                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">Добавить</Button>
+                            </DialogFooter>
+                        </form>
                     </DialogContent>
                 </Dialog>
             </main>

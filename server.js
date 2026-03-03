@@ -38,7 +38,7 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-    if (req.session && req.session.user && req.session.user.role === 'admin') {
+    if (req.session && req.session.user && (req.session.user.role === 'admin' || req.session.user.role === 'global_admin')) {
         return next();
     }
     return res.status(403).json({ error: 'Forbidden: Admins only' });
@@ -104,7 +104,7 @@ app.post('/api/login/barcode/pin', async (req, res) => {
     try {
         const { data: user, error } = await supabase
             .from('users')
-            .select('id, username, full_name, role, avatar_url, pin_code, location_id, is_global_admin')
+            .select('id, username, full_name, role, avatar_url, pin_code, location_id, is_global_admin, specialization, total_points')
             .eq('barcode', cleanBarcode)
             .maybeSingle();
 
@@ -133,8 +133,10 @@ app.post('/api/login/barcode/pin', async (req, res) => {
             avatar_url: user.avatar_url,
             pin_code: user.pin_code,
             location_id: user.location_id,
-            active_location_id: user.location_id, // Default to their assigned location
+            active_location_id: user.location_id,
             is_global_admin: user.is_global_admin,
+            specialization: user.specialization,
+            total_points: user.total_points || 0,
             permissions: roleData || {}
         };
 
@@ -152,7 +154,7 @@ app.post('/api/login', async (req, res) => {
 
     const { data: user, error } = await supabase
         .from('users')
-        .select('id, username, password, full_name, role, avatar_url, pin_code, location_id, is_global_admin')
+        .select('id, username, password, full_name, role, avatar_url, pin_code, location_id, is_global_admin, specialization, total_points')
         .eq('username', username)
         .maybeSingle();
 
@@ -174,8 +176,10 @@ app.post('/api/login', async (req, res) => {
         avatar_url: user.avatar_url,
         pin_code: user.pin_code,
         location_id: user.location_id,
-        active_location_id: user.location_id, // Default to their assigned location
+        active_location_id: user.location_id,
         is_global_admin: user.is_global_admin,
+        specialization: user.specialization,
+        total_points: user.total_points || 0,
         permissions: roleData || {}
     };
     res.json({ success: true, user: req.session.user });
@@ -223,6 +227,11 @@ app.get('/api/remarks', requireAuth, async (req, res) => {
             .select(`
                 *,
                 locomotive:locomotives(number, location_id),
+                assigned_user:users!locomotive_remarks_assigned_to_fkey (
+                    full_name,
+                    username,
+                    specialization
+                ),
                 completed_by:users!locomotive_remarks_completed_by_fkey (
                     full_name,
                     username
@@ -238,6 +247,13 @@ app.get('/api/remarks', requireAuth, async (req, res) => {
         }
         if (locomotive_id) {
             query = query.eq('locomotive_id', locomotive_id);
+        }
+        if (req.query.assigned_to) {
+            if (req.query.assigned_to === 'me') {
+                query = query.eq('assigned_to', req.session.user.id);
+            } else {
+                query = query.eq('assigned_to', req.query.assigned_to);
+            }
         }
 
         const { data: remarks, error } = await query
@@ -432,10 +448,12 @@ app.get('/api/public/users', async (req, res) => {
     }
 
     const publicUsers = users.map(u => ({
+        id: u.id,
         username: u.username,
         full_name: u.full_name || u.username,
         role_name: u.role || 'Сотрудник',
-        avatar_url: u.avatar_url
+        avatar_url: u.avatar_url,
+        specialization: u.specialization
     }));
 
     res.json(publicUsers);
@@ -446,7 +464,7 @@ app.get('/api/public/users', async (req, res) => {
 app.get('/api/users', requireAdmin, async (req, res) => {
     let query = supabase
         .from('users')
-        .select('id, username, full_name, role, created_at, barcode, is_active')
+        .select('id, username, full_name, role, created_at, barcode, is_active, specialization, total_points')
         .order('id');
 
     if (req.session.user.active_location_id) {
@@ -459,7 +477,7 @@ app.get('/api/users', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/users', requireAdmin, async (req, res) => {
-    const { username, password, full_name, role, barcode, location_id } = req.body;
+    const { username, password, full_name, role, barcode, location_id, specialization } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Логин и пароль обязательны' });
 
     // Check if user exists
@@ -475,9 +493,10 @@ app.post('/api/users', requireAdmin, async (req, res) => {
             full_name: full_name || null,
             role: role || 'employee',
             barcode: barcode || null,
+            specialization: specialization || null,
             location_id: req.session.user.is_global_admin ? (location_id || 1) : req.session.user.location_id
         })
-        .select('id, username, full_name, role, created_at, barcode, location_id')
+        .select('id, username, full_name, role, created_at, barcode, location_id, specialization')
         .maybeSingle();
 
     if (error) return res.status(500).json({ error: error.message });
@@ -495,7 +514,7 @@ app.post('/api/users', requireAdmin, async (req, res) => {
 
 app.put('/api/users/:id', requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
-    const { username, full_name, role, password, barcode, is_active, location_id } = req.body;
+    const { username, full_name, role, password, barcode, is_active, location_id, specialization, total_points } = req.body;
 
     // Protect modifying the main admin
     const { data: user } = await supabase.from('users').select('username').eq('id', id).maybeSingle();
@@ -516,6 +535,8 @@ app.put('/api/users/:id', requireAdmin, async (req, res) => {
     if (location_id !== undefined && req.session.user.is_global_admin) {
         updates.location_id = location_id;
     }
+    if (specialization !== undefined) updates.specialization = specialization;
+    if (total_points !== undefined) updates.total_points = total_points;
 
     if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'Нет данных для обновления' });
@@ -711,6 +732,131 @@ app.post('/api/catalog/bulk', requireAdmin, async (req, res) => {
     });
 
     res.json({ success: true, count: data ? data.length : 0, data });
+});
+
+// ===================== REMARK TEMPLATES ROUTES =====================
+
+app.get('/api/remark-templates', requireAuth, async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('remark_templates')
+            .select('*')
+            .order('usage_count', { ascending: false })
+            .order('text', { ascending: true });
+
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        console.error("Error fetching templates:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/remark-templates', requireAdmin, async (req, res) => {
+    try {
+        const { text, specialization, priority, category, estimated_hours } = req.body;
+        console.log("POST /api/remark-templates - Body:", req.body);
+
+        if (!text || !text.trim()) return res.status(400).json({ error: 'Текст замечания обязателен' });
+
+        const insertData = {
+            text: text.trim(),
+            specialization: specialization || null,
+            priority: priority || 'medium',
+            category: category || null,
+            estimated_hours: estimated_hours || null
+        };
+
+        const { data, error } = await supabase
+            .from('remark_templates')
+            .insert([insertData])
+            .select()
+            .maybeSingle();
+
+        if (error) throw error;
+
+        // Audit Log
+        await supabase.from('audit_logs').insert({
+            user_id: req.session.user.id,
+            action: 'Добавлен шаблон замечания',
+            target: text.trim(),
+            details: `Специализация: ${specialization}`
+        });
+
+        console.log("Template created successfully:", data.id);
+        res.json(data);
+    } catch (err) {
+        console.error("Error creating template:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/remark-templates/:id', requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { text, specialization, priority, category, estimated_hours } = req.body;
+        console.log(`PUT /api/remark-templates/${id} - Body:`, req.body);
+
+        const updateData = {};
+        if (text !== undefined) updateData.text = text.trim();
+        if (specialization !== undefined) updateData.specialization = specialization;
+        if (priority !== undefined) updateData.priority = priority;
+        if (category !== undefined) updateData.category = category;
+        if (estimated_hours !== undefined) updateData.estimated_hours = estimated_hours;
+
+        const { data, error } = await supabase
+            .from('remark_templates')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) return res.status(404).json({ error: 'Шаблон не найден' });
+
+        // Audit Log
+        await supabase.from('audit_logs').insert({
+            user_id: req.session.user.id,
+            action: 'Изменен шаблон замечания',
+            target: text || 'ID: ' + id,
+            details: `Обновлено полей: ${Object.keys(updateData).join(', ')}`
+        });
+
+        console.log("Template updated successfully:", id);
+        res.json(data);
+    } catch (err) {
+        console.error("Error updating template:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/remark-templates/:id', requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`DELETE /api/remark-templates/${id}`);
+
+        // Get old data for audit log
+        const { data: oldData } = await supabase.from('remark_templates').select('text').eq('id', id).maybeSingle();
+
+        const { error } = await supabase.from('remark_templates').delete().eq('id', id);
+        if (error) throw error;
+
+        // Audit Log
+        if (oldData) {
+            await supabase.from('audit_logs').insert({
+                user_id: req.session.user.id,
+                action: 'Удален шаблон замечания',
+                target: oldData.text,
+                details: `ID шаблона: ${id}`
+            });
+        }
+
+        console.log("Template deleted successfully:", id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Error deleting template:", err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ===================== REPAIR TYPES ROUTES =====================
@@ -1274,6 +1420,110 @@ app.get('/api/locomotives/:id/remarks', requireAuth, async (req, res) => {
 
 
 
+app.post('/api/locomotives/:id/remarks', requirePermission('can_edit_catalog'), async (req, res) => {
+    const { id } = req.params;
+    const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
+
+    let locoId;
+    if (isIdNumeric) {
+        locoId = parseInt(id);
+    } else {
+        const { data: locoData } = await supabase.from('locomotives').select('id').eq('number', decodeURIComponent(id)).maybeSingle();
+        if (!locoData) return res.status(404).json({ error: 'Локомотив не найден' });
+        locoId = locoData.id;
+    }
+
+    const { text, priority, category } = req.body;
+    if (!text) return res.status(400).json({ error: 'Текст замечания обязателен' });
+
+    const { data: loco } = await supabase.from('locomotives').select('number').eq('id', locoId).maybeSingle();
+
+    const { data, error } = await supabase
+        .from('locomotive_remarks')
+        .insert({
+            locomotive_id: locoId,
+            text,
+            priority: priority || 'medium',
+            category: category || null,
+            created_by: req.session.user.id
+        })
+        .select(`
+            *,
+            created_by:users!locomotive_remarks_created_by_fkey(full_name, username)
+        `)
+        .maybeSingle();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    if (loco) {
+        await supabase.from('movements').insert({
+            locomotive_id: locoId,
+            locomotive_number: loco.number,
+            action: `remark_added: ${text}`,
+            moved_by: req.session.user.full_name || req.session.user.username
+        });
+    }
+
+    res.json(data);
+});
+
+app.post('/api/locomotives/:id/remarks/template', requirePermission('can_edit_catalog'), async (req, res) => {
+    const { id } = req.params;
+    const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
+
+    let locoId;
+    if (isIdNumeric) {
+        locoId = parseInt(id);
+    } else {
+        const { data: locoData } = await supabase.from('locomotives').select('id').eq('number', decodeURIComponent(id)).maybeSingle();
+        if (!locoData) return res.status(404).json({ error: 'Локомотив не найден' });
+        locoId = locoData.id;
+    }
+
+    const { template_id } = req.body;
+    if (!template_id) return res.status(400).json({ error: 'ID шаблона обязателен' });
+
+    // Fetch template
+    const { data: template, error: tErr } = await supabase.from('remark_templates').select('*').eq('id', template_id).maybeSingle();
+    if (tErr) return res.status(500).json({ error: tErr.message });
+    if (!template) return res.status(404).json({ error: 'Шаблон не найден' });
+
+    const { data: loco } = await supabase.from('locomotives').select('number').eq('id', locoId).maybeSingle();
+
+    const { data, error } = await supabase
+        .from('locomotive_remarks')
+        .insert({
+            locomotive_id: locoId,
+            text: template.text,
+            priority: template.priority || 'medium',
+            category: template.category || null,
+            points: template.points || 10,
+            estimated_hours: template.estimated_hours || 0,
+            created_by: req.session.user.id
+        })
+        .select(`
+            *,
+            created_by:users!locomotive_remarks_created_by_fkey(full_name, username)
+        `)
+        .maybeSingle();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Update usage count
+    await supabase.rpc('increment_template_usage', { t_id: template_id });
+
+    if (loco) {
+        await supabase.from('movements').insert({
+            locomotive_id: locoId,
+            locomotive_number: loco.number,
+            action: `remark_added_from_template: ${template.text}`,
+            moved_by: req.session.user.full_name || req.session.user.username
+        });
+    }
+
+    res.json(data);
+});
+
 app.post('/api/locomotives/:id/remarks/bulk', requirePermission('can_edit_catalog'), async (req, res) => {
     const { id } = req.params;
     const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
@@ -1324,53 +1574,122 @@ app.post('/api/locomotives/:id/remarks/bulk', requirePermission('can_edit_catalo
 
 app.put('/api/remarks/:id/complete', requirePermission('can_complete_remarks'), async (req, res) => {
     const remarkId = req.params.id;
-    const { is_completed } = req.body;
+    const { is_completed, completion_photo_url } = req.body;
 
-    const updates = {
-        is_completed: is_completed,
-        completed_by: is_completed ? req.session.user.id : null,
-        completed_at: is_completed ? new Date().toISOString() : null
-    };
-
-    const { data, error } = await supabase
-        .from('locomotive_remarks')
-        .update(updates)
-        .eq('id', remarkId)
-        .select(`
-            id, text, is_completed, completed_at, created_at, priority, category, locomotive_id,
-            completed_by: users!locomotive_remarks_completed_by_fkey(full_name, username),
-            created_by: users!locomotive_remarks_created_by_fkey(full_name, username)
-            `);
-
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data || data.length === 0) return res.status(404).json({ error: 'Замечание не найдено' });
-
-    // Log to movements and history
     try {
-        const remark = data[0];
+        // Fetch remark to get point value and current status
+        const { data: remark, error: fetchErr } = await supabase
+            .from('locomotive_remarks')
+            .select('*, locomotive:locomotives(number)')
+            .eq('id', remarkId)
+            .maybeSingle();
 
-        // Ensure we log to the new history table
+        if (fetchErr) throw fetchErr;
+        if (!remark) return res.status(404).json({ error: 'Замечание не найдено' });
+
+        // Only update if status changed
+        if (remark.is_completed === is_completed) {
+            return res.json(remark);
+        }
+
+        const updates = {
+            is_completed: is_completed,
+            completed_by: is_completed ? req.session.user.id : null,
+            completed_at: is_completed ? new Date().toISOString() : null
+        };
+        if (completion_photo_url) updates.completion_photo_url = completion_photo_url;
+
+        const { data: updatedRemark, error: updateErr } = await supabase
+            .from('locomotive_remarks')
+            .update(updates)
+            .eq('id', remarkId)
+            .select(`
+                *,
+                completed_by: users!locomotive_remarks_completed_by_fkey(full_name, username),
+                created_by: users!locomotive_remarks_created_by_fkey(full_name, username)
+            `)
+            .maybeSingle();
+
+        if (updateErr) throw updateErr;
+
+        // --- POINT SYSTEM LOGIC ---
+        const pointsToAward = remark.points || 10;
+        const userId = req.session.user.id;
+
+        if (is_completed) {
+            // Increment user points
+            await supabase.rpc('increment_user_points', { user_id: userId, amount: pointsToAward });
+        } else {
+            // Decrement user points if reopened
+            await supabase.rpc('increment_user_points', { user_id: userId, amount: -pointsToAward });
+        }
+
+        // --- LOGGING ---
         await supabase.from('remark_history').insert({
-            remark_id: remark.id,
+            remark_id: remarkId,
             user_id: req.session.user.id,
             action: is_completed ? 'completed' : 'reopened',
-            details: is_completed ? 'Отмечено как выполненное' : 'Отметка о выполнении снята'
+            details: is_completed ? `Выполнено (+${pointsToAward} б.)` : `Отметка снята (-${pointsToAward} б.)`
         });
 
-        const { data: loco } = await supabase.from('locomotives').select('number').eq('id', remark.locomotive_id).maybeSingle();
-        if (loco) {
+        if (remark.locomotive) {
             await supabase.from('movements').insert({
                 locomotive_id: remark.locomotive_id,
-                locomotive_number: loco.number,
+                locomotive_number: remark.locomotive.number,
                 action: is_completed ? `remark_completed: ${remark.text}` : `remark_reopened: ${remark.text}`,
                 moved_by: req.session.user.full_name || req.session.user.username
             });
         }
-    } catch (logErr) {
-        console.error("Error logging remark completion:", logErr);
-    }
 
-    res.json(data[0]);
+        res.json(updatedRemark);
+    } catch (err) {
+        console.error("Error in completion logic:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// New Assignment Route
+app.put('/api/remarks/:id/assign', requirePermission('can_complete_remarks'), async (req, res) => {
+    const remarkId = req.params.id;
+    const { assigned_to } = req.body;
+
+    try {
+        const { data: remark, error: fetchErr } = await supabase
+            .from('locomotive_remarks')
+            .select('text')
+            .eq('id', remarkId)
+            .maybeSingle();
+
+        if (fetchErr) throw fetchErr;
+        if (!remark) return res.status(404).json({ error: 'Замечание не найдено' });
+
+        const { data: updated, error: updateErr } = await supabase
+            .from('locomotive_remarks')
+            .update({ assigned_to: assigned_to || null })
+            .eq('id', remarkId)
+            .select(`
+                *,
+                assigned_user:users!locomotive_remarks_assigned_to_fkey(full_name, username, specialization)
+            `)
+            .maybeSingle();
+
+        if (updateErr) throw updateErr;
+
+        // Log to history
+        let logDetails = assigned_to ? 'Назначено исполнителю' : 'Назначение снято';
+        if (updated.assigned_user) logDetails += `: ${updated.assigned_user.full_name}`;
+
+        await supabase.from('remark_history').insert({
+            remark_id: remarkId,
+            user_id: req.session.user.id,
+            action: 'assigned',
+            details: logDetails
+        });
+
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.put('/api/remarks/:id', requirePermission('can_complete_remarks'), async (req, res) => {

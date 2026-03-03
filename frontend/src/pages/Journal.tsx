@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef } from "react"
 import { useDebounce } from "@/hooks/useDebounce"
 import { Link } from "react-router-dom"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Header } from "@/components/common/Header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -270,10 +269,8 @@ export default function Journal() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <Header />
-
-            <main className="flex-1 p-4 md:p-6 flex flex-col items-center overflow-hidden">
+        <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
+            <main className="flex-1 w-full p-4 md:p-6 flex flex-col">
                 <div className="w-full max-w-6xl">
 
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">

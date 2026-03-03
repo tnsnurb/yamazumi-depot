@@ -2,7 +2,6 @@ import React, { useEffect, useState, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useDebounce } from "@/hooks/useDebounce"
 import { useNavigate } from "react-router-dom"
-import { Header } from "@/components/common/Header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -427,14 +426,12 @@ export default function MapPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <Header />
-
-            <main className="flex-1 p-4 md:p-6 flex flex-col items-center overflow-hidden">
+        <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
+            <main className="flex-1 w-full p-4 md:p-6 flex flex-col items-center">
                 {/* Toolbar */}
                 <div className="w-full max-w-6xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full">
-                        <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 border-b lg:border-none pb-2 lg:pb-0 w-full lg:w-auto">Карта депо</h2>
+                        <h2 className="hidden text-xl md:text-2xl font-bold tracking-tight text-slate-900 border-b lg:border-none pb-2 lg:pb-0 w-full lg:w-auto">Карта депо</h2>
                         <div className="flex flex-wrap gap-2 text-sm sm:ml-4 sm:border-l sm:pl-4">
                             <button
                                 onClick={() => setStatusFilter("all")}

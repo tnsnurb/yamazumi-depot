@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react"
-import { Header } from "@/components/common/Header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { UserCircle, Key, Shield } from "lucide-react"
 
@@ -14,6 +14,8 @@ interface User {
     role: string
     avatar_url?: string
     pin_code?: string
+    specialization?: string | null
+    total_points?: number
 }
 
 export default function Profile() {
@@ -136,10 +138,8 @@ export default function Profile() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <Header />
-
-            <main className="flex-1 p-6 flex flex-col items-center">
+        <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
+            <main className="flex-1 w-full p-4 md:p-8 flex flex-col items-center">
                 <div className="w-full max-w-2xl space-y-6">
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">Профиль</h2>
 
@@ -176,22 +176,37 @@ export default function Profile() {
                             </div>
                             <div>
                                 <CardTitle className="text-xl">{user?.full_name || user?.username}</CardTitle>
-                                <CardDescription className="flex items-center gap-1.5 mt-1">
-                                    <Shield className="w-3.5 h-3.5" />
-                                    {user?.role === 'admin' ? 'Администратор' : user?.role || 'Сотрудник'}
-                                </CardDescription>
+                                <div className="flex flex-wrap gap-2 mt-1.5">
+                                    <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 border-indigo-100 text-[10px] font-bold uppercase">
+                                        <Shield className="w-3 h-3 mr-1" />
+                                        {user?.role === 'admin' ? 'Администратор' : 'Сотрудник'}
+                                    </Badge>
+                                    {user?.specialization && (
+                                        <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-100 text-[10px] font-bold uppercase">
+                                            {user.specialization}
+                                        </Badge>
+                                    )}
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="grid grid-cols-2 gap-y-3 text-sm">
-                                <div className="text-slate-500">Логин:</div>
-                                <div className="font-medium">{user?.username}</div>
-                                <div className="text-slate-500">ФИО:</div>
-                                <div className="font-medium">{user?.full_name || '—'}</div>
-                                <div className="text-slate-500">Роль:</div>
-                                <div className="font-medium">{user?.role}</div>
-                                <div className="text-slate-500">Пин-код:</div>
-                                <div className="font-medium">{user?.pin_code ? 'Установлен (****)' : 'Не установлен'}</div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-slate-500 text-xs">Логин</span>
+                                    <span className="font-semibold text-slate-900">{user?.username}</span>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-slate-500 text-xs">ФИО</span>
+                                    <span className="font-semibold text-slate-900">{user?.full_name || '—'}</span>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-slate-500 text-xs">Специализация</span>
+                                    <span className="font-semibold text-indigo-600">{user?.specialization || 'Не указана'}</span>
+                                </div>
+                                <div className="flex flex-col gap-1 p-2 bg-indigo-50 rounded-lg border border-indigo-100">
+                                    <span className="text-indigo-600 text-[10px] font-bold uppercase">Мои баллы</span>
+                                    <span className="text-lg font-black text-indigo-700 leading-none">{user?.total_points || 0}</span>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
