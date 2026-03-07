@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
-import { Search, Loader2, CheckCircle2, ChevronRight, MessageSquare, Train } from "lucide-react"
+import { Search, CheckCircle2, ChevronRight, MessageSquare, Train } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
+import { useAuth } from "@/hooks/useAuth"
 import {
     Item,
     ItemGroup,
@@ -12,6 +13,7 @@ import {
     ItemActions
 } from "@/components/ui/item"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface Remark {
     id: string;
@@ -34,14 +36,8 @@ export default function ActiveRemarks() {
     const [remarks, setRemarks] = useState<Remark[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
-    const [filter, setFilter] = useState<"all" | "me">("all")
-    const [user, setUser] = useState<any>(null)
-
-    useEffect(() => {
-        fetch('/api/me').then(res => res.json()).then(data => {
-            if (data.user) setUser(data.user)
-        }).catch(() => { })
-    }, [])
+    const [filter, setFilter] = useState<"all" | "me" | "spec" | "pending">("all")
+    const { user } = useAuth()
 
     useEffect(() => {
         fetchActiveRemarks()
@@ -50,9 +46,13 @@ export default function ActiveRemarks() {
     const fetchActiveRemarks = async () => {
         try {
             setIsLoading(true)
-            const url = filter === 'me'
-                ? '/api/remarks?is_completed=false&assigned_to=me'
-                : '/api/remarks?is_completed=false'
+            const url = filter === 'pending'
+                ? '/api/remarks?is_completed=true&is_verified=false'
+                : filter === 'me'
+                    ? '/api/remarks?is_completed=false&assigned_to=me'
+                    : filter === 'spec'
+                        ? '/api/remarks?is_completed=false&specialization=me'
+                        : '/api/remarks?is_completed=false'
             const res = await fetch(url)
             if (res.ok) {
                 const data = await res.json()
@@ -97,12 +97,22 @@ export default function ActiveRemarks() {
                                     >
                                         Все задачи
                                     </button>
-                                    <button
-                                        onClick={() => setFilter('me')}
-                                        className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${filter === 'me' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        Мои задачи
-                                    </button>
+                                    {user.specialization && (
+                                        <button
+                                            onClick={() => setFilter('spec')}
+                                            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${filter === 'spec' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            {user.specialization}
+                                        </button>
+                                    )}
+                                    {user.permissions?.can_verify_remarks && (
+                                        <button
+                                            onClick={() => setFilter('pending')}
+                                            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${filter === 'pending' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            На проверку
+                                        </button>
+                                    )}
                                 </div>
                             )}
 
@@ -119,10 +129,20 @@ export default function ActiveRemarks() {
                     </div>
 
                     {isLoading ? (
-                        <div className="flex flex-col items-center justify-center py-20 gap-3">
-                            <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
-                            <span className="text-slate-500 font-medium">Загрузка задач...</span>
-                        </div>
+                        <ItemGroup className="space-y-3">
+                            {Array(3).fill(0).map((_, i) => (
+                                <Item key={i} variant="outline" size="default" className="bg-white border-slate-200 shadow-sm px-4 py-2">
+                                    <Skeleton className="w-12 h-12 rounded-xl shrink-0 bg-slate-200" />
+                                    <ItemContent className="space-y-2">
+                                        <Skeleton className="h-5 w-48 bg-slate-200" />
+                                        <Skeleton className="h-4 w-32 bg-slate-100" />
+                                    </ItemContent>
+                                    <ItemActions>
+                                        <Skeleton className="w-10 h-10 rounded-full bg-slate-100" />
+                                    </ItemActions>
+                                </Item>
+                            ))}
+                        </ItemGroup>
                     ) : filteredLocos.length === 0 ? (
                         <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300 max-w-xl mx-auto">
                             <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4 opacity-20" />
@@ -149,7 +169,7 @@ export default function ActiveRemarks() {
                                                 </div>
                                                 <ItemDescription className="text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
                                                     <MessageSquare className="w-3.5 h-3.5" />
-                                                    {grouped[locoNum].length} активных замечаний
+                                                    {grouped[locoNum].length} {filter === 'pending' ? 'замечаний на проверку' : 'активных замечаний'}
                                                 </ItemDescription>
                                             </ItemContent>
                                             <ItemActions>

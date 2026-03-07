@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { LogOut, Map as MapIcon, ClipboardList, Users, BarChart3, UserCircle, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/hooks/useAuth";
 
 interface User {
     id: number;
@@ -18,27 +19,25 @@ interface User {
 export function Header() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { user: authUser } = useAuth();
     const [user, setUser] = useState<User | null>(null);
     const [locations, setLocations] = useState<{ id: number; name: string }[]>([]);
     const [activeLocation, setActiveLocation] = useState<string>("");
 
     useEffect(() => {
-        fetch('/api/me').then(res => res.json()).then(data => {
-            if (data.authenticated) {
-                setUser(data.user);
-                if (data.user.active_location_id) {
-                    setActiveLocation(String(data.user.active_location_id));
-                } else if (data.user.is_global_admin) {
-                    setActiveLocation("all");
-                }
-                if (data.user.role === 'admin' || data.user.is_global_admin) {
-                    fetch('/api/locations').then(r => r.json()).then(setLocations);
-                }
-            } else {
-                navigate('/');
+        if (authUser) {
+            setUser(authUser as any);
+            if (authUser.active_location_id) {
+                setActiveLocation(String(authUser.active_location_id));
+            } else if ((authUser as any).is_global_admin) {
+                setActiveLocation("all");
             }
-        });
-    }, [navigate]);
+
+            if (authUser.role === 'admin' || (authUser as any).is_global_admin) {
+                fetch('/api/locations').then(r => r.json()).then(setLocations);
+            }
+        }
+    }, [authUser]);
 
     const handleLocationChange = async (val: string) => {
         setActiveLocation(val);

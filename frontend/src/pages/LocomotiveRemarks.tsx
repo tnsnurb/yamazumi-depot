@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import imageCompression from 'browser-image-compression'
 import { useParams, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
@@ -14,12 +15,14 @@ import {
     Send,
     Download,
     ClipboardPaste,
+    Plus,
     FileText,
     BookOpen,
     Search,
     Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useAuth } from "@/hooks/useAuth"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
     Dialog,
@@ -36,7 +39,9 @@ import {
     ItemTitle,
 } from "@/components/ui/item"
 import { Input } from "@/components/ui/input"
+import { FloatingInput } from "@/components/ui/FloatingInput"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
     Select,
     SelectContent,
@@ -44,7 +49,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import * as XLSX from "xlsx"
+import { cn } from "@/lib/utils"
 
 interface RemarkComment {
     id: string;
@@ -93,6 +98,12 @@ interface Remark {
         full_name: string;
         username: string;
     } | null;
+    is_verified?: boolean;
+    verified_at?: string | null;
+    verified_by?: {
+        full_name: string;
+        username: string;
+    } | null;
     assigned_to?: number | null;
     assigned_user?: {
         full_name: string;
@@ -104,26 +115,31 @@ interface Remark {
 export default function LocomotiveRemarks() {
     const { id: locomotiveId } = useParams()
     const navigate = useNavigate()
-    const [remarks, setRemarks] = useState<Remark[]>([])
+    const queryClient = useQueryClient()
     const [locomotive, setLocomotive] = useState<any>(null)
-    const [isLoading, setIsLoading] = useState(true)
     const [isPasteOpen, setIsPasteOpen] = useState(false)
     const [pasteText, setPasteText] = useState("")
     const [confirmRemark, setConfirmRemark] = useState<Remark | null>(null)
+    const [togglingRemarkId, setTogglingRemarkId] = useState<string | null>(null)
 
     // Catalog state
     const [catalogTemplates, setCatalogTemplates] = useState<any[]>([])
     const [isCatalogOpen, setIsCatalogOpen] = useState(false)
-    const [templateSearch, setTemplateSearch] = useState("")
+    const [catalogSearch, setCatalogSearch] = useState("")
     useEffect(() => {
         setAddedTemplateIds([])
-    }, [templateSearch])
+    }, [catalogSearch])
     const [isAddManualOpen, setIsAddManualOpen] = useState(false)
-    const [manualText, setManualText] = useState("")
+    const [manualRemark, setManualRemark] = useState("")
     const [manualPriority, setManualPriority] = useState("medium")
     const [manualCategory, setManualCategory] = useState("")
 
+    const { user: authUser } = useAuth()
     const [user, setUser] = useState<any>(null)
+
+    useEffect(() => {
+        if (authUser) setUser(authUser)
+    }, [authUser])
 
     // Expanded state
     const [expandedRemarkId, setExpandedRemarkId] = useState<string | null>(null)
@@ -148,23 +164,29 @@ export default function LocomotiveRemarks() {
 
     // Loading states for UX
     const [isSubmittingTemplate, setIsSubmittingTemplate] = useState(false)
-    const [submittingTemplateId, setSubmittingTemplateId] = useState<number | null>(null)
     const [addedTemplateIds, setAddedTemplateIds] = useState<number[]>([])
+    const [selectedTemplateIds, setSelectedTemplateIds] = useState<number[]>([])
 
-    useEffect(() => {
-        fetch('/api/me').then(res => res.json()).then(data => {
-            if (data.user) setUser(data.user)
-        }).catch(() => { })
-    }, [])
-
+    // Reject Dialog state
+    const [rejectRemarkId, setRejectRemarkId] = useState<string | null>(null)
+    const [rejectComment, setRejectComment] = useState("")
     useEffect(() => {
         if (locomotiveId) {
-            fetchRemarks()
             fetchLocomotive()
             fetchUsers()
             fetchCatalogTemplates()
         }
     }, [locomotiveId])
+
+    const { data: remarks = [], isLoading: isRemarksLoading } = useQuery({
+        queryKey: ['remarks', locomotiveId],
+        queryFn: async () => {
+            const res = await fetch(`/api/locomotives/${locomotiveId}/remarks`)
+            if (!res.ok) throw new Error("Ошибка загрузки замечаний")
+            return res.json() as Promise<Remark[]>
+        },
+        enabled: !!locomotiveId
+    })
 
     const fetchUsers = async () => {
         try {
@@ -195,175 +217,249 @@ export default function LocomotiveRemarks() {
         }
     }
 
-    const fetchRemarks = async () => {
-        setIsLoading(true)
-        try {
-            const res = await fetch(`/api/locomotives/${locomotiveId}/remarks`)
-            if (res.ok) {
-                setRemarks(await res.json())
-            } else {
-                toast.error("Ошибка загрузки замечаний")
-            }
-        } catch (e) {
-            toast.error("Ошибка сети")
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const assignWorker = async (remarkId: string, userId: number | null) => {
-        try {
+    const assignWorkerMutation = useMutation({
+        mutationFn: async ({ remarkId, userId }: { remarkId: string, userId: number | null }) => {
             const res = await fetch(`/api/remarks/${remarkId}/assign`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ assigned_to: userId })
-            });
-
-            if (res.ok) {
-                const updated = await res.json();
-                setRemarks(prev => prev.map(r => r.id === remarkId ? { ...r, assigned_to: updated.assigned_to, assigned_user: updated.assigned_user } : r));
-                toast.success(userId ? "Исполнитель назначен" : "Назначение снято");
-
-                // Refresh history if open
-                if (expandedRemarkId === remarkId && activeTab === 'history') {
-                    fetchHistory(remarkId);
-                }
-            } else {
-                const error = await res.json();
-                toast.error(error.error || "Ошибка назначения");
+            })
+            if (!res.ok) {
+                const error = await res.json()
+                throw new Error(error.error || "Ошибка назначения")
             }
-        } catch (e) {
-            toast.error("Ошибка сети");
+            return res.json()
+        },
+        onSuccess: (updatedRemark, variables) => {
+            queryClient.setQueryData(['remarks', locomotiveId], (old: Remark[] | undefined) => {
+                if (!old) return old
+                return old.map(r => r.id === updatedRemark.id ? { ...r, assigned_to: updatedRemark.assigned_to, assigned_user: updatedRemark.assigned_user } : r)
+            })
+            toast.success(variables.userId ? "Исполнитель назначен" : "Назначение снято")
+            if (expandedRemarkId === variables.remarkId && activeTab === 'history') {
+                fetchHistory(variables.remarkId)
+            }
+        },
+        onError: (error: Error) => {
+            toast.error(error.message)
         }
+    })
+
+    const assignWorker = (remarkId: string, userId: number | null) => {
+        assignWorkerMutation.mutate({ remarkId, userId })
     }
 
-    const handlePasteSubmit = async () => {
+    const pasteRemarksMutation = useMutation({
+        mutationFn: async (lines: string[]) => {
+            const res = await fetch(`/api/locomotives/${locomotiveId}/remarks/bulk`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ texts: lines })
+            })
+            if (!res.ok) throw new Error("Ошибка при добавлении замечаний")
+            return res.json()
+        },
+        onSuccess: (_, lines) => {
+            toast.success(`Добавлено замечаний: ${lines.length}`)
+            setIsPasteOpen(false)
+            setPasteText("")
+            queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
+        },
+        onError: () => toast.error("Ошибка при добавлении замечаний")
+    })
+
+    const handlePasteSubmit = () => {
         if (!pasteText.trim()) return
 
         const lines = pasteText
             .split('\n')
             .map(line => line.trim())
             .filter(line => line.length > 0)
-            .map(line => line.replace(/^\d+[\.)\]]\s*/, ''))
+            .map(line => line.replace(/^\d+[.)\]]\s*/, ''))
 
         if (lines.length === 0) {
             toast.error("Текст не содержит валидных строк")
             return
         }
-
-        try {
-            const res = await fetch(`/api/locomotives/${locomotiveId}/remarks/bulk`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ texts: lines })
-            })
-
-            if (res.ok) {
-                toast.success(`Добавлено замечаний: ${lines.length}`)
-                setIsPasteOpen(false)
-                setPasteText("")
-                fetchRemarks()
-            } else {
-                toast.error("Ошибка при добавлении замечаний")
-            }
-        } catch (e) {
-            toast.error("Ошибка сети")
-        }
+        pasteRemarksMutation.mutate(lines)
     }
 
-    const handleAddFromTemplate = async (templateId: number) => {
-        if (isSubmittingTemplate) return
+    const toggleTemplateSelection = (templateId: number) => {
+        setSelectedTemplateIds(prev =>
+            prev.includes(templateId)
+                ? prev.filter(id => id !== templateId)
+                : [...prev, templateId]
+        )
+    }
+
+    const addTemplatesMutation = useMutation({
+        mutationFn: async (templateIds: number[]) => {
+            const results = await Promise.all(
+                templateIds.map(templateId =>
+                    fetch(`/api/locomotives/${locomotiveId}/remarks/template`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ template_id: templateId })
+                    })
+                )
+            )
+            const allOk = results.every(res => res.ok)
+            if (!allOk) throw new Error("Некоторые замечания не были добавлены")
+            return results
+        },
+        onSuccess: (_, variables) => {
+            toast.success(`Добавлено замечаний: ${variables.length}`)
+            setAddedTemplateIds(prev => [...prev, ...variables])
+            setSelectedTemplateIds([])
+            queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
+        },
+        onError: (error: Error) => toast.error(error.message),
+        onSettled: () => setIsSubmittingTemplate(false)
+    })
+
+    const handleAddSelectedTemplates = () => {
+        if (selectedTemplateIds.length === 0 || isSubmittingTemplate) return
         setIsSubmittingTemplate(true)
-        setSubmittingTemplateId(templateId)
-        try {
-            const res = await fetch(`/api/locomotives/${locomotiveId}/remarks/template`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ template_id: templateId })
-            })
-
-            if (res.ok) {
-                toast.success("Замечание добавлено")
-                await fetchRemarks()
-                setAddedTemplateIds(prev => [...prev, templateId])
-            } else {
-                toast.error("Ошибка при добавлении")
-            }
-        } catch (e) {
-            toast.error("Ошибка сети")
-        } finally {
-            setIsSubmittingTemplate(false)
-            setSubmittingTemplateId(null)
-        }
+        addTemplatesMutation.mutate(selectedTemplateIds)
     }
 
-    const handleManualSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!manualText.trim()) return
-
-        try {
+    const addManualRemarkMutation = useMutation({
+        mutationFn: async (newRemarkInfo: any) => {
             const res = await fetch(`/api/locomotives/${locomotiveId}/remarks`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    text: manualText,
-                    priority: manualPriority,
-                    category: manualCategory
-                })
+                body: JSON.stringify(newRemarkInfo)
             })
-
-            if (res.ok) {
-                toast.success("Замечание добавлено")
-                setManualText("")
-                setManualCategory("")
-                setManualPriority("medium")
-                setIsAddManualOpen(false)
-                fetchRemarks()
-            } else {
-                toast.error("Ошибка при добавлении")
-            }
-        } catch (e) {
-            toast.error("Ошибка сети")
+            if (!res.ok) throw new Error("Ошибка при добавлении")
+            return res.json()
+        },
+        onMutate: async (newRemarkInfo) => {
+            await queryClient.cancelQueries({ queryKey: ['remarks', locomotiveId] })
+            const previousRemarks = queryClient.getQueryData<Remark[]>(['remarks', locomotiveId])
+            queryClient.setQueryData<Remark[]>(['remarks', locomotiveId], old => {
+                const optimisticRemark = {
+                    id: Math.random().toString(),
+                    ...newRemarkInfo,
+                    is_completed: false,
+                    created_at: new Date().toISOString(),
+                }
+                return old ? [...old, optimisticRemark] : [optimisticRemark]
+            })
+            return { previousRemarks }
+        },
+        onError: (_err, _newRemarkInfo, context) => {
+            queryClient.setQueryData(['remarks', locomotiveId], context?.previousRemarks)
+            toast.error("Ошибка при добавлении")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
+        },
+        onSuccess: () => {
+            toast.success("Замечание добавлено")
+            setManualRemark("")
+            setManualCategory("")
+            setManualPriority("medium")
+            setIsAddManualOpen(false)
         }
+    })
+
+    const handleManualSubmit = (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!manualRemark.trim()) return
+        addManualRemarkMutation.mutate({
+            text: manualRemark,
+            priority: manualPriority,
+            category: manualCategory
+        })
     }
 
-    const toggleCompletion = async (remark: Remark) => {
-        if (!user) {
-            toast.error("Необходима авторизация")
-            return
-        }
-
-        const newStatus = !remark.is_completed
-
-        if (newStatus) {
-            setConfirmRemark(remark)
-            return
-        }
-
-        await executeCompletion(remark, newStatus)
-    }
-
-    const executeCompletion = async (remark: Remark, newStatus: boolean) => {
-        try {
+    const completeRemarkMutation = useMutation({
+        mutationFn: async ({ remark, newStatus }: { remark: Remark, newStatus: boolean }) => {
             const res = await fetch(`/api/remarks/${remark.id}/complete`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ is_completed: newStatus })
             })
-
-            if (res.ok) {
-                const updatedRemark = await res.json()
-                setRemarks(prev => prev.map(r => r.id === updatedRemark.id ? updatedRemark : r))
-                toast.success(newStatus ? "Замечание выполнено" : "Отметка о выполнении снята")
-            } else {
-                toast.error("Ошибка при обновлении статуса")
+            if (!res.ok) throw new Error("Ошибка при обновлении статуса")
+            return res.json()
+        },
+        onMutate: async ({ remark, newStatus }) => {
+            await queryClient.cancelQueries({ queryKey: ['remarks', locomotiveId] })
+            const previousRemarks = queryClient.getQueryData<Remark[]>(['remarks', locomotiveId])
+            queryClient.setQueryData<Remark[]>(['remarks', locomotiveId], old => {
+                if (!old) return old
+                return old.map(r => r.id === remark.id ? { ...r, is_completed: newStatus, completed_by: newStatus ? user?.id : null } : r)
+            })
+            return { previousRemarks }
+        },
+        onError: (_err, _newRemarkInfo, context) => {
+            if (context?.previousRemarks) {
+                queryClient.setQueryData(['remarks', locomotiveId], context.previousRemarks)
             }
-        } catch (e) {
-            toast.error("Ошибка сети")
-        } finally {
+            toast.error("Ошибка при обновлении статуса")
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
+            setTogglingRemarkId(null)
             setConfirmRemark(null)
+        },
+        onSuccess: (_, variables) => {
+            toast.success(variables.newStatus ? "Замечание выполнено" : "Отметка о выполнении снята")
         }
+    })
+
+    const toggleCompletion = (remark: Remark) => {
+        if (!user) {
+            toast.error("Необходима авторизация")
+            return
+        }
+        const newStatus = !remark.is_completed
+        if (newStatus) {
+            setConfirmRemark(remark)
+            return
+        }
+        setTogglingRemarkId(remark.id)
+        completeRemarkMutation.mutate({ remark, newStatus })
     }
+
+    const executeCompletion = (remark: Remark, newStatus: boolean) => {
+        setTogglingRemarkId(remark.id)
+        completeRemarkMutation.mutate({ remark, newStatus })
+    }
+
+    const verifyRemarkMutation = useMutation({
+        mutationFn: async (remarkId: string) => {
+            const res = await fetch(`/api/remarks/${remarkId}/verify`, { method: "PUT" })
+            if (!res.ok) throw new Error("Ошибка при принятии замечания")
+            return res.json()
+        },
+        onSuccess: () => {
+            toast.success("Замечание принято")
+            queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
+        },
+        onError: () => toast.error("Ошибка сети")
+    })
+
+    const rejectRemarkMutation = useMutation({
+        mutationFn: async ({ id, comment }: { id: string, comment: string }) => {
+            const res = await fetch(`/api/remarks/${id}/reject`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ comment })
+            })
+            if (!res.ok) throw new Error("Ошибка при возврате замечания")
+            return res.json()
+        },
+        onSuccess: () => {
+            toast.success("Замечание возвращено на доработку")
+            queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
+            setRejectRemarkId(null)
+            setRejectComment("")
+        },
+        onError: () => toast.error("Ошибка сети")
+    })
 
     const fetchComments = async (remarkId: string) => {
         setLoadingComments(remarkId)
@@ -475,7 +571,10 @@ export default function LocomotiveRemarks() {
 
             if (res.ok) {
                 const updatedRemark = await res.json()
-                setRemarks(prev => prev.map(r => r.id === updatedRemark.id ? updatedRemark : r))
+                queryClient.setQueryData(['remarks', locomotiveId], (old: Remark[] | undefined) => {
+                    if (!old) return old
+                    return old.map(r => r.id === updatedRemark.id ? updatedRemark : r)
+                })
                 toast.success("Обновлено")
                 // Refetch history if expanded
                 if (expandedRemarkId === remarkId && activeTab === 'history') {
@@ -521,7 +620,8 @@ export default function LocomotiveRemarks() {
         return a.is_completed ? 1 : -1
     })
 
-    const downloadRemarks = (filter: 'all' | 'completed' | 'incomplete') => {
+    const downloadRemarks = async (filter: 'all' | 'completed' | 'incomplete') => {
+        const XLSX = await import("xlsx-js-style")
         let data = sortedRemarks
         if (filter === 'completed') data = remarks.filter(r => r.is_completed)
         if (filter === 'incomplete') data = remarks.filter(r => !r.is_completed)
@@ -687,7 +787,7 @@ export default function LocomotiveRemarks() {
                 </div>
 
                 {/* Statistics */}
-                {!isLoading && remarks.length > 0 && (() => {
+                {!isRemarksLoading && remarks.length > 0 && (() => {
                     const total = remarks.length
                     const completed = remarks.filter(r => r.is_completed).length
                     const remaining = total - completed
@@ -747,8 +847,28 @@ export default function LocomotiveRemarks() {
                 })()}
 
                 <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
-                    {isLoading ? (
-                        <div className="p-8 text-center text-slate-500">Загрузка...</div>
+                    {isRemarksLoading ? (
+                        <ItemGroup className="flex flex-col gap-3 p-3 md:p-0">
+                            {Array(4).fill(0).map((_, i) => (
+                                <Item key={i} variant="outline" className="bg-white border-slate-200 shadow-sm rounded-xl overflow-hidden p-3 md:p-4 min-h-0 flex-col md:flex-row items-stretch md:items-center">
+                                    <div className="flex items-start gap-4 flex-1">
+                                        <Skeleton className="w-6 md:w-8 h-4 mt-2 shrink-0 bg-slate-200" />
+                                        <div className="flex-1 space-y-3 mt-1">
+                                            <Skeleton className="h-5 w-3/4 bg-slate-200" />
+                                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                <Skeleton className="h-4 w-24 bg-slate-100" />
+                                                <Skeleton className="h-6 w-32 rounded-full bg-indigo-50" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 md:mt-0 md:ml-4 flex items-center justify-end gap-2 shrink-0 border-t md:border-none pt-3 md:pt-0 border-slate-100">
+                                        <Skeleton className="h-8 w-24 rounded-md bg-slate-100" />
+                                        <Skeleton className="h-8 w-10 rounded-md bg-slate-100" />
+                                        <Skeleton className="h-8 w-10 rounded-md bg-slate-100" />
+                                    </div>
+                                </Item>
+                            ))}
+                        </ItemGroup>
                     ) : remarks.length === 0 ? (
                         <div className="p-12 text-center flex flex-col items-center">
                             <ClipboardPaste className="w-12 h-12 text-slate-300 mb-4" />
@@ -764,18 +884,15 @@ export default function LocomotiveRemarks() {
                         </div>
                     ) : (
                         <ItemGroup className="flex flex-col gap-3 p-3 md:p-0">
-                            {sortedRemarks.map((remark, idx) => (
+                            {sortedRemarks.map((remark) => (
                                 <div key={remark.id}>
                                     <Item
                                         variant="outline"
-                                        className={`bg-white border-slate-200 shadow-sm rounded-xl overflow-hidden p-3 md:p-4 min-h-0 flex-col md:flex-row items-stretch md:items-center ${remark.is_completed ? 'opacity-80' : ''}`}
+                                        className={`bg-white border-slate-200 shadow-sm rounded-xl overflow-hidden p-3 md:p-4 min-h-0 flex-col md:flex-row items-stretch md:items-center ${remark.is_verified ? 'opacity-60' : remark.is_completed ? 'border-amber-200/50 shadow-sm' : ''}`}
                                     >
-                                        <div className="flex items-start gap-4 flex-1">
-                                            <div className="text-slate-400 font-mono text-xs md:text-base mt-0.5 w-6 md:w-8 shrink-0 pt-1">
-                                                {idx + 1}.
-                                            </div>
+                                        <div className="flex items-start gap-3 flex-1">
                                             <div className="flex-1 min-w-0">
-                                                <ItemTitle className={`text-base whitespace-normal leading-snug line-clamp-none ${remark.is_completed ? 'text-slate-400 line-through font-normal' : 'text-slate-900 font-semibold'}`}>
+                                                <ItemTitle className={`text-base whitespace-normal leading-snug line-clamp-none ${remark.is_verified ? 'text-slate-400 line-through font-normal' : remark.is_completed ? 'text-slate-700 font-medium' : 'text-slate-900 font-semibold'}`}>
                                                     {remark.text}
                                                 </ItemTitle>
 
@@ -857,31 +974,59 @@ export default function LocomotiveRemarks() {
                                                 </div>
 
                                                 {remark.is_completed && remark.completed_by && (
-                                                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm text-slate-500 bg-green-50/50 border border-green-100 px-2.5 py-1.5 inline-flex rounded-md shadow-sm">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <CheckCircle2 className="w-3.5 md:w-4 h-3.5 md:h-4 text-green-600" />
-                                                            <span className="font-semibold text-green-800">{remark.completed_by.full_name}</span>
+                                                    <div className="mt-2 flex flex-col gap-2">
+                                                        <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm text-slate-500 border px-2.5 py-1.5 inline-flex rounded-md shadow-sm w-fit ${remark.is_verified ? 'bg-green-50/50 border-green-100' : 'bg-amber-50/50 border-amber-200'}`}>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <CheckCircle2 className={`w-3.5 md:w-4 h-3.5 md:h-4 ${remark.is_verified ? 'text-green-600' : 'text-amber-600'}`} />
+                                                                <span className={`font-semibold ${remark.is_verified ? 'text-green-800' : 'text-amber-800'}`}>
+                                                                    {remark.completed_by.full_name}
+                                                                </span>
+                                                            </div>
+                                                            <span className={`hidden md:inline ${remark.is_verified ? 'text-green-300' : 'text-amber-300'}`}>•</span>
+                                                            <span className={`${remark.is_verified ? 'text-green-600' : 'text-amber-600'} font-medium`}>
+                                                                {new Date(remark.completed_at!).toLocaleString('ru-RU', {
+                                                                    day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                                })}
+                                                            </span>
+                                                            {remark.is_verified ? (
+                                                                <span className="ml-1 font-bold text-green-700 bg-green-200/50 px-1.5 rounded">✓ Принято</span>
+                                                            ) : (
+                                                                <span className="ml-1 font-bold text-amber-700 bg-amber-200/50 px-1.5 rounded">⏳ Ожидает проверки</span>
+                                                            )}
                                                         </div>
-                                                        <span className="hidden md:inline text-green-300">•</span>
-                                                        <span className="text-green-600 font-medium">{new Date(remark.completed_at!).toLocaleString('ru-RU', {
-                                                            day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                        })}</span>
+
+                                                        {user?.permissions?.can_verify_remarks && !remark.is_verified && (
+                                                            <div className="flex gap-2 w-full mt-2">
+                                                                <Button
+                                                                    size="default"
+                                                                    onClick={() => verifyRemarkMutation.mutate(remark.id)}
+                                                                    disabled={verifyRemarkMutation.isPending || rejectRemarkMutation.isPending}
+                                                                    className="bg-green-600 hover:bg-green-700 text-white h-10 px-2 text-[11px] sm:text-xs flex-1 rounded-lg"
+                                                                >
+                                                                    ✓ Принять работу
+                                                                </Button>
+                                                                <Button
+                                                                    size="default"
+                                                                    onClick={() => {
+                                                                        setRejectComment("");
+                                                                        setRejectRemarkId(remark.id);
+                                                                    }}
+                                                                    disabled={verifyRemarkMutation.isPending || rejectRemarkMutation.isPending}
+                                                                    variant="outline"
+                                                                    className="border-red-200 text-red-600 hover:bg-red-50 h-10 px-2 text-[11px] sm:text-xs flex-1 rounded-lg"
+                                                                >
+                                                                    Вернуть на доработку
+                                                                </Button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
 
-                                            <button
-                                                onClick={() => toggleCompletion(remark)}
-                                                className={`w-12 md:w-10 h-12 md:h-10 flex items-center justify-center rounded-xl border shadow-sm transition-all md:hidden ${remark.is_completed
-                                                    ? 'bg-green-500 border-green-500 text-white shadow-green-200 shadow-lg'
-                                                    : 'bg-white border-slate-200 text-slate-300 active:scale-95'
-                                                    }`}
-                                            >
-                                                <CheckCircle2 className="w-6 md:w-5 h-6 md:h-5" />
-                                            </button>
+
                                         </div>
 
-                                        <div className="mt-4 md:mt-0 flex items-center justify-between md:ml-4">
+                                        <div className="mt-4 md:mt-0 flex flex-col md:flex-row justify-between md:items-center md:ml-4 gap-3 md:gap-0">
                                             <div className="flex gap-2 flex-1 md:flex-none">
                                                 <button
                                                     onClick={() => toggleExpanded(remark.id, 'comments')}
@@ -921,12 +1066,22 @@ export default function LocomotiveRemarks() {
 
                                             <button
                                                 onClick={() => toggleCompletion(remark)}
-                                                className={`hidden md:flex w-10 h-10 ml-3 items-center justify-center rounded-xl border shadow-sm transition-all ${remark.is_completed
-                                                    ? 'bg-green-500 border-green-500 text-white hover:bg-green-600 shadow-green-200 shadow-lg'
-                                                    : 'bg-white border-slate-200 text-slate-300 hover:border-green-400 hover:text-green-500'
+                                                disabled={togglingRemarkId === remark.id}
+                                                className={`flex items-center justify-center gap-2 h-11 md:h-10 md:px-4 md:ml-3 rounded-xl border shadow-sm transition-all w-full md:w-auto flex-none ${!remark.is_completed
+                                                    ? 'bg-green-500 border-green-500 text-white hover:bg-green-600 shadow-green-200 shadow-md active:scale-95 cursor-pointer'
+                                                    : 'bg-slate-50 border-slate-200 text-slate-400 opacity-70 cursor-pointer'
                                                     }`}
                                             >
-                                                <CheckCircle2 className="w-5 h-5" />
+                                                {togglingRemarkId === remark.id ? (
+                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                ) : (
+                                                    <>
+                                                        <CheckCircle2 className="w-5 h-5 shrink-0" />
+                                                        <span className="font-medium text-[15px] md:text-sm">
+                                                            {remark.is_completed ? 'Выполнено' : 'Выполнить'}
+                                                        </span>
+                                                    </>
+                                                )}
                                             </button>
                                         </div>
                                     </Item>
@@ -1095,9 +1250,11 @@ export default function LocomotiveRemarks() {
                             </Button>
                             <Button
                                 onClick={() => confirmRemark && executeCompletion(confirmRemark, true)}
-                                className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
+                                disabled={togglingRemarkId === confirmRemark?.id}
+                                className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none transition-all duration-300"
                             >
-                                <CheckCircle2 className="w-4 h-4 mr-2" /> Выполнено
+                                {togglingRemarkId === confirmRemark?.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                                {togglingRemarkId === confirmRemark?.id ? "Завершение..." : "Выполнено"}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
@@ -1143,40 +1300,64 @@ export default function LocomotiveRemarks() {
                 {/* Add Catalog Remark Dialog */}
                 <Dialog open={isCatalogOpen} onOpenChange={(open) => {
                     setIsCatalogOpen(open)
-                    if (!open) setAddedTemplateIds([])
+                    if (!open) {
+                        setAddedTemplateIds([])
+                        setSelectedTemplateIds([])
+                    }
                 }}>
                     <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col p-6">
                         <DialogHeader>
-                            <DialogTitle>Каталог типовых замечаний</DialogTitle>
-                            <DialogDescription>Выберите замечание из списка для быстрого добавления</DialogDescription>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <DialogTitle>Каталог типовых замечаний</DialogTitle>
+                                    <DialogDescription>Выберите замечания для быстрого добавления</DialogDescription>
+                                </div>
+                                {selectedTemplateIds.length > 0 && (
+                                    <Button
+                                        onClick={handleAddSelectedTemplates}
+                                        disabled={isSubmittingTemplate}
+                                        className="bg-green-600 hover:bg-green-700 animate-in fade-in zoom-in duration-200"
+                                    >
+                                        {isSubmittingTemplate ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                                        Добавить ({selectedTemplateIds.length})
+                                    </Button>
+                                )}
+                            </div>
                         </DialogHeader>
-                        <div className="relative my-4">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <Input
-                                placeholder="Поиск по тексту или специализации..."
-                                value={templateSearch}
-                                onChange={e => setTemplateSearch(e.target.value)}
-                                className="pl-9"
+                        <div className="relative group">
+                            <Search className={cn(
+                                "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
+                                catalogSearch ? "text-indigo-500" : "text-slate-400 group-hover:text-slate-500"
+                            )} />
+                            <FloatingInput
+                                label="Поиск в каталоге..."
+                                value={catalogSearch}
+                                onChange={(e) => setCatalogSearch(e.target.value)}
+                                className="pl-9 h-10"
+                                labelClassName="left-9"
                             />
                         </div>
                         <div className="flex-1 overflow-y-auto pr-2 space-y-2 py-2 scrollbar-thin">
                             {catalogTemplates
-                                .filter(t => t.text.toLowerCase().includes(templateSearch.toLowerCase()) || (t.specialization || "").toLowerCase().includes(templateSearch.toLowerCase()))
+                                .filter(t => t.text.toLowerCase().includes(catalogSearch.toLowerCase()) || (t.specialization || "").toLowerCase().includes(catalogSearch.toLowerCase()))
                                 .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))
                                 .map(t => (
                                     <button
                                         key={t.id}
                                         disabled={isSubmittingTemplate}
-                                        onClick={() => handleAddFromTemplate(t.id)}
-                                        className={`w-full text-left p-3 rounded-lg border transition-all group flex flex-col gap-1 ${submittingTemplateId === t.id
+                                        onClick={() => toggleTemplateSelection(t.id)}
+                                        className={`w-full text-left p-3 rounded-lg border transition-all group flex flex-col gap-1 ${selectedTemplateIds.includes(t.id)
                                             ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-100 ring-offset-0'
                                             : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50'
                                             } ${isSubmittingTemplate ? 'opacity-80 cursor-wait' : ''}`}
                                     >
                                         <div className="flex justify-between items-start">
                                             <div className="flex items-center gap-2">
-                                                <span className={`font-medium ${submittingTemplateId === t.id ? 'text-indigo-700' : 'text-slate-900'} group-hover:text-indigo-700`}>{t.text}</span>
-                                                {submittingTemplateId === t.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />}
+                                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedTemplateIds.includes(t.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                                                    }`}>
+                                                    {selectedTemplateIds.includes(t.id) && <CheckCircle2 className="w-3 h-3 text-white" />}
+                                                </div>
+                                                <span className={`font-medium ${selectedTemplateIds.includes(t.id) ? 'text-indigo-700' : 'text-slate-900'} group-hover:text-indigo-700`}>{t.text}</span>
                                                 {addedTemplateIds.includes(t.id) && (
                                                     <span className="flex items-center text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold ml-2">
                                                         <CheckCircle2 className="w-3 h-3 mr-1" /> Добавлено
@@ -1185,7 +1366,7 @@ export default function LocomotiveRemarks() {
                                             </div>
                                             {t.priority === 'high' && <span className="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">High</span>}
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 ml-6">
                                             {t.specialization && <span className="text-[10px] text-indigo-600 font-semibold">{t.specialization}</span>}
                                             {t.category && <span className="text-[10px] text-slate-400">/ {t.category}</span>}
                                             <span className="text-[9px] text-slate-300 ml-auto leading-none">Использовано: {t.usage_count || 0}</span>
@@ -1205,14 +1386,12 @@ export default function LocomotiveRemarks() {
                             <DialogTitle>Добавить замечание</DialogTitle>
                         </DialogHeader>
                         <form onSubmit={handleManualSubmit} className="space-y-4 pt-2">
-                            <div className="space-y-2">
-                                <Label>Текст замечания</Label>
-                                <Textarea
-                                    required
-                                    value={manualText}
-                                    onChange={e => setManualText(e.target.value)}
-                                    placeholder="Введите описание проблемы..."
-                                    className="min-h-[100px]"
+                            <div className="space-y-4 pt-4">
+                                <FloatingInput
+                                    label="Текст замечания"
+                                    value={manualRemark}
+                                    onChange={(e) => setManualRemark(e.target.value)}
+                                    placeholder="Опишите неисправность..."
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
@@ -1237,6 +1416,40 @@ export default function LocomotiveRemarks() {
                                 <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">Добавить</Button>
                             </DialogFooter>
                         </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Reject Remark Dialog */}
+                <Dialog open={!!rejectRemarkId} onOpenChange={(open) => !open && setRejectRemarkId(null)}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle>Вернуть на доработку</DialogTitle>
+                            <DialogDescription>
+                                Укажите причину возврата, чтобы специалист понимал, что нужно исправить.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-2">
+                            <Textarea
+                                placeholder="Комментарий к возврату..."
+                                value={rejectComment}
+                                onChange={(e) => setRejectComment(e.target.value)}
+                                className="min-h-[100px]"
+                            />
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setRejectRemarkId(null)}>Отмена</Button>
+                            <Button
+                                variant="destructive"
+                                onClick={() => {
+                                    if (rejectRemarkId) {
+                                        rejectRemarkMutation.mutate({ id: rejectRemarkId, comment: rejectComment });
+                                    }
+                                }}
+                                disabled={!rejectComment.trim()}
+                            >
+                                Вернуть работу
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </main>

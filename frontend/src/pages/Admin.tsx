@@ -1,17 +1,20 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
-import { Trash2, Plus, Edit, KeyRound, ShieldAlert, FileDown, Upload, BookOpen, Search, Wrench, Lock, ArrowDown, ArrowUp, Activity, Loader2, MapPin, Warehouse, ClipboardList } from "lucide-react"
+import { Trash2, Plus, Edit, KeyRound, ShieldAlert, FileDown, Upload, BookOpen, Search, Wrench, Lock, ArrowDown, ArrowUp, Activity, Loader2, MapPin, Warehouse, ClipboardList, QrCode } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { FloatingInput } from "@/components/ui/FloatingInput"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import * as XLSX from 'xlsx'
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAuth } from "@/hooks/useAuth"
+import { QRCodeSVG } from 'qrcode.react'
 
 interface User {
     id: number
@@ -37,6 +40,7 @@ interface Role {
     can_edit_catalog: boolean
     can_manage_users: boolean
     can_complete_remarks: boolean
+    can_verify_remarks: boolean
 }
 
 interface RepairType {
@@ -69,6 +73,7 @@ const PERMISSIONS = [
     { key: 'can_view_dashboard', label: 'Просмотр Дашборда', desc: 'Доступ к дашборду и аналитике' },
     { key: 'can_move_locomotives', label: 'Управление Локомотивами', desc: 'Разрешено перемещать тепловозы' },
     { key: 'can_complete_remarks', label: 'Работа с Замечаниями', desc: 'Разрешено отмечать замечания как устраненные' },
+    { key: 'can_verify_remarks', label: 'Проверка Замечаний', desc: 'Разрешено принимать или отклонять работу по замечаниям' },
     { key: 'can_edit_catalog', label: 'Справочник Локомотивов', desc: 'Управление записями в справочнике' },
     { key: 'can_manage_users', label: 'Управление Пользователями', desc: 'Настройка профилей, ролей и прав' },
 ] as const;
@@ -84,23 +89,17 @@ const SPECIALIZATIONS = [
 export default function Admin() {
     const navigate = useNavigate()
 
-    // Auth & Mount
+    const { user: authUser } = useAuth()
+    const [adminUser, setAdminUser] = useState<any>(null)
+
     useEffect(() => {
-        fetch('/api/me').then(r => r.json()).then(d => {
-            if (!d.authenticated || d.user.role !== 'admin') {
-                navigate('/map')
-            } else {
-                fetchAdminUser()
-                fetchRoles()
-                fetchUsers()
-                fetchCatalog()
-                fetchRepairTypes()
-                fetchAuditLogs()
-                fetchLocations()
-                fetchRemarkTemplates()
-            }
-        })
-    }, [navigate])
+        if (authUser) {
+            setAdminUser(authUser)
+            setAddLocationId(String((authUser as any).active_location_id || 1))
+        }
+    }, [authUser])
+    const [activeTab, setActiveTab] = useState("users")
+
 
     // --- LOCATIONS STATE ---
     const [locations, setLocations] = useState<{ id: number, name: string, is_active?: boolean, track_count?: number, slot_count?: number, gate_position?: string, track_config?: string }[]>([])
@@ -187,6 +186,7 @@ export default function Admin() {
     const [users, setUsers] = useState<User[]>([])
     const [isLoadingUsers, setIsLoadingUsers] = useState(true)
     const [isAddUserOpen, setIsAddUserOpen] = useState(false)
+    const [isCreatingUser, setIsCreatingUser] = useState(false)
     const [isEditUserOpen, setIsEditUserOpen] = useState(false)
     const [editUserData, setEditUserData] = useState<User | null>(null)
 
@@ -195,6 +195,7 @@ export default function Admin() {
     const [addPassword, setAddPassword] = useState("")
     const [addRole, setAddRole] = useState("employee")
     const [addBarcode, setAddBarcode] = useState("")
+    const [addEmail, setAddEmail] = useState("")
     const [addLocationId, setAddLocationId] = useState<string>("1")
     const [addSpecialization, setAddSpecialization] = useState("none")
 
@@ -202,22 +203,14 @@ export default function Admin() {
     const [editFullName, setEditFullName] = useState("")
     const [editRole, setEditRole] = useState("employee")
     const [editBarcode, setEditBarcode] = useState("")
+    const [editEmail, setEditEmail] = useState("")
     const [editIsActive, setEditIsActive] = useState(true)
     const [editPassword, setEditPassword] = useState("")
     const [editLocationId, setEditLocationId] = useState<string>("1")
     const [editSpecialization, setEditSpecialization] = useState("none")
     const [editPoints, setEditPoints] = useState<number>(0)
 
-    const [adminUser, setAdminUser] = useState<any>(null)
 
-    const fetchAdminUser = async () => {
-        const res = await fetch('/api/me')
-        if (res.ok) {
-            const data = await res.json()
-            setAdminUser(data.user)
-            setAddLocationId(String(data.user.active_location_id || 1))
-        }
-    }
 
     const [usersSearch, setUsersSearch] = useState("")
     const [usersSortField, setUsersSortField] = useState<'username' | 'created_at' | 'full_name'>('username')
@@ -232,7 +225,7 @@ export default function Admin() {
     const [addRoleDescription, setAddRoleDescription] = useState("")
     const [addRolePermissions, setAddRolePermissions] = useState({
         can_view_dashboard: false, can_view_map: true, can_view_journal: true,
-        can_move_locomotives: false, can_edit_catalog: false, can_manage_users: false, can_complete_remarks: true
+        can_move_locomotives: false, can_edit_catalog: false, can_manage_users: false, can_complete_remarks: true, can_verify_remarks: false
     })
 
     const [isEditRoleOpen, setIsEditRoleOpen] = useState(false)
@@ -241,8 +234,9 @@ export default function Admin() {
     const [editRoleDescription, setEditRoleDescription] = useState("")
     const [editRolePermissions, setEditRolePermissions] = useState({
         can_view_dashboard: false, can_view_map: true, can_view_journal: true,
-        can_move_locomotives: false, can_edit_catalog: false, can_manage_users: false, can_complete_remarks: true
+        can_move_locomotives: false, can_edit_catalog: false, can_manage_users: false, can_complete_remarks: true, can_verify_remarks: false
     })
+    const [isSavingRole, setIsSavingRole] = useState(false)
 
     // --- CATALOG STATE ---
     const [catalog, setCatalog] = useState<{ id: number, number: string }[]>([])
@@ -258,6 +252,8 @@ export default function Admin() {
     const [isEditLocoOpen, setIsEditLocoOpen] = useState(false)
     const [editLocoId, setEditLocoId] = useState<number | null>(null)
     const [editLocoNumber, setEditLocoNumber] = useState("")
+
+    const [qrLoco, setQrLoco] = useState<{ id: number, number: string } | null>(null)
 
     // --- REPAIR TYPES STATE ---
     const [repairTypes, setRepairTypes] = useState<RepairType[]>([])
@@ -290,6 +286,10 @@ export default function Admin() {
     const [editTemplatePriority, setEditTemplatePriority] = useState("medium")
     const [editTemplateCategory, setEditTemplateCategory] = useState("")
     const [editTemplateHours, setEditTemplateHours] = useState("")
+
+    const [isTemplatePreviewOpen, setIsTemplatePreviewOpen] = useState(false)
+    const [templatePreviewData, setTemplatePreviewData] = useState<any[]>([])
+    const [isImportingTemplates, setIsImportingTemplates] = useState(false)
 
     // ================================= FETCHERS =================================
 
@@ -329,9 +329,6 @@ export default function Admin() {
         setIsLoadingLogs(false)
     }
 
-    useEffect(() => {
-        fetchAuditLogs(logsPage)
-    }, [logsPage])
 
     const fetchRemarkTemplates = async () => {
         setIsLoadingTemplates(true)
@@ -339,6 +336,49 @@ export default function Admin() {
         if (res.ok) setRemarkTemplates(await res.json())
         setIsLoadingTemplates(false)
     }
+
+    // Auth & Mount - Core Data Only
+    useEffect(() => {
+        if (authUser && (authUser as any).role !== 'admin') {
+            navigate('/map')
+        }
+    }, [authUser, navigate])
+
+    useEffect(() => {
+        if (adminUser) {
+            fetchRoles()
+            fetchLocations()
+        }
+    }, [adminUser])
+
+    // Lazy Fetcher for Tabs
+    useEffect(() => {
+        if (!adminUser) return; // Wait for auth
+
+        switch (activeTab) {
+            case 'users':
+                fetchUsers()
+                break
+            case 'remarkTemplates':
+                fetchRemarkTemplates()
+                break
+            case 'roles':
+                fetchRoles()
+                break
+            case 'catalog':
+                fetchCatalog()
+                break
+            case 'repairTypes':
+                fetchRepairTypes()
+                break
+            case 'locations':
+                fetchLocations()
+                break
+            case 'audit':
+                fetchAuditLogs(logsPage)
+                break
+        }
+    }, [activeTab, adminUser, logsPage]) // Added logsPage to dependencies
 
     const handleCreateTemplate = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -412,30 +452,148 @@ export default function Admin() {
         }
     }
 
+    const exportTemplatesToExcel = async () => {
+        const XLSX = await import("xlsx-js-style");
+        const ws = XLSX.utils.json_to_sheet(remarkTemplates.map(t => ({
+            'Текст замечания': t.text,
+            'Специализация': t.specialization === 'none' ? 'Нет' : t.specialization,
+            'Приоритет': t.priority === 'high' ? 'Высокий' : t.priority === 'medium' ? 'Средний' : 'Низкий',
+            'Категория': t.category || '',
+            'Норма часов': t.estimated_hours || '',
+            'Кол-во использований': t.usage_count
+        })))
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, "Шаблоны")
+        XLSX.writeFile(wb, "Remark_Templates.xlsx")
+    }
+
+    const downloadTemplateSchema = async () => {
+        const XLSX = await import("xlsx-js-style");
+        const ws = XLSX.utils.aoa_to_sheet([
+            ["Текст замечания", "Специализация", "Приоритет", "Категория", "Норма часов"],
+            ["Течь масла ТК", "Дизелист", "Высокий", "Дизель", "1.5"],
+            ["Ослабление крепления контакта", "Электрик", "Средний", "Электро", "0.5"]
+        ])
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, "Шаблон_для_заполнения")
+        XLSX.writeFile(wb, "Import_Remark_Templates_Example.xlsx")
+    }
+
+    const handleTemplateFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        const reader = new FileReader()
+        reader.onload = async (e) => {
+            try {
+                const XLSX = await import("xlsx-js-style");
+                const data = e.target?.result
+                const workbook = XLSX.read(data, { type: 'binary' })
+                const firstSheetName = workbook.SheetNames[0]
+                const worksheet = workbook.Sheets[firstSheetName]
+                const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet)
+
+                if (jsonData.length === 0) {
+                    toast.error("Файл пуст или имеет неверный формат")
+                    return
+                }
+
+                // Map headers (support both RU and EN or specific mappings)
+                const mappedData = jsonData.map(row => {
+                    const findValue = (keys: string[]) => {
+                        const key = keys.find(k => row[k] !== undefined);
+                        return key ? row[key] : undefined;
+                    };
+
+                    const text = findValue(['Текст замечания', 'text', 'Text']);
+                    const priorityInput = findValue(['Приоритет', 'priority', 'Priority']) || 'medium'
+                    const specializationInput = findValue(['Специализация', 'specialization', 'Specialization']) || 'none'
+
+                    // Priority conversion
+                    let priority = 'medium'
+                    if (String(priorityInput).toLowerCase().includes('выс') || String(priorityInput).toLowerCase() === 'high') priority = 'high'
+                    if (String(priorityInput).toLowerCase().includes('низ') || String(priorityInput).toLowerCase() === 'low') priority = 'low'
+
+                    // Specialization check
+                    let specialization = specializationInput
+                    if (String(specialization).toLowerCase() === 'нет' || String(specialization).toLowerCase() === 'none') specialization = 'none'
+
+                    return {
+                        text,
+                        specialization,
+                        priority,
+                        category: findValue(['Категория', 'category', 'Category']) || null,
+                        estimated_hours: parseFloat(findValue(['Норма часов', 'estimated_hours', 'Hours'])) || null
+                    }
+                }).filter(t => t.text)
+
+                setTemplatePreviewData(mappedData)
+                setIsTemplatePreviewOpen(true)
+            } catch (err: any) {
+                toast.error("Ошибка при чтении файла")
+            } finally {
+                event.target.value = ''
+            }
+        }
+        reader.readAsBinaryString(file)
+    }
+
+    const confirmImportTemplates = async () => {
+        setIsImportingTemplates(true)
+        try {
+            const res = await fetch('/api/remark-templates/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(templatePreviewData)
+            })
+            if (res.ok) {
+                const result = await res.json()
+                toast.success(`Успешно импортировано ${result.count} шаблонов`)
+                setIsTemplatePreviewOpen(false)
+                fetchRemarkTemplates()
+            } else {
+                const err = await res.json()
+                toast.error(err.error || 'Ошибка импорта')
+            }
+        } catch (err) {
+            toast.error("Ошибка сети при импорте")
+        } finally {
+            setIsImportingTemplates(false)
+        }
+    }
+
     // ================================= USERS ACTIONS =================================
 
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault()
+        setIsCreatingUser(true)
         const payload = {
             username: addUsername,
             full_name: addFullName,
             password: addPassword,
             role: addRole,
             barcode: addBarcode,
+            email: addEmail || null,
             location_id: parseInt(addLocationId) || 1,
             specialization: addSpecialization || null
         }
-        const res = await fetch('/api/users', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-        })
-        if (res.ok) {
-            toast.success('Пользователь создан')
-            setIsAddUserOpen(false)
-            fetchUsers()
-            setAddUsername(""); setAddFullName(""); setAddPassword(""); setAddRole("employee"); setAddBarcode(""); setAddLocationId("1"); setAddSpecialization("")
-        } else {
-            const err = await res.json()
-            toast.error(err.error || 'Ошибка создания')
+        try {
+            const res = await fetch('/api/users', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            })
+            if (res.ok) {
+                toast.success('Пользователь создан')
+                setIsAddUserOpen(false)
+                fetchUsers()
+                setAddUsername(""); setAddFullName(""); setAddPassword(""); setAddRole("employee"); setAddBarcode(""); setAddEmail(""); setAddLocationId("1"); setAddSpecialization("")
+            } else {
+                const err = await res.json()
+                toast.error(err.error || 'Ошибка создания')
+            }
+        } catch (err) {
+            toast.error('Сетевая ошибка при создании')
+        } finally {
+            setIsCreatingUser(false)
         }
     }
 
@@ -445,6 +603,10 @@ export default function Admin() {
         setEditFullName(u.full_name || "")
         setEditRole(u.role)
         setEditBarcode(u.barcode || "")
+        // We'll need to update the User interface if we want to display/edit existing emails easily
+        // but for now we'll assume the API provides it or we just allow setting it.
+        // Assuming user object from API might have email now.
+        setEditEmail((u as any).email || "")
         setEditIsActive(u.is_active !== false)
         setEditLocationId(u.location_id?.toString() || "1")
         setEditSpecialization(u.specialization || "")
@@ -462,6 +624,7 @@ export default function Admin() {
             full_name: editFullName,
             role: editRole,
             barcode: editBarcode,
+            email: editEmail || null,
             is_active: editIsActive,
             location_id: parseInt(editLocationId) || 1,
             specialization: editSpecialization || null,
@@ -494,7 +657,8 @@ export default function Admin() {
         }
     }
 
-    const exportUsersToExcel = () => {
+    const exportUsersToExcel = async () => {
+        const XLSX = await import("xlsx-js-style");
         const ws = XLSX.utils.json_to_sheet(users.map(u => ({
             'ID': u.id,
             'Логин': u.username,
@@ -516,29 +680,37 @@ export default function Admin() {
         setAddPassword(p)
     }
 
-    // --- Users Sorting & Pagination ---
-    let processedUsers = [...users].filter(u =>
-        u.username.toLowerCase().includes(usersSearch.toLowerCase()) ||
-        (u.full_name || "").toLowerCase().includes(usersSearch.toLowerCase())
-    )
+    // --- Users Sorting & Pagination (Memoized) ---
+    const processedUsers = useMemo(() => {
+        const result = [...users].filter(u =>
+            u.username.toLowerCase().includes(usersSearch.toLowerCase()) ||
+            (u.full_name || "").toLowerCase().includes(usersSearch.toLowerCase())
+        )
 
-    processedUsers.sort((a, b) => {
-        let valA: any = a[usersSortField] || ""
-        let valB: any = b[usersSortField] || ""
-        if (usersSortField === 'created_at') {
-            valA = new Date(valA as string).getTime()
-            valB = new Date(valB as string).getTime()
-        } else {
-            valA = String(valA).toLowerCase()
-            valB = String(valB).toLowerCase()
-        }
-        if (valA < valB) return usersSortDir === 'asc' ? -1 : 1
-        if (valA > valB) return usersSortDir === 'asc' ? 1 : -1
-        return 0
-    })
+        result.sort((a, b) => {
+            let valA: any = a[usersSortField] || ""
+            let valB: any = b[usersSortField] || ""
+            if (usersSortField === 'created_at') {
+                valA = new Date(valA as string).getTime()
+                valB = new Date(valB as string).getTime()
+            } else {
+                valA = String(valA).toLowerCase()
+                valB = String(valB).toLowerCase()
+            }
+            if (valA < valB) return usersSortDir === 'asc' ? -1 : 1
+            if (valA > valB) return usersSortDir === 'asc' ? 1 : -1
+            return 0
+        })
+        return result
+    }, [users, usersSearch, usersSortField, usersSortDir])
 
-    const totalUsersPages = Math.ceil(processedUsers.length / USERS_PER_PAGE) || 1
-    const pagedUsers = processedUsers.slice((usersPage - 1) * USERS_PER_PAGE, usersPage * USERS_PER_PAGE)
+    const totalUsersPages = useMemo(() =>
+        Math.ceil(processedUsers.length / USERS_PER_PAGE) || 1,
+        [processedUsers.length])
+
+    const pagedUsers = useMemo(() =>
+        processedUsers.slice((usersPage - 1) * USERS_PER_PAGE, usersPage * USERS_PER_PAGE),
+        [processedUsers, usersPage])
 
     const toggleSort = (field: typeof usersSortField) => {
         if (usersSortField === field) setUsersSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -595,6 +767,7 @@ export default function Admin() {
         const reader = new FileReader()
         reader.onload = async (e) => {
             try {
+                const XLSX = await import("xlsx-js-style");
                 const data = e.target?.result
                 const workbook = XLSX.read(data, { type: 'binary' })
                 const firstSheetName = workbook.SheetNames[0]
@@ -626,7 +799,8 @@ export default function Admin() {
         reader.readAsBinaryString(file)
     }
 
-    const downloadTemplate = () => {
+    const downloadTemplate = async () => {
+        const XLSX = await import("xlsx-js-style");
         const ws = XLSX.utils.aoa_to_sheet([["Номер"], ["2345"], ["9876"]])
         const wb = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(wb, ws, "Шаблон")
@@ -634,35 +808,45 @@ export default function Admin() {
     }
 
     // --- Catalog Pagination ---
-    let processedCatalog = [...catalog].filter(c => c.number.toLowerCase().includes(catalogSearch.toLowerCase()))
+    const processedCatalog = [...catalog].filter(c => c.number.toLowerCase().includes(catalogSearch.toLowerCase()))
     const totalCatalogPages = Math.ceil(processedCatalog.length / CATALOG_PER_PAGE) || 1
     const pagedCatalog = processedCatalog.slice((catalogPage - 1) * CATALOG_PER_PAGE, catalogPage * CATALOG_PER_PAGE)
 
     // ================================= ROLES & REPAIR TYPES ACTIONS =================================
     const handleCreateRole = async (e: React.FormEvent) => {
         e.preventDefault()
-        const payload = { name: addRoleName, description: addRoleDescription, ...addRolePermissions }
-        const res = await fetch('/api/roles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-        if (res.ok) {
-            toast.success('Роль добавлена')
-            setIsAddRoleOpen(false); fetchRoles()
-        } else {
-            const err = await res.json()
-            toast.error(err.error || 'Ошибка добавления')
+        setIsSavingRole(true)
+        try {
+            const payload = { name: addRoleName, description: addRoleDescription, ...addRolePermissions }
+            const res = await fetch('/api/roles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+            if (res.ok) {
+                toast.success('Роль добавлена')
+                setIsAddRoleOpen(false); fetchRoles()
+            } else {
+                const err = await res.json()
+                toast.error(err.error || 'Ошибка добавления')
+            }
+        } finally {
+            setIsSavingRole(false)
         }
     }
 
     const handleEditRole = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!editRoleData) return
-        const payload = { name: editRoleName, description: editRoleDescription, ...editRolePermissions }
-        const res = await fetch(`/api/roles/${editRoleData.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-        if (res.ok) {
-            toast.success('Роль обновлена')
-            setIsEditRoleOpen(false); fetchRoles()
-        } else {
-            const err = await res.json()
-            toast.error(err.error || 'Ошибка обновления')
+        setIsSavingRole(true)
+        try {
+            const payload = { name: editRoleName, description: editRoleDescription, ...editRolePermissions }
+            const res = await fetch(`/api/roles/${editRoleData.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+            if (res.ok) {
+                toast.success('Роль обновлена')
+                setIsEditRoleOpen(false); fetchRoles()
+            } else {
+                const err = await res.json()
+                toast.error(err.error || 'Ошибка обновления')
+            }
+        } finally {
+            setIsSavingRole(false)
         }
     }
 
@@ -697,7 +881,7 @@ export default function Admin() {
                         </h1>
                     </div>
 
-                    <Tabs defaultValue="users" className="w-full">
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                         <div className="overflow-x-auto pb-2 scrollbar-none">
                             <TabsList className="mb-2 w-max min-w-full justify-start md:w-full md:justify-center">
                                 <TabsTrigger value="users" className="flex items-center gap-2"><KeyRound className="w-4 h-4" /> <span className="hidden sm:inline">Сотрудники</span><span className="sm:hidden">Люди</span></TabsTrigger>
@@ -713,9 +897,18 @@ export default function Admin() {
                         {/* USERS TAB */}
                         <TabsContent value="users" className="space-y-4 outline-none">
                             <div className="flex flex-col sm:flex-row gap-3">
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <Input placeholder="Поиск по логину или ФИО..." value={usersSearch} onChange={(e) => { setUsersSearch(e.target.value); setUsersPage(1); }} className="pl-9 bg-white h-9" />
+                                <div className="relative flex-1 group">
+                                    <Search className={cn(
+                                        "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
+                                        usersSearch ? "text-indigo-500" : "text-slate-400"
+                                    )} />
+                                    <FloatingInput
+                                        label="Поиск по логину или ФИО..."
+                                        value={usersSearch}
+                                        onChange={(e) => { setUsersSearch(e.target.value); setUsersPage(1); }}
+                                        className="pl-9 h-10"
+                                        labelClassName="left-9"
+                                    />
                                 </div>
                                 <div className="flex gap-2">
                                     <Button variant="outline" onClick={exportUsersToExcel} className="gap-2 h-9 flex-1 sm:flex-none">
@@ -830,7 +1023,7 @@ export default function Admin() {
                                                     <TableCell className="font-medium text-slate-900 text-sm px-2 md:px-4">{r.name}</TableCell>
                                                     <TableCell className="text-slate-600 text-xs md:text-sm px-2 md:px-4">{r.description || '—'}</TableCell>
                                                     <TableCell className="text-right space-x-1 px-2 md:px-4 whitespace-nowrap">
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditRoleData(r); setEditRoleName(r.name); setEditRoleDescription(r.description); setEditRolePermissions(r as any); setIsEditRoleOpen(true) }} disabled={r.name === 'admin' || r.name === 'employee'}><Edit className="w-3.5 h-3.5 text-indigo-500" /></Button>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditRoleData(r); setEditRoleName(r.name); setEditRoleDescription(r.description); setEditRolePermissions(r as any); setIsEditRoleOpen(true) }} disabled={r.name === 'admin'}><Edit className="w-3.5 h-3.5 text-indigo-500" /></Button>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteRole(r.id, r.name)} disabled={r.name === 'admin' || r.name === 'employee'}><Trash2 className="w-3.5 h-3.5 text-rose-500" /></Button>
                                                     </TableCell>
                                                 </TableRow>
@@ -844,9 +1037,18 @@ export default function Admin() {
                         {/* CATALOG TAB */}
                         <TabsContent value="catalog" className="space-y-4 outline-none">
                             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-white p-3 md:p-4 rounded-xl shadow-sm border border-slate-200">
-                                <div className="w-full sm:flex-1 sm:max-w-xs relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <Input placeholder="Поиск в каталоге..." value={catalogSearch} onChange={e => { setCatalogSearch(e.target.value); setCatalogPage(1); }} className="pl-9 h-9" />
+                                <div className="w-full sm:flex-1 sm:max-w-xs relative group">
+                                    <Search className={cn(
+                                        "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
+                                        catalogSearch ? "text-indigo-500" : "text-slate-400"
+                                    )} />
+                                    <FloatingInput
+                                        label="Поиск в каталоге..."
+                                        value={catalogSearch}
+                                        onChange={e => { setCatalogSearch(e.target.value); setCatalogPage(1); }}
+                                        className="pl-9 h-10"
+                                        labelClassName="left-9"
+                                    />
                                 </div>
                                 <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:ml-auto">
                                     <label className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-md cursor-pointer hover:bg-slate-50 transition-colors text-xs font-medium h-9 flex-1 sm:flex-none justify-center">
@@ -886,8 +1088,11 @@ export default function Admin() {
                                                         <TableCell className="text-center text-slate-500 font-mono text-xs px-2 md:px-4">{item.id}</TableCell>
                                                         <TableCell className="font-semibold text-slate-900 text-sm px-2 md:px-4">{item.number}</TableCell>
                                                         <TableCell className="text-right px-2 md:px-4 space-x-1 sticky right-0 bg-white/95 backdrop-blur-sm shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50/95">
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-600" onClick={() => { setEditLocoId(item.id); setEditLocoNumber(item.number); setIsEditLocoOpen(true); }}><Edit className="w-3.5 h-3.5" /></Button>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:text-rose-600" onClick={() => handleDeleteLoco(item.id, item.number)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50" onClick={() => setQrLoco({ id: item.id, number: item.number })} title="QR Код">
+                                                                <QrCode className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50" onClick={() => { setEditLocoId(item.id); setEditLocoNumber(item.number); setIsEditLocoOpen(true); }}><Edit className="w-3.5 h-3.5" /></Button>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => handleDeleteLoco(item.id, item.number)}><Trash2 className="w-3.5 h-3.5" /></Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -973,13 +1178,35 @@ export default function Admin() {
                         {/* REMARK TEMPLATES TAB */}
                         <TabsContent value="remarkTemplates" className="space-y-4 outline-none">
                             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-white p-3 md:p-4 rounded-xl shadow-sm border border-slate-200">
-                                <div className="w-full sm:flex-1 sm:max-w-xs relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <Input placeholder="Поиск в шаблонах..." value={templateSearch} onChange={e => setTemplateSearch(e.target.value)} className="pl-9 h-9" />
+                                <div className="w-full sm:flex-1 sm:max-w-xs relative group">
+                                    <Search className={cn(
+                                        "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
+                                        templateSearch ? "text-indigo-500" : "text-slate-400"
+                                    )} />
+                                    <FloatingInput
+                                        label="Поиск в шаблонах..."
+                                        value={templateSearch}
+                                        onChange={e => setTemplateSearch(e.target.value)}
+                                        className="pl-9 h-10"
+                                        labelClassName="left-9"
+                                    />
                                 </div>
-                                <Button onClick={() => setIsAddTemplateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 gap-2 h-9 text-xs sm:ml-auto">
-                                    <Plus className="w-4 h-4" /> Добавить шаблон
-                                </Button>
+                                <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:ml-auto">
+                                    <Button variant="outline" onClick={exportTemplatesToExcel} className="gap-2 h-9 text-xs flex-1 sm:flex-none">
+                                        <FileDown className="w-4 h-4" /> <span className="hidden xs:inline">Экспорт</span>
+                                    </Button>
+                                    <Button variant="outline" onClick={downloadTemplateSchema} className="gap-2 h-9 text-xs flex-1 sm:flex-none">
+                                        <ArrowDown className="w-4 h-4" /> <span className="hidden xs:inline">Шаблон</span>
+                                    </Button>
+                                    <label className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-md cursor-pointer hover:bg-slate-50 transition-colors text-xs font-medium h-9 flex-1 sm:flex-none justify-center">
+                                        <Upload className="w-4 h-4 text-slate-500" />
+                                        <span className="hidden xs:inline">Импорт</span>
+                                        <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleTemplateFileUpload} />
+                                    </label>
+                                    <Button onClick={() => setIsAddTemplateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 gap-2 h-9 text-xs flex-1 sm:flex-none">
+                                        <Plus className="w-4 h-4" /> <span className="hidden xs:inline">Добавить шаблон</span><span className="xs:hidden">Добавить</span>
+                                    </Button>
+                                </div>
                             </div>
 
                             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -1106,13 +1333,61 @@ export default function Admin() {
 
             {/* MODALS / DIALOGS */}
 
+            {/* Template Import Preview Dialog */}
+            <Dialog open={isTemplatePreviewOpen} onOpenChange={setIsTemplatePreviewOpen}>
+                <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Предпросмотр импорта шаблонов</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex-1 overflow-auto border rounded-md my-4">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Текст</TableHead>
+                                    <TableHead>Специализация</TableHead>
+                                    <TableHead>Приоритет</TableHead>
+                                    <TableHead>Категория</TableHead>
+                                    <TableHead>Норма (ч)</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {templatePreviewData.map((row: any, i: number) => (
+                                    <TableRow key={i}>
+                                        <TableCell className="max-w-xs truncate">{row.text}</TableCell>
+                                        <TableCell>{row.specialization}</TableCell>
+                                        <TableCell>{row.priority}</TableCell>
+                                        <TableCell>{row.category}</TableCell>
+                                        <TableCell>{row.estimated_hours}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                    <DialogFooter className="gap-2">
+                        <Button variant="outline" onClick={() => setIsTemplatePreviewOpen(false)}>Отмена</Button>
+                        <Button onClick={confirmImportTemplates} disabled={isImportingTemplates} className="bg-green-600 hover:bg-green-700">
+                            {isImportingTemplates ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                            Подтвердить импорт ({templatePreviewData.length})
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* LOCATION DIALOGS */}
             {/* Add User Dialog */}
             <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Новый сотрудник</DialogTitle></DialogHeader>
                     <form onSubmit={handleCreateUser} className="space-y-4 pt-2">
-                        <div className="space-y-2"><Label>Логин (Username) *</Label><Input required value={addUsername} onChange={e => setAddUsername(e.target.value)} /></div>
-                        <div className="space-y-2"><Label>ФИО</Label><Input value={addFullName} onChange={e => setAddFullName(e.target.value)} /></div>
+                        <FloatingInput label="Логин (Username) *" required value={addUsername} onChange={e => setAddUsername(e.target.value)} />
+                        <FloatingInput
+                            label="Email (Обязательно для Google/Сброса пароля)"
+                            type="email"
+                            value={addEmail}
+                            onChange={e => setAddEmail(e.target.value)}
+                            placeholder="user@company.com"
+                        />
+                        <FloatingInput label="ФИО" value={addFullName} onChange={e => setAddFullName(e.target.value)} />
                         <div className="space-y-2">
                             <Label>Роль</Label>
                             <Select value={addRole} onValueChange={setAddRole}>
@@ -1137,14 +1412,25 @@ export default function Admin() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Временный пароль *</Label>
-                            <div className="flex gap-2">
-                                <Input required value={addPassword} onChange={e => setAddPassword(e.target.value)} />
-                                <Button type="button" variant="secondary" onClick={generatePassword}><KeyRound className="w-4 h-4" /></Button>
+                            <div className="flex gap-2 relative">
+                                <FloatingInput
+                                    label="Временный пароль *"
+                                    required
+                                    value={addPassword}
+                                    onChange={e => setAddPassword(e.target.value)}
+                                    className="flex-1"
+                                />
+                                <Button type="button" variant="secondary" onClick={generatePassword} className="h-10 w-10 shrink-0"><KeyRound className="w-4 h-4" /></Button>
                             </div>
                         </div>
-                        <div className="space-y-2"><Label>Штрих-код</Label><Input value={addBarcode} onChange={e => setAddBarcode(e.target.value)} /></div>
-                        <DialogFooter><Button type="button" variant="outline" onClick={() => setIsAddUserOpen(false)}>Отмена</Button><Button type="submit">Создать</Button></DialogFooter>
+                        <FloatingInput label="Штрих-код" value={addBarcode} onChange={e => setAddBarcode(e.target.value)} />
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setIsAddUserOpen(false)}>Отмена</Button>
+                            <Button type="submit" disabled={isCreatingUser}>
+                                {isCreatingUser && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Создать
+                            </Button>
+                        </DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
@@ -1154,7 +1440,7 @@ export default function Admin() {
                 <DialogContent>
                     <DialogHeader><DialogTitle>Новый шаблон замечания</DialogTitle></DialogHeader>
                     <form onSubmit={handleCreateTemplate} className="space-y-4 pt-2">
-                        <div className="space-y-2"><Label>Текст замечания *</Label><Input required value={addTemplateText} onChange={e => setAddTemplateText(e.target.value)} placeholder="Например: Теч масла ТК" /></div>
+                        <FloatingInput label="Текст замечания *" required value={addTemplateText} onChange={e => setAddTemplateText(e.target.value)} placeholder="Например: Теч масла ТК" />
                         <div className="space-y-2">
                             <Label>Специализация</Label>
                             <Select value={addTemplateSpecialization} onValueChange={setAddTemplateSpecialization}>
@@ -1175,8 +1461,8 @@ export default function Admin() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-2"><Label>Категория</Label><Input value={addTemplateCategory} onChange={e => setAddTemplateCategory(e.target.value)} placeholder="Например: Дизель" /></div>
-                        <div className="space-y-2"><Label>Норма часов (Примерно)</Label><Input type="number" step="0.5" value={addTemplateHours} onChange={e => setAddTemplateHours(e.target.value)} placeholder="1.5" /></div>
+                        <FloatingInput label="Категория" value={addTemplateCategory} onChange={e => setAddTemplateCategory(e.target.value)} placeholder="Например: Дизель" />
+                        <FloatingInput label="Норма часов (Примерно)" type="number" step="0.5" value={addTemplateHours} onChange={e => setAddTemplateHours(e.target.value)} placeholder="1.5" />
                         <DialogFooter><Button type="button" variant="outline" onClick={() => setIsAddTemplateOpen(false)}>Отмена</Button><Button type="submit">Создать</Button></DialogFooter>
                     </form>
                 </DialogContent>
@@ -1186,7 +1472,7 @@ export default function Admin() {
                 <DialogContent>
                     <DialogHeader><DialogTitle>Редактировать шаблон</DialogTitle></DialogHeader>
                     <form onSubmit={handleUpdateTemplate} className="space-y-4 pt-2">
-                        <div className="space-y-2"><Label>Текст замечания *</Label><Input required value={editTemplateText} onChange={e => setEditTemplateText(e.target.value)} /></div>
+                        <FloatingInput label="Текст замечания *" required value={editTemplateText} onChange={e => setEditTemplateText(e.target.value)} />
                         <div className="space-y-2">
                             <Label>Специализация</Label>
                             <Select value={editTemplateSpecialization} onValueChange={setEditTemplateSpecialization}>
@@ -1207,8 +1493,8 @@ export default function Admin() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-2"><Label>Категория</Label><Input value={editTemplateCategory} onChange={e => setEditTemplateCategory(e.target.value)} /></div>
-                        <div className="space-y-2"><Label>Норма часов</Label><Input type="number" step="0.5" value={editTemplateHours} onChange={e => setEditTemplateHours(e.target.value)} /></div>
+                        <FloatingInput label="Категория" value={editTemplateCategory} onChange={e => setEditTemplateCategory(e.target.value)} />
+                        <FloatingInput label="Норма часов" type="number" step="0.5" value={editTemplateHours} onChange={e => setEditTemplateHours(e.target.value)} />
                         <DialogFooter><Button type="button" variant="outline" onClick={() => setIsEditTemplateOpen(false)}>Отмена</Button><Button type="submit">Сохранить</Button></DialogFooter>
                     </form>
                 </DialogContent>
@@ -1219,8 +1505,15 @@ export default function Admin() {
                 <DialogContent>
                     <DialogHeader><DialogTitle>Редактирование профиля: {editUserData?.username}</DialogTitle></DialogHeader>
                     <form onSubmit={handleUpdateUser} className="space-y-4 pt-2">
-                        <div className="space-y-2"><Label>Логин</Label><Input required value={editUsername} onChange={e => setEditUsername(e.target.value)} disabled={editUserData?.username === 'admin'} /></div>
-                        <div className="space-y-2"><Label>ФИО</Label><Input value={editFullName} onChange={e => setEditFullName(e.target.value)} /></div>
+                        <FloatingInput label="Логин" required value={editUsername} onChange={e => setEditUsername(e.target.value)} disabled={editUserData?.username === 'admin'} />
+                        <FloatingInput
+                            label="Email (Обязательно для Google/Сброса пароля)"
+                            type="email"
+                            value={editEmail}
+                            onChange={e => setEditEmail(e.target.value)}
+                            placeholder="user@company.com"
+                        />
+                        <FloatingInput label="ФИО" value={editFullName} onChange={e => setEditFullName(e.target.value)} />
                         <div className="space-y-2">
                             <Label>Роль</Label>
                             <Select value={editRole} onValueChange={setEditRole} disabled={editUserData?.username === 'admin'}>
@@ -1244,15 +1537,9 @@ export default function Admin() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-2">
-                            <Label>Баллы (Всего)</Label>
-                            <Input type="number" value={editPoints} onChange={e => setEditPoints(parseInt(e.target.value) || 0)} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Новый пароль (оставьте пустым, чтобы не менять)</Label>
-                            <Input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="••••••••" />
-                        </div>
-                        <div className="space-y-2"><Label>Штрих-код</Label><Input value={editBarcode} onChange={e => setEditBarcode(e.target.value)} /></div>
+                        <FloatingInput label="Баллы (Всего)" type="number" value={editPoints} onChange={e => setEditPoints(parseInt(e.target.value) || 0)} />
+                        <FloatingInput label="Новый пароль (оставьте пустым, чтобы не менять)" type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="••••••••" />
+                        <FloatingInput label="Штрих-код" value={editBarcode} onChange={e => setEditBarcode(e.target.value)} />
                         <div className="flex items-center space-x-2 bg-slate-50 p-3 rounded border">
                             <Checkbox id="is_active_toggle" checked={editIsActive} onCheckedChange={(c) => setEditIsActive(!!c)} disabled={editUserData?.username === 'admin'} />
                             <div>
@@ -1269,13 +1556,43 @@ export default function Admin() {
             <Dialog open={isAddLocoOpen} onOpenChange={setIsAddLocoOpen}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Добавить локомотив</DialogTitle></DialogHeader>
-                    <form onSubmit={handleAddLoco} className="space-y-4"><div className="space-y-2"><Label>Номер локомотива</Label><Input required value={addLocoNumber} onChange={e => setAddLocoNumber(e.target.value)} placeholder="0001" /></div><DialogFooter><Button type="submit">Добавить</Button></DialogFooter></form>
+                    <form onSubmit={handleAddLoco} className="space-y-4">
+                        <FloatingInput label="Номер локомотива" required value={addLocoNumber} onChange={e => setAddLocoNumber(e.target.value)} placeholder="0001" />
+                        <DialogFooter><Button type="submit">Добавить</Button></DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
             <Dialog open={isEditLocoOpen} onOpenChange={setIsEditLocoOpen}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Редактировать номер</DialogTitle></DialogHeader>
-                    <form onSubmit={handleEditLoco} className="space-y-4"><div className="space-y-2"><Label>Номер локомотива</Label><Input required value={editLocoNumber} onChange={e => setEditLocoNumber(e.target.value)} /></div><DialogFooter><Button type="submit">Сохранить</Button></DialogFooter></form>
+                    <form onSubmit={handleEditLoco} className="space-y-4">
+                        <FloatingInput label="Номер локомотива" required value={editLocoNumber} onChange={e => setEditLocoNumber(e.target.value)} />
+                        <DialogFooter><Button type="submit">Сохранить</Button></DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={!!qrLoco} onOpenChange={(open) => !open && setQrLoco(null)}>
+                <DialogContent className="sm:max-w-xs text-center border-slate-200 shadow-xl">
+                    <DialogHeader><DialogTitle className="text-center">Тепловоз {qrLoco?.number}</DialogTitle></DialogHeader>
+                    <div className="flex flex-col items-center justify-center p-6 bg-white rounded-xl">
+                        {qrLoco && (
+                            <QRCodeSVG
+                                value={`loco:${qrLoco.id}`}
+                                size={220}
+                                level="H"
+                                includeMargin={true}
+                                className="qr-code-svg-element"
+                            />
+                        )}
+                        <p className="mt-4 font-black text-3xl tracking-tight text-slate-900 border-2 border-slate-900 rounded-lg px-6 py-2 uppercase">{qrLoco?.number}</p>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-2">Распечатайте и наклейте в кабине</p>
+                    <DialogFooter className="sm:justify-center">
+                        <Button onClick={() => window.print()} className="w-full gap-2 bg-slate-900 hover:bg-slate-800 text-white shadow-md">
+                            <QrCode className="w-4 h-4" /> Печать
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
@@ -1283,9 +1600,9 @@ export default function Admin() {
             <Dialog open={isAddRoleOpen} onOpenChange={setIsAddRoleOpen}>
                 <DialogContent className="max-w-2xl">
                     <DialogHeader><DialogTitle>Новая роль</DialogTitle></DialogHeader>
-                    <form onSubmit={handleCreateRole} className="space-y-4">
-                        <Input required value={addRoleName} onChange={e => setAddRoleName(e.target.value)} placeholder="Имя роли (eng)" />
-                        <Input value={addRoleDescription} onChange={e => setAddRoleDescription(e.target.value)} placeholder="Описание" />
+                    <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+                        <FloatingInput required value={addRoleName} onChange={e => setAddRoleName(e.target.value)} label="Имя роли (eng)" />
+                        <FloatingInput value={addRoleDescription} onChange={e => setAddRoleDescription(e.target.value)} label="Описание" />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
                             {PERMISSIONS.map(p => (
                                 <div key={`add-${p.key}`} className="flex items-start space-x-3 p-2 bg-white rounded border shadow-sm">
@@ -1301,21 +1618,21 @@ export default function Admin() {
                                 </div>
                             ))}
                         </div>
-                        <DialogFooter><Button type="submit">Создать</Button></DialogFooter>
-                    </form>
+                    </div>
+                    <DialogFooter><Button onClick={(e) => handleCreateRole(e as any)} disabled={isSavingRole}>{isSavingRole && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Создать</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
             <Dialog open={isEditRoleOpen} onOpenChange={setIsEditRoleOpen}>
                 <DialogContent className="max-w-2xl">
                     <DialogHeader><DialogTitle>Редактировать роль: {editRoleName}</DialogTitle></DialogHeader>
-                    <form onSubmit={handleEditRole} className="space-y-4">
-                        <div className="space-y-2"><Label>Имя роли (системное)</Label><Input required value={editRoleName} onChange={e => setEditRoleName(e.target.value)} disabled={editRoleData?.name === 'admin'} /></div>
-                        <div className="space-y-2"><Label>Описание (понятное)</Label><Input value={editRoleDescription} onChange={e => setEditRoleDescription(e.target.value)} /></div>
+                    <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+                        <FloatingInput required value={editRoleName} onChange={e => setEditRoleName(e.target.value)} disabled={editRoleData?.name === 'admin'} label="Имя роли (системное)" />
+                        <FloatingInput value={editRoleDescription} onChange={e => setEditRoleDescription(e.target.value)} label="Описание (понятное)" />
 
                         <div className="space-y-2 mt-4 pt-4 border-t">
                             <Label className="font-bold flex items-center gap-2"><ShieldAlert className="w-4 h-4" /> Права доступа</Label>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-lg border border-slate-200 max-h-60 overflow-y-auto shadow-inner">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-lg border border-slate-200 shadow-inner">
                                 {PERMISSIONS.map(p => (
                                     <div key={`edit-${p.key}`} className={`flex items-start space-x-3 p-3 bg-white border rounded shadow-sm transition-colors ${editRoleData?.name === 'admin' ? 'opacity-50 grayscale' : 'hover:border-indigo-300'}`}>
                                         <Checkbox
@@ -1332,190 +1649,203 @@ export default function Admin() {
                                 ))}
                             </div>
                         </div>
-
-                        <DialogFooter><Button type="submit" disabled={editRoleData?.name === 'admin'}>Сохранить</Button></DialogFooter>
-                    </form>
+                    </div>
+                    <DialogFooter><Button onClick={(e) => handleEditRole(e as any)} disabled={editRoleData?.name === 'admin' || isSavingRole}>{isSavingRole && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Сохранить</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
             {/* REPAIR TYPE DIALOG */}
-            <Dialog open={isAddRepairTypeOpen} onOpenChange={setIsAddRepairTypeOpen}><DialogContent><DialogHeader><DialogTitle>Тип ремонта</DialogTitle></DialogHeader><form onSubmit={handleAddRepairType} className="space-y-4"><Input required value={addRepairTypeName} onChange={e => setAddRepairTypeName(e.target.value)} placeholder="ТО-2" /><DialogFooter><Button type="submit">Добавить</Button></DialogFooter></form></DialogContent></Dialog>
+            <Dialog open={isAddRepairTypeOpen} onOpenChange={setIsAddRepairTypeOpen}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>Тип ремонта</DialogTitle></DialogHeader>
+                    <form onSubmit={handleAddRepairType} className="space-y-4 pt-2">
+                        <FloatingInput required value={addRepairTypeName} onChange={e => setAddRepairTypeName(e.target.value)} label="Шифр (например: ТО-2)" />
+                        <DialogFooter><Button type="submit">Добавить</Button></DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
             {/* LOCATION DIALOGS */}
-            <Dialog open={isAddLocationOpen} onOpenChange={setIsAddLocationOpen}><DialogContent className="max-h-[85vh] overflow-y-auto max-w-2xl"><DialogHeader><DialogTitle>Добавить депо</DialogTitle></DialogHeader><form onSubmit={handleCreateLocation} className="space-y-4">
-                <div className="space-y-2"><Label>Название</Label><Input required value={addLocationName} onChange={e => setAddLocationName(e.target.value)} placeholder="ТЧЭ-1 Входная" /></div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Количество путей</Label><Input type="number" min={1} max={20} required value={addLocationTrackCount} onChange={e => setAddLocationTrackCount(parseInt(e.target.value) || 6)} /></div>
-                    <div className="space-y-2"><Label>Слотов на путь</Label><Input type="number" min={1} max={20} required value={addLocationSlotCount} onChange={e => setAddLocationSlotCount(parseInt(e.target.value) || 6)} /></div>
-                </div>
-                <div className="space-y-4 pt-2 border-t mt-2">
-                    <Label className="text-slate-700 font-bold flex items-center gap-2">
-                        <Warehouse className="w-4 h-4" /> Настройка слотов (Депо vs Улица)
-                    </Label>
-                    <p className="text-xs text-slate-500">
-                        Нажмите на номер слота, чтобы пометить его как <strong className="text-indigo-600">Депо</strong> (белый фон).
-                        Остальные будут считаться <strong className="text-slate-400">Улицей</strong> (серый фон).
-                    </p>
-                    <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                        {Array.from({ length: addLocationSlotCount }).map((_, i) => {
-                            const slotNum = (i + 1).toString();
-                            const isInside = addLocationGatePosition.split(',').includes(slotNum);
-                            return (
-                                <Button
-                                    key={i}
-                                    type="button"
-                                    size="sm"
-                                    variant={isInside ? "default" : "outline"}
-                                    className={`w-10 h-10 p-0 font-bold transition-all ${isInside ? 'bg-indigo-600 shadow-md ring-2 ring-indigo-200' : 'bg-white text-slate-400 border-dashed hover:border-indigo-400 hover:text-indigo-500'}`}
-                                    onClick={() => {
-                                        const current = addLocationGatePosition ? addLocationGatePosition.split(',') : [];
-                                        const next = isInside
-                                            ? current.filter((s: string) => s !== slotNum)
-                                            : [...current, slotNum].filter((s: string) => s !== '0' && s !== '').sort((a, b) => parseInt(a) - parseInt(b));
-                                        setAddLocationGatePosition(next.join(','));
-                                    }}
-                                >
-                                    {slotNum}
-                                </Button>
-                            );
-                        })}
-                    </div>
-                </div>
+            <Dialog open={isAddLocationOpen} onOpenChange={setIsAddLocationOpen}>
+                <DialogContent className="max-h-[85vh] overflow-y-auto max-w-2xl">
+                    <DialogHeader><DialogTitle>Добавить депо</DialogTitle></DialogHeader>
+                    <form onSubmit={handleCreateLocation} className="space-y-4 pt-2">
+                        <FloatingInput label="Название" required value={addLocationName} onChange={e => setAddLocationName(e.target.value)} placeholder="ТЧЭ-1 Входная" />
+                        <div className="grid grid-cols-2 gap-4">
+                            <FloatingInput label="Количество путей" type="number" min={1} max={20} required value={addLocationTrackCount} onChange={e => setAddLocationTrackCount(parseInt(e.target.value) || 6)} />
+                            <FloatingInput label="Слотов на путь" type="number" min={1} max={20} required value={addLocationSlotCount} onChange={e => setAddLocationSlotCount(parseInt(e.target.value) || 6)} />
+                        </div>
+                        <div className="space-y-4 pt-2 border-t mt-2">
+                            <Label className="text-slate-700 font-bold flex items-center gap-2">
+                                <Warehouse className="w-4 h-4" /> Настройка слотов (Депо vs Улица)
+                            </Label>
+                            <p className="text-xs text-slate-500">
+                                Нажмите на номер слота, чтобы пометить его как <strong className="text-indigo-600">Депо</strong> (белый фон).
+                                Остальные будут считаться <strong className="text-slate-400">Улицей</strong> (серый фон).
+                            </p>
+                            <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                {Array.from({ length: addLocationSlotCount }).map((_, i) => {
+                                    const slotNum = (i + 1).toString();
+                                    const isInside = addLocationGatePosition.split(',').includes(slotNum);
+                                    return (
+                                        <Button
+                                            key={i}
+                                            type="button"
+                                            size="sm"
+                                            variant={isInside ? "default" : "outline"}
+                                            className={`w-10 h-10 p-0 font-bold transition-all ${isInside ? 'bg-indigo-600 shadow-md ring-2 ring-indigo-200' : 'bg-white text-slate-400 border-dashed hover:border-indigo-400 hover:text-indigo-500'}`}
+                                            onClick={() => {
+                                                const current = addLocationGatePosition ? addLocationGatePosition.split(',') : [];
+                                                const next = isInside
+                                                    ? current.filter((s: string) => s !== slotNum)
+                                                    : [...current, slotNum].filter((s: string) => s !== '0' && s !== '').sort((a, b) => parseInt(a) - parseInt(b));
+                                                setAddLocationGatePosition(next.join(','));
+                                            }}
+                                        >
+                                            {slotNum}
+                                        </Button>
+                                    );
+                                })}
+                            </div>
+                        </div>
 
-                <div className="space-y-4 pt-2 border-t mt-2">
-                    <Label className="text-slate-700 font-bold flex items-center gap-2">
-                        <Activity className="w-4 h-4" /> Настройка зон (Минимализм)
-                    </Label>
-                    <p className="text-xs text-slate-500">Введите названия цехов для нужных путей. Разделитель появится перед путем.</p>
-                    <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded border">
-                        {Array.from({ length: addLocationTrackCount }).map((_, i) => {
-                            const trackNum = i + 1;
-                            const currentConfig = addLocationTrackConfig.split(',').filter(s => s).reduce((acc: any, curr) => {
-                                const [t, l] = curr.split(':');
-                                acc[t] = l;
-                                return acc;
-                            }, {});
-                            return (
-                                <div key={trackNum} className="flex items-center gap-2">
-                                    <span className="text-xs font-medium w-12 shrink-0">Путь {trackNum}</span>
-                                    <Input
-                                        placeholder="Название зоны..."
-                                        className="h-8 text-xs"
-                                        value={currentConfig[trackNum] || ""}
-                                        onChange={e => {
-                                            const val = e.target.value.replace(/[:,]/g, '').trim();
-                                            const newConfig = { ...currentConfig };
-                                            if (val) {
-                                                newConfig[trackNum] = val;
-                                            } else {
-                                                delete newConfig[trackNum];
-                                            }
+                        <div className="space-y-4 pt-2 border-t mt-2">
+                            <Label className="text-slate-700 font-bold flex items-center gap-2">
+                                <Activity className="w-4 h-4" /> Настройка зон (Минимализм)
+                            </Label>
+                            <p className="text-xs text-slate-500">Введите названия цехов для нужных путей. Разделитель появится перед путем.</p>
+                            <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded border">
+                                {Array.from({ length: addLocationTrackCount }).map((_, i) => {
+                                    const trackNum = i + 1;
+                                    const currentConfig = addLocationTrackConfig.split(',').filter(s => s).reduce((acc: any, curr) => {
+                                        const [t, l] = curr.split(':');
+                                        acc[t] = l;
+                                        return acc;
+                                    }, {});
+                                    return (
+                                        <div key={trackNum} className="flex items-center gap-2">
+                                            <span className="text-xs font-medium w-12 shrink-0">Путь {trackNum}</span>
+                                            <Input
+                                                placeholder="Название зоны..."
+                                                className="h-8 text-xs"
+                                                value={currentConfig[trackNum] || ""}
+                                                onChange={e => {
+                                                    const val = e.target.value.replace(/[:,]/g, '').trim();
+                                                    const newConfig = { ...currentConfig };
+                                                    if (val) {
+                                                        newConfig[trackNum] = val;
+                                                    } else {
+                                                        delete newConfig[trackNum];
+                                                    }
 
-                                            const configStr = Object.entries(newConfig)
-                                                .filter(([_, v]) => v)
-                                                .map(([t, v]) => `${t}:${v}`)
-                                                .join(',');
-                                            setAddLocationTrackConfig(configStr);
-                                        }}
-                                    />
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
+                                                    const configStr = Object.entries(newConfig)
+                                                        .filter(([_, v]) => v)
+                                                        .map(([t, v]) => `${t}:${v}`)
+                                                        .join(',');
+                                                    setAddLocationTrackConfig(configStr);
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
 
-                <DialogFooter><Button type="submit">Добавить</Button></DialogFooter></form></DialogContent></Dialog>
-            <Dialog open={isEditLocationOpen} onOpenChange={setIsEditLocationOpen}><DialogContent className="max-h-[85vh] overflow-y-auto max-w-2xl"><DialogHeader><DialogTitle>Редактировать депо</DialogTitle></DialogHeader><form onSubmit={handleUpdateLocation} className="space-y-4">
-                <div className="space-y-2"><Label>Название</Label><Input required value={editLocationName} onChange={e => setEditLocationName(e.target.value)} /></div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Количество путей</Label><Input type="number" min={1} max={20} required value={editLocationTrackCount} onChange={e => setEditLocationTrackCount(parseInt(e.target.value) || 6)} /></div>
-                    <div className="space-y-2"><Label>Слотов на путь</Label><Input type="number" min={1} max={20} required value={editLocationSlotCount} onChange={e => setEditLocationSlotCount(parseInt(e.target.value) || 6)} /></div>
-                </div>
-                <div className="space-y-4 pt-2 border-t mt-2">
-                    <Label className="text-slate-700 font-bold flex items-center gap-2">
-                        <Warehouse className="w-4 h-4" /> Настройка слотов (Депо vs Улица)
-                    </Label>
-                    <p className="text-xs text-slate-500">
-                        Нажмите на номер слота, чтобы пометить его как <strong className="text-indigo-600">Депо</strong> (белый фон).
-                        Остальные будут считаться <strong className="text-slate-400">Улицей</strong> (серый фон).
-                    </p>
-                    <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                        {Array.from({ length: editLocationSlotCount }).map((_, i) => {
-                            const slotNum = (i + 1).toString();
-                            const isInside = editLocationGatePosition.split(',').includes(slotNum);
-                            return (
-                                <Button
-                                    key={i}
-                                    type="button"
-                                    size="sm"
-                                    variant={isInside ? "default" : "outline"}
-                                    className={`w-10 h-10 p-0 font-bold transition-all ${isInside ? 'bg-indigo-600 shadow-md ring-2 ring-indigo-200' : 'bg-white text-slate-400 border-dashed hover:border-indigo-400 hover:text-indigo-500'}`}
-                                    onClick={() => {
-                                        const current = editLocationGatePosition ? editLocationGatePosition.split(',') : [];
-                                        const next = isInside
-                                            ? current.filter((s: string) => s !== slotNum)
-                                            : [...current, slotNum].filter((s: string) => s !== '0' && s !== '').sort((a, b) => parseInt(a) - parseInt(b));
-                                        setEditLocationGatePosition(next.join(','));
-                                    }}
-                                >
-                                    {slotNum}
-                                </Button>
-                            );
-                        })}
-                    </div>
-                </div>
+                        <DialogFooter><Button type="submit">Добавить</Button></DialogFooter></form></DialogContent></Dialog>
+            <Dialog open={isEditLocationOpen} onOpenChange={setIsEditLocationOpen}>
+                <DialogContent className="max-h-[85vh] overflow-y-auto max-w-2xl">
+                    <DialogHeader><DialogTitle>Редактировать депо</DialogTitle></DialogHeader>
+                    <form onSubmit={handleUpdateLocation} className="space-y-4 pt-2">
+                        <FloatingInput label="Название" required value={editLocationName} onChange={e => setEditLocationName(e.target.value)} />
+                        <div className="grid grid-cols-2 gap-4">
+                            <FloatingInput label="Количество путей" type="number" min={1} max={20} required value={editLocationTrackCount} onChange={e => setEditLocationTrackCount(parseInt(e.target.value) || 6)} />
+                            <FloatingInput label="Слотов на путь" type="number" min={1} max={20} required value={editLocationSlotCount} onChange={e => setEditLocationSlotCount(parseInt(e.target.value) || 6)} />
+                        </div>
+                        <div className="space-y-4 pt-2 border-t mt-2">
+                            <Label className="text-slate-700 font-bold flex items-center gap-2">
+                                <Warehouse className="w-4 h-4" /> Настройка слотов (Депо vs Улица)
+                            </Label>
+                            <p className="text-xs text-slate-500">
+                                Нажмите на номер слота, чтобы пометить его как <strong className="text-indigo-600">Депо</strong> (белый фон).
+                                Остальные будут считаться <strong className="text-slate-400">Улицей</strong> (серый фон).
+                            </p>
+                            <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                {Array.from({ length: editLocationSlotCount }).map((_, i) => {
+                                    const slotNum = (i + 1).toString();
+                                    const isInside = editLocationGatePosition.split(',').includes(slotNum);
+                                    return (
+                                        <Button
+                                            key={i}
+                                            type="button"
+                                            size="sm"
+                                            variant={isInside ? "default" : "outline"}
+                                            className={`w-10 h-10 p-0 font-bold transition-all ${isInside ? 'bg-indigo-600 shadow-md ring-2 ring-indigo-200' : 'bg-white text-slate-400 border-dashed hover:border-indigo-400 hover:text-indigo-500'}`}
+                                            onClick={() => {
+                                                const current = editLocationGatePosition ? editLocationGatePosition.split(',') : [];
+                                                const next = isInside
+                                                    ? current.filter((s: string) => s !== slotNum)
+                                                    : [...current, slotNum].filter((s: string) => s !== '0' && s !== '').sort((a, b) => parseInt(a) - parseInt(b));
+                                                setEditLocationGatePosition(next.join(','));
+                                            }}
+                                        >
+                                            {slotNum}
+                                        </Button>
+                                    );
+                                })}
+                            </div>
+                        </div>
 
-                <div className="flex items-center space-x-2 bg-slate-50 p-3 rounded border">
-                    <Checkbox id="loc_is_active_toggle" checked={editLocationIsActive} onCheckedChange={(c) => setEditLocationIsActive(!!c)} />
-                    <div>
-                        <Label htmlFor="loc_is_active_toggle" className="font-semibold text-slate-800 cursor-pointer">Активное депо</Label>
-                        <p className="text-xs text-slate-500">Если снято, локомотивы нельзя будет туда перевести.</p>
-                    </div>
-                </div>
-                <div className="space-y-4 pt-2 border-t mt-2">
-                    <Label className="text-slate-700 font-bold flex items-center gap-2">
-                        <Activity className="w-4 h-4" /> Настройка зон (Минимализм)
-                    </Label>
-                    <p className="text-xs text-slate-500">Введите названия цехов для нужных путей. Разделитель появится перед путем.</p>
-                    <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded border">
-                        {Array.from({ length: editLocationTrackCount }).map((_, i) => {
-                            const trackNum = i + 1;
-                            const currentConfig = editLocationTrackConfig.split(',').filter(s => s).reduce((acc: any, curr) => {
-                                const [t, l] = curr.split(':');
-                                acc[t] = l;
-                                return acc;
-                            }, {});
-                            return (
-                                <div key={trackNum} className="flex items-center gap-2">
-                                    <span className="text-xs font-medium w-12 shrink-0">Путь {trackNum}</span>
-                                    <Input
-                                        placeholder="Название зоны..."
-                                        className="h-8 text-xs"
-                                        value={currentConfig[trackNum] || ""}
-                                        onChange={e => {
-                                            const val = e.target.value.replace(/[:,]/g, '').trim();
-                                            const newConfig = { ...currentConfig };
-                                            if (val) {
-                                                newConfig[trackNum] = val;
-                                            } else {
-                                                delete newConfig[trackNum];
-                                            }
+                        <div className="flex items-center space-x-2 bg-slate-50 p-3 rounded border">
+                            <Checkbox id="loc_is_active_toggle" checked={editLocationIsActive} onCheckedChange={(c) => setEditLocationIsActive(!!c)} />
+                            <div>
+                                <Label htmlFor="loc_is_active_toggle" className="font-semibold text-slate-800 cursor-pointer">Активное депо</Label>
+                                <p className="text-xs text-slate-500">Если снято, локомотивы нельзя будет туда перевести.</p>
+                            </div>
+                        </div>
+                        <div className="space-y-4 pt-2 border-t mt-2">
+                            <Label className="text-slate-700 font-bold flex items-center gap-2">
+                                <Activity className="w-4 h-4" /> Настройка зон (Минимализм)
+                            </Label>
+                            <p className="text-xs text-slate-500">Введите названия цехов для нужных путей. Разделитель появится перед путем.</p>
+                            <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded border">
+                                {Array.from({ length: editLocationTrackCount }).map((_, i) => {
+                                    const trackNum = i + 1;
+                                    const currentConfig = editLocationTrackConfig.split(',').filter(s => s).reduce((acc: any, curr) => {
+                                        const [t, l] = curr.split(':');
+                                        acc[t] = l;
+                                        return acc;
+                                    }, {});
+                                    return (
+                                        <div key={trackNum} className="flex items-center gap-2">
+                                            <span className="text-xs font-medium w-12 shrink-0">Путь {trackNum}</span>
+                                            <Input
+                                                placeholder="Название зоны..."
+                                                className="h-8 text-xs"
+                                                value={currentConfig[trackNum] || ""}
+                                                onChange={e => {
+                                                    const val = e.target.value.replace(/[:,]/g, '').trim();
+                                                    const newConfig = { ...currentConfig };
+                                                    if (val) {
+                                                        newConfig[trackNum] = val;
+                                                    } else {
+                                                        delete newConfig[trackNum];
+                                                    }
 
-                                            const configStr = Object.entries(newConfig)
-                                                .filter(([_, v]) => v)
-                                                .map(([t, v]) => `${t}:${v}`)
-                                                .join(',');
-                                            setEditLocationTrackConfig(configStr);
-                                        }}
-                                    />
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
+                                                    const configStr = Object.entries(newConfig)
+                                                        .filter(([_, v]) => v)
+                                                        .map(([t, v]) => `${t}:${v}`)
+                                                        .join(',');
+                                                    setEditLocationTrackConfig(configStr);
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
 
-                <DialogFooter><Button type="button" variant="outline" onClick={() => setIsEditLocationOpen(false)}>Отмена</Button><Button type="submit">Сохранить</Button></DialogFooter>
-            </form></DialogContent></Dialog>
+                        <DialogFooter><Button type="button" variant="outline" onClick={() => setIsEditLocationOpen(false)}>Отмена</Button><Button type="submit">Сохранить</Button></DialogFooter>
+                    </form></DialogContent></Dialog>
 
         </div >
     )

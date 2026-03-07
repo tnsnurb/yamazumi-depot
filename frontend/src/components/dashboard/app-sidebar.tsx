@@ -4,7 +4,6 @@ import {
     LayoutDashboard,
     Map as MapIcon,
     History,
-    Monitor,
     Settings,
     HelpCircle,
     User,
@@ -47,11 +46,6 @@ const navMain = [
         title: "Замечания",
         url: "/remarks",
         icon: ListTodo,
-    },
-    {
-        title: "Киоск",
-        url: "/kiosk",
-        icon: Monitor,
     },
 ]
 
@@ -137,16 +131,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarFooter>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted">
+                        <div className="flex items-center gap-2 px-2 py-1.5">
+                            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted shrink-0">
                                 <User className="size-4" />
                             </div>
-                            <div className="grid flex-1 text-left text-sm leading-tight">
+                            <div className="grid flex-1 text-left text-sm leading-tight min-w-0 group-data-[collapsible=icon]:hidden">
                                 <span className="truncate font-semibold">{user?.full_name || 'Пользователь'}</span>
-                                <span className="truncate text-xs">{user?.role === 'admin' ? 'Администратор' : user?.role === 'global_admin' ? 'Супер-админ' : 'Слесарь'}</span>
+                                <span className="truncate text-xs text-muted-foreground">{user?.role === 'admin' ? 'Администратор' : user?.role === 'global_admin' ? 'Супер-админ' : 'Слесарь'}</span>
                             </div>
-                            <LogOut className="ml-auto size-4 cursor-pointer text-muted-foreground hover:text-foreground" onClick={signOut} />
-                        </SidebarMenuButton>
+                            <button
+                                onClick={signOut}
+                                title="Выход"
+                                className="ml-auto size-8 flex items-center justify-center rounded-md cursor-pointer text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors group-data-[collapsible=icon]:hidden"
+                            >
+                                <LogOut className="size-4" />
+                            </button>
+                        </div>
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarFooter>

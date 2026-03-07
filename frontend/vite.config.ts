@@ -10,7 +10,23 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}']
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webp}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^\/api\/(catalog|locations|repair-types)/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'api-cache',
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+        ],
       },
       manifest: {
         name: 'Yamazumi Depot',
@@ -35,5 +51,8 @@ export default defineConfig({
         changeOrigin: true,
       },
     }
+  },
+  build: {
+    chunkSizeWarningLimit: 1000
   }
 })

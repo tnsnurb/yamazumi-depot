@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FloatingInput } from "@/components/ui/FloatingInput"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
     Table,
@@ -15,7 +16,8 @@ import {
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
-import { RefreshCw, ArrowRight, Plus, MapPin, Trash2, ArrowLeftFromLine, Download, Filter, CalendarDays, User, Activity, CheckCircle2, MessageSquarePlus, Edit3, Loader2 } from "lucide-react"
+import { RefreshCw, ArrowRight, Plus, MapPin, Trash2, ArrowLeftFromLine, Download, CalendarDays, User, Activity, CheckCircle2, MessageSquarePlus, Edit3, Loader2 } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
 
 interface Movement {
     id: number;
@@ -30,16 +32,12 @@ interface Movement {
     moved_by: string;
 }
 
-interface DailyStats {
-    moved: number;
-    remarksCompleted: number;
-    remarksAdded: number;
-    statusChanged: number;
-}
+
 
 const ITEMS_PER_PAGE = 50;
 
 export default function Journal() {
+    const { user } = useAuth()
     const [movements, setMovements] = useState<Movement[]>([])
     const [total, setTotal] = useState(0)
     const [hasMore, setHasMore] = useState(true)
@@ -56,7 +54,7 @@ export default function Journal() {
     const [filterUser, setFilterUser] = useState("all")
 
     const [users, setUsers] = useState<string[]>([])
-    const [stats, setStats] = useState<DailyStats | null>(null)
+
 
     useEffect(() => {
         fetchUsers()
@@ -66,8 +64,7 @@ export default function Journal() {
 
     useEffect(() => {
         fetchMovements(true)
-        fetchStats()
-    }, [startDate, endDate, filterUser, debouncedFilterQuery, filterAction])
+    }, [startDate, endDate, filterUser, debouncedFilterQuery, filterAction, user?.active_location_id])
 
     const fetchUsers = async () => {
         try {
@@ -81,21 +78,7 @@ export default function Journal() {
         }
     }
 
-    const fetchStats = async () => {
-        try {
-            const params = new URLSearchParams()
-            if (startDate) params.append('startDate', startDate)
-            if (endDate) params.append('endDate', endDate)
 
-            const res = await fetch(`/api/movements/stats?${params.toString()}`)
-            if (res.ok) {
-                const data = await res.json()
-                setStats(data)
-            }
-        } catch (e) {
-            console.error("Failed to load stats", e)
-        }
-    }
 
     const fetchMovements = async (reset: boolean = false) => {
         if (reset) {
@@ -217,7 +200,7 @@ export default function Journal() {
         }
         if (action.startsWith('remark_added')) {
             const numAddedMatch = action.match(/(\d+) замечаний/)
-            let countLabel = numAddedMatch ? `${numAddedMatch[1]} шт.` : action.includes(': ') ? action.split(': ').slice(1).join(': ') : ''
+            const countLabel = numAddedMatch ? `${numAddedMatch[1]} шт.` : action.includes(': ') ? action.split(': ').slice(1).join(': ') : ''
             return (
                 <div className="flex flex-col gap-0.5">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 self-start">
@@ -283,7 +266,19 @@ export default function Journal() {
                         </div>
 
                         <div className="flex gap-2 w-full sm:w-auto">
-                            <Button variant="outline" onClick={() => window.open('/api/movements/export', '_blank')} className="bg-white gap-2 flex-1 sm:flex-none py-1.5 h-9 text-sm">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    const params = new URLSearchParams()
+                                    if (startDate) params.append('startDate', startDate)
+                                    if (endDate) params.append('endDate', endDate)
+                                    if (filterUser !== 'all') params.append('user', filterUser)
+                                    if (debouncedFilterQuery) params.append('loco', debouncedFilterQuery)
+                                    if (filterAction !== 'all') params.append('action', filterAction)
+                                    window.open(`/api/movements/export?${params.toString()}`, '_blank')
+                                }}
+                                className="bg-white gap-2 flex-1 sm:flex-none py-1.5 h-9 text-sm"
+                            >
                                 <Download className="w-4 h-4" /> <span className="hidden xs:inline">Экспорт</span>
                             </Button>
                             <Button variant="outline" onClick={() => fetchMovements(true)} className="bg-white gap-2 flex-1 sm:flex-none py-1.5 h-9 text-sm">
@@ -292,38 +287,18 @@ export default function Journal() {
                         </div>
                     </div>
 
-                    {/* Stats summary panel */}
-                    {stats && (
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-                            <div className="bg-white border rounded-xl p-3 md:p-4 flex flex-col justify-center items-center shadow-sm">
-                                <div className="text-2xl md:text-3xl font-bold text-slate-800">{stats.moved}</div>
-                                <div className="text-[10px] md:text-sm text-slate-500 font-medium text-center">Перемещений</div>
-                            </div>
-                            <div className="bg-white border rounded-xl p-3 md:p-4 flex flex-col justify-center items-center shadow-sm">
-                                <div className="text-2xl md:text-3xl font-bold text-purple-700">{stats.statusChanged}</div>
-                                <div className="text-[10px] md:text-sm text-slate-500 font-medium text-center">Смен статуса</div>
-                            </div>
-                            <div className="bg-white border rounded-xl p-3 md:p-4 flex flex-col justify-center items-center shadow-sm">
-                                <div className="text-2xl md:text-3xl font-bold text-green-600">{stats.remarksCompleted}</div>
-                                <div className="text-[10px] md:text-sm text-slate-500 font-medium text-center">Закрыто замеч.</div>
-                            </div>
-                            <div className="bg-white border rounded-xl p-3 md:p-4 flex flex-col justify-center items-center shadow-sm">
-                                <div className="text-2xl md:text-3xl font-bold text-indigo-600">{stats.remarksAdded}</div>
-                                <div className="text-[10px] md:text-sm text-slate-500 font-medium text-center">Создано замеч.</div>
-                            </div>
-                        </div>
-                    )}
+
 
                     {/* Filters Toolbar */}
                     <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 mb-4 bg-slate-100/50 p-2.5 rounded-lg border border-slate-200">
                         <div className="flex flex-col sm:flex-row gap-3 flex-1">
-                            <div className="flex items-center gap-2 bg-white rounded-md border text-sm px-2.5 h-10 flex-1 sm:flex-none">
-                                <Filter className="w-4 h-4 text-slate-400" />
-                                <Input
-                                    placeholder="№ локомотива"
+                            <div className="flex-1 w-full group relative sm:w-[180px]">
+                                <FloatingInput
+                                    label="Поиск локомотива..."
                                     value={filterQuery}
-                                    onChange={e => setFilterQuery(e.target.value)}
-                                    className="w-full sm:w-32 border-0 h-8 focus-visible:ring-0 px-1 shadow-none"
+                                    onChange={(e) => setFilterQuery(e.target.value)}
+                                    placeholder="Введите номер..."
+                                    className="h-10"
                                 />
                             </div>
 

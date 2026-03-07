@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { SectionCards } from "@/components/dashboard/section-cards"
 import { ChartAreaInteractive } from "@/components/dashboard/chart-area-interactive"
 import { StatusDistribution } from "@/components/dashboard/status-distribution"
 import { TrackOccupancy } from "@/components/dashboard/track-occupancy"
-import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { useAuth } from "@/hooks/useAuth"
 
 interface DashboardData {
     totalLocomotives: number
@@ -26,30 +26,26 @@ interface ChartData {
 }
 
 export default function Dashboard() {
-    const [data, setData] = useState<DashboardData | null>(null)
-    const [chartData, setChartData] = useState<ChartData | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-
-    useEffect(() => {
-        loadAllData()
-    }, [])
-
-    const loadAllData = async () => {
-        setIsLoading(true)
-        try {
+    const { user } = useAuth()
+    const { data: dashboardData, isLoading } = useQuery({
+        queryKey: ['dashboard', user?.active_location_id],
+        queryFn: async () => {
             const [dataRes, chartRes] = await Promise.all([
                 fetch("/api/dashboard"),
                 fetch("/api/dashboard/chart")
             ])
 
-            if (dataRes.ok) setData(await dataRes.json())
-            if (chartRes.ok) setChartData(await chartRes.json())
-        } catch (e) {
-            toast.error("Ошибка загрузки данных")
-        } finally {
-            setIsLoading(false)
+            if (!dataRes.ok || !chartRes.ok) throw new Error("Ошибка загрузки данных")
+
+            const data: DashboardData = await dataRes.json()
+            const chartData: ChartData = await chartRes.json()
+
+            return { data, chartData }
         }
-    }
+    })
+
+    const data = dashboardData?.data || null
+    const chartData = dashboardData?.chartData || null
 
     return (
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0 md:gap-8 md:p-8 lg:p-12 overflow-y-auto bg-slate-50/50">

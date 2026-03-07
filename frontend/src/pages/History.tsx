@@ -155,12 +155,12 @@ export default function History() {
                                 <div className="space-y-4 animate-pulse p-6">
                                     {[1, 2, 3, 4, 5].map(i => (
                                         <div key={i} className="flex items-center gap-4">
-                                            <Skeleton className="h-4 w-6" />
-                                            <Skeleton className="h-4 w-36" />
-                                            <Skeleton className="h-6 w-28 rounded-full" />
-                                            <Skeleton className="h-4 w-28" />
-                                            <Skeleton className="h-4 w-28" />
-                                            <Skeleton className="h-4 w-20" />
+                                            <Skeleton className="h-4 w-6 bg-slate-200" />
+                                            <Skeleton className="h-4 w-36 bg-slate-200" />
+                                            <Skeleton className="h-6 w-28 rounded-full bg-slate-100" />
+                                            <Skeleton className="h-4 w-28 bg-slate-200" />
+                                            <Skeleton className="h-4 w-28 bg-slate-200" />
+                                            <Skeleton className="h-4 w-20 bg-slate-100" />
                                         </div>
                                     ))}
                                 </div>

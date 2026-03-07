@@ -2,10 +2,14 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FloatingInput } from "@/components/ui/FloatingInput"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { UserCircle, Key, Shield } from "lucide-react"
+import imageCompression from 'browser-image-compression'
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/hooks/useAuth"
 
 interface User {
     id: number
@@ -27,12 +31,29 @@ export default function Profile() {
     const [uploadingAvatar, setUploadingAvatar] = useState(false)
     const [newPinCode, setNewPinCode] = useState("")
     const [loadingPin, setLoadingPin] = useState(false)
+    const [isRecoveryMode, setIsRecoveryMode] = useState(false)
 
     useEffect(() => {
-        fetch('/api/me').then(res => res.json()).then(data => {
-            if (data.authenticated) setUser(data.user)
-        })
+        // Check if we arrived here from a password reset link 
+        // Supabase adds type=recovery to the URL hash/params or session 
+        const checkRecovery = async () => {
+            const { data } = await supabase.auth.getSession()
+            if (data.session?.user?.aud === 'authenticated' &&
+                (window.location.hash.includes('type=recovery') || (data.session?.expires_at ?? 0) > 0)) {
+                // Technically, if the user just logged in via Magic Link or Reset Link, 
+                // they are in a "fresh" session that might not require currentPassword.
+                // We'll trust the server to handle the 'x-auth-recovery' header logic.
+                setIsRecoveryMode(window.location.hash.includes('type=recovery'))
+            }
+        }
+        checkRecovery()
     }, [])
+
+    const { user: authUser } = useAuth()
+
+    useEffect(() => {
+        if (authUser) setUser(authUser as unknown as User)
+    }, [authUser])
 
     const handleChangePassword = async () => {
         if (!currentPassword || !newPassword) {
@@ -52,7 +73,10 @@ export default function Profile() {
         try {
             const res = await fetch('/api/profile/password', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-auth-recovery': isRecoveryMode ? 'true' : 'false'
+                },
                 body: JSON.stringify({ currentPassword, newPassword })
             })
             const data = await res.json()
@@ -113,10 +137,17 @@ export default function Profile() {
         }
 
         setUploadingAvatar(true)
-        const formData = new FormData()
-        formData.append('avatar', file)
-
         try {
+            const options = {
+                maxSizeMB: 0.2, // 200 KB max for avatars
+                maxWidthOrHeight: 512,
+                useWebWorker: true,
+            }
+            const compressedFile = await imageCompression(file, options)
+
+            const formData = new FormData()
+            formData.append('avatar', compressedFile, compressedFile.name)
+
             const res = await fetch('/api/profile/avatar', {
                 method: 'POST',
                 body: formData
@@ -223,18 +254,16 @@ export default function Profile() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Новый пин-код</Label>
-                                <Input
-                                    type="password"
-                                    inputMode="numeric"
-                                    maxLength={4}
-                                    value={newPinCode}
-                                    onChange={e => setNewPinCode(e.target.value.replace(/\D/g, ''))}
-                                    placeholder="Например: 1234"
-                                />
-                                <p className="text-xs text-slate-500">Оставьте пустым, чтобы удалить текущий пин-код</p>
-                            </div>
+                            <FloatingInput
+                                label="Новый пин-код"
+                                type="password"
+                                inputMode="numeric"
+                                maxLength={4}
+                                value={newPinCode}
+                                onChange={e => setNewPinCode(e.target.value.replace(/\D/g, ''))}
+                                placeholder="Например: 1234"
+                            />
+                            <p className="text-xs text-slate-500 -mt-2">Оставьте пустым, чтобы удалить текущий пин-код</p>
                             <Button onClick={handleChangePinCode} disabled={loadingPin} className="w-full bg-indigo-600 hover:bg-indigo-700">
                                 {loadingPin ? 'Сохранение...' : 'Сохранить пин-код'}
                             </Button>
@@ -246,37 +275,38 @@ export default function Profile() {
                         <CardHeader>
                             <CardTitle className="text-lg flex items-center gap-2">
                                 <Key className="w-5 h-5 text-slate-400" />
-                                Смена пароля
+                                {isRecoveryMode ? 'Установка нового пароля' : 'Смена пароля'}
                             </CardTitle>
+                            {isRecoveryMode && (
+                                <CardDescription className="text-amber-600 bg-amber-50 p-2 rounded border border-amber-100">
+                                    Вы вошли через ссылку восстановления. Текущий пароль указывать не нужно.
+                                </CardDescription>
+                            )}
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Текущий пароль</Label>
-                                <Input
+                            {!isRecoveryMode && (
+                                <FloatingInput
+                                    label="Текущий пароль"
                                     type="password"
                                     value={currentPassword}
                                     onChange={e => setCurrentPassword(e.target.value)}
                                     placeholder="••••••••"
                                 />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Новый пароль</Label>
-                                <Input
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={e => setNewPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Подтвердите новый пароль</Label>
-                                <Input
-                                    type="password"
-                                    value={confirmPassword}
-                                    onChange={e => setConfirmPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                />
-                            </div>
+                            )}
+                            <FloatingInput
+                                label="Новый пароль"
+                                type="password"
+                                value={newPassword}
+                                onChange={e => setNewPassword(e.target.value)}
+                                placeholder="••••••••"
+                            />
+                            <FloatingInput
+                                label="Подтвердите новый пароль"
+                                type="password"
+                                value={confirmPassword}
+                                onChange={e => setConfirmPassword(e.target.value)}
+                                placeholder="••••••••"
+                            />
                             <Button onClick={handleChangePassword} disabled={loading} className="w-full">
                                 {loading ? 'Сохранение...' : 'Сменить пароль'}
                             </Button>

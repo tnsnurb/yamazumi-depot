@@ -1,4 +1,8 @@
 require('dotenv').config();
+
+// Bypass unauthorized SSL certs in local development
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
@@ -30,563 +34,21 @@ app.use(session({
 // Static files
 app.use(express.static(path.join(__dirname, 'frontend', 'dist')));
 
-function requireAuth(req, res, next) {
-    if (req.session && req.session.user) {
-        return next();
-    }
-    return res.status(401).json({ error: 'Unauthorized' });
-}
+// Middleware
+const { requireAuth, requireAdmin, requirePermission } = require('./src/middlewares/auth');
+
+// Extracted Routers
+const authRoutes = require('./src/routes/auth');
+const userRoutes = require('./src/routes/users');
+const remarksRoutes = require('./src/routes/remarks');
+const locationsRoutes = require('./src/routes/locations');
+
+// Mount API Routes
+app.use('/api', authRoutes); // /api/me mounts here
+app.use('/api/users', userRoutes); // User management + public users
+app.use('/api/remarks', remarksRoutes);
+app.use('/api/locations', locationsRoutes);
 
-function requireAdmin(req, res, next) {
-    if (req.session && req.session.user && (req.session.user.role === 'admin' || req.session.user.role === 'global_admin')) {
-        return next();
-    }
-    return res.status(403).json({ error: 'Forbidden: Admins only' });
-}
-
-function requirePermission(permissionStr) {
-    return (req, res, next) => {
-        if (!req.session || !req.session.user) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-        if (req.session.user.role === 'admin') return next();
-        if (req.session.user.permissions && req.session.user.permissions[permissionStr]) {
-            return next();
-        }
-        return res.status(403).json({ error: 'Доступ запрещен' });
-    };
-}
-
-// ===================== AUTH ROUTES =====================
-
-// Step 1: Verify barcode — return user info, do NOT log in yet
-app.post('/api/login/barcode', async (req, res) => {
-    const { barcode } = req.body;
-    console.log("\n=== BARCODE SCAN ATTEMPT ===");
-    console.log("Received barcode:", JSON.stringify(barcode));
-
-    if (!barcode) return res.status(400).json({ error: 'Код не считан' });
-    // Remove extra quotes that the scanner might add
-    const cleanBarcode = String(barcode).trim().replace(/^"|"$/g, '');
-
-    try {
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('id, username, full_name, avatar_url')
-            .eq('barcode', cleanBarcode)
-            .maybeSingle();
-
-        console.log("Supabase search result - User:", user?.username, "Error:", error);
-
-        if (error || !user) {
-            return res.status(401).json({ error: 'Пользователь с таким кодом не найден' });
-        }
-
-        // Return user info for PIN prompt (don't log in yet)
-        res.json({ found: true, user: { id: user.id, full_name: user.full_name, avatar_url: user.avatar_url } });
-    } catch (err) {
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
-});
-
-// Step 2: Verify PIN code — log in
-app.post('/api/login/barcode/pin', async (req, res) => {
-    const { barcode, pin } = req.body;
-
-    console.log("\n=== PIN VERIFICATION ATTEMPT ===");
-    console.log("Received barcode for PIN:", JSON.stringify(barcode), "PIN:", pin);
-
-    if (!barcode || !pin) return res.status(400).json({ error: 'Введите пин-код' });
-
-    // Clean barcode just in case
-    const cleanBarcode = String(barcode).trim().replace(/^"|"$/g, '');
-
-    try {
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('id, username, full_name, role, avatar_url, pin_code, location_id, is_global_admin, specialization, total_points')
-            .eq('barcode', cleanBarcode)
-            .maybeSingle();
-
-        console.log("PIN verification - User found:", user?.username, "Error:", error);
-
-        if (error || !user) {
-            return res.status(401).json({ error: 'Пользователь не найден' });
-        }
-
-        if (!user.pin_code || user.pin_code !== pin) {
-            return res.status(401).json({ error: 'Неверный пин-код' });
-        }
-
-        // Fetch role permissions
-        const { data: roleData } = await supabase
-            .from('roles')
-            .select('*')
-            .eq('name', user.role)
-            .maybeSingle();
-
-        req.session.user = {
-            id: user.id,
-            username: user.username,
-            full_name: user.full_name,
-            role: user.role,
-            avatar_url: user.avatar_url,
-            pin_code: user.pin_code,
-            location_id: user.location_id,
-            active_location_id: user.location_id,
-            is_global_admin: user.is_global_admin,
-            specialization: user.specialization,
-            total_points: user.total_points || 0,
-            permissions: roleData || {}
-        };
-
-        res.json({ success: true, user: req.session.user });
-    } catch (err) {
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
-});
-
-app.post('/api/login', async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-        return res.status(400).json({ error: 'Введите логин и пароль' });
-    }
-
-    const { data: user, error } = await supabase
-        .from('users')
-        .select('id, username, password, full_name, role, avatar_url, pin_code, location_id, is_global_admin, specialization, total_points')
-        .eq('username', username)
-        .maybeSingle();
-
-    if (error || !user || !bcrypt.compareSync(password, user.password)) {
-        return res.status(401).json({ error: 'Неверный логин или пароль' });
-    }
-
-    const { data: roleData } = await supabase
-        .from('roles')
-        .select('*')
-        .eq('name', user.role)
-        .maybeSingle();
-
-    req.session.user = {
-        id: user.id,
-        username: user.username,
-        full_name: user.full_name,
-        role: user.role,
-        avatar_url: user.avatar_url,
-        pin_code: user.pin_code,
-        location_id: user.location_id,
-        active_location_id: user.location_id,
-        is_global_admin: user.is_global_admin,
-        specialization: user.specialization,
-        total_points: user.total_points || 0,
-        permissions: roleData || {}
-    };
-    res.json({ success: true, user: req.session.user });
-});
-
-app.post('/api/logout', (req, res) => {
-    req.session.destroy();
-    res.json({ success: true });
-});
-
-app.get('/api/me', (req, res) => {
-    if (req.session && req.session.user) {
-        return res.json({ authenticated: true, user: req.session.user });
-    }
-    res.json({ authenticated: false });
-});
-
-// Switch active location (for Global Admins)
-app.put('/api/me/active-location', requireAuth, (req, res) => {
-    const { location_id } = req.body;
-
-    if (!req.session.user.is_global_admin) {
-        return res.status(403).json({ error: 'Нет прав на смену локации (необходимы права Главного Администратора)' });
-    }
-    if (location_id === undefined) {
-        return res.status(400).json({ error: 'Не указана локация' });
-    }
-
-    req.session.user.active_location_id = location_id || null;
-    res.json({ success: true, active_location_id: location_id || null });
-});
-
-// Get all remarks (for overall dashboard/worker tasks)
-app.get('/api/remarks', requireAuth, async (req, res) => {
-    console.log(`\n=== REMARKS FEED REQUEST ===`);
-    console.log(`User: ${req.session.user.username} (Global Admin: ${req.session.user.is_global_admin})`);
-    console.log(`Active Location: ${req.session.user.active_location_id}`);
-
-    const { is_completed, locomotive_id } = req.query;
-    console.log(`Filters - completed: ${is_completed}, loco: ${locomotive_id}`);
-
-    try {
-        let query = supabase
-            .from('locomotive_remarks')
-            .select(`
-                *,
-                locomotive:locomotives(number, location_id),
-                assigned_user:users!locomotive_remarks_assigned_to_fkey (
-                    full_name,
-                    username,
-                    specialization
-                ),
-                completed_by:users!locomotive_remarks_completed_by_fkey (
-                    full_name,
-                    username
-                ),
-                created_by:users!locomotive_remarks_created_by_fkey (
-                    full_name,
-                    username
-                )
-            `);
-
-        if (is_completed !== undefined) {
-            query = query.eq('is_completed', is_completed === 'true');
-        }
-        if (locomotive_id) {
-            query = query.eq('locomotive_id', locomotive_id);
-        }
-        if (req.query.assigned_to) {
-            if (req.query.assigned_to === 'me') {
-                query = query.eq('assigned_to', req.session.user.id);
-            } else {
-                query = query.eq('assigned_to', req.query.assigned_to);
-            }
-        }
-
-        const { data: remarks, error } = await query
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            console.error("Supabase error fetching remarks:", error);
-            return res.status(500).json({ error: error.message });
-        }
-
-        // Filter results by location in JS for safety if needed
-        let filteredResults = remarks || [];
-        if (!req.session.user.is_global_admin && req.session.user.active_location_id) {
-            filteredResults = filteredResults.filter(r => r.locomotive?.location_id === req.session.user.active_location_id);
-        }
-
-        console.log(`Returning ${filteredResults.length} remarks`);
-        res.json(filteredResults);
-    } catch (err) {
-        console.error("General error in /api/remarks:", err);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-// Get all locations
-app.get('/api/locations', requireAuth, async (req, res) => {
-    const { data, error } = await supabase
-        .from('locations')
-        .select('*')
-        .order('id');
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-});
-
-// Create new location
-app.post('/api/locations', requireAuth, async (req, res) => {
-    if (!req.session.user.is_global_admin) {
-        return res.status(403).json({ error: 'Только Главный Админ может создавать депо' });
-    }
-    const { name, track_count, slot_count, gate_position, track_config } = req.body;
-    if (!name || !name.trim()) return res.status(400).json({ error: 'Название обязательно' });
-
-    const insertData = { name: name.trim() };
-    if (track_count !== undefined) insertData.track_count = parseInt(track_count) || 6;
-    if (slot_count !== undefined) insertData.slot_count = parseInt(slot_count) || 6;
-    if (gate_position !== undefined) insertData.gate_position = gate_position;
-    if (track_config !== undefined) insertData.track_config = track_config;
-
-    const { data, error } = await supabase.from('locations').insert([insertData]).select().maybeSingle();
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-});
-
-// Update location
-app.put('/api/locations/:id', requireAuth, async (req, res) => {
-    if (!req.session.user.is_global_admin) {
-        return res.status(403).json({ error: 'Только Главный Админ может изменять депо' });
-    }
-    const { id } = req.params;
-    const { name, is_active, track_count, slot_count, gate_position, track_config } = req.body;
-
-    const updateData = {};
-    if (name !== undefined) updateData.name = name.trim();
-    if (is_active !== undefined) updateData.is_active = is_active;
-    if (track_count !== undefined) updateData.track_count = parseInt(track_count) || 6;
-    if (slot_count !== undefined) updateData.slot_count = parseInt(slot_count) || 6;
-    if (gate_position !== undefined) updateData.gate_position = gate_position;
-    if (track_config !== undefined) updateData.track_config = track_config;
-
-    console.log(`\n=== UPDATE LOCATION ATTEMPT (ID: ${id}) ===`);
-    console.log("Payload:", JSON.stringify(updateData, null, 2));
-
-    if (Object.keys(updateData).length === 0) {
-        return res.status(400).json({ error: 'Нет данных для обновления' });
-    }
-
-    const { data, error } = await supabase
-        .from('locations')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .maybeSingle();
-
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(404).json({ error: 'Локация не найдена' });
-    res.json(data);
-});
-
-app.post('/api/profile/avatar', requireAuth, upload.single('avatar'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'Файл не загружен' });
-    }
-
-    try {
-        const fileExt = req.file.originalname.split('.').pop();
-        const fileName = `${req.session.user.id}_${Date.now()}.${fileExt}`;
-        const filePath = `avatars/${fileName}`;
-
-        // Upload to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-            .from('avatars')
-            .upload(filePath, req.file.buffer, {
-                contentType: req.file.mimetype,
-                upsert: true
-            });
-
-        if (uploadError) {
-            console.error("Storage upload error:", uploadError);
-            return res.status(500).json({ error: 'Ошибка сохранения файла' });
-        }
-
-        const { data: { publicUrl } } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(filePath);
-
-        // Update user row
-        const { error: dbError } = await supabase
-            .from('users')
-            .update({ avatar_url: publicUrl })
-            .eq('id', req.session.user.id);
-
-        if (dbError) {
-            console.error("DB update error:", dbError);
-            return res.status(500).json({ error: 'Ошибка обновления профиля' });
-        }
-
-        // Update session
-        req.session.user.avatar_url = publicUrl;
-
-        res.json({ success: true, avatar_url: publicUrl });
-    } catch (err) {
-        console.error("Avatar upload exception:", err);
-        res.status(500).json({ error: 'Внутренняя ошибка сервера' });
-    }
-});
-
-// Update own profile (PIN code, password)
-app.put('/api/profile', requireAuth, async (req, res) => {
-    const userId = req.session.user.id;
-    const { password, pin_code } = req.body;
-
-    const updates = {};
-    if (password) updates.password = bcrypt.hashSync(password, 10);
-    if (pin_code !== undefined) updates.pin_code = pin_code || null; // allow clearing PIN
-
-    if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ error: 'Нет данных для обновления' });
-    }
-
-    try {
-        const { data, error } = await supabase
-            .from('users')
-            .update(updates)
-            .eq('id', userId)
-            .select('id, username, full_name, avatar_url, pin_code')
-            .maybeSingle();
-
-        if (error) return res.status(500).json({ error: error.message });
-
-        // Update session
-        if (pin_code !== undefined) {
-            req.session.user.pin_code = pin_code || null;
-        }
-        res.json({ success: true, user: data });
-    } catch (err) {
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
-});
-
-// Public endpoint to get list of users for terminal mode login
-app.get('/api/public/users', async (req, res) => {
-    let query = supabase
-        .from('users')
-        .select(`
-            id,
-            username,
-            full_name,
-            role,
-            avatar_url
-        `)
-        .eq('is_active', true)
-        .order('full_name', { ascending: true });
-
-    if (req.query.location_id) {
-        query = query.eq('location_id', parseInt(req.query.location_id));
-    }
-
-    const { data: users, error } = await query;
-
-    if (error) {
-        return res.status(500).json({ error: error.message });
-    }
-
-    const publicUsers = users.map(u => ({
-        id: u.id,
-        username: u.username,
-        full_name: u.full_name || u.username,
-        role_name: u.role || 'Сотрудник',
-        avatar_url: u.avatar_url,
-        specialization: u.specialization
-    }));
-
-    res.json(publicUsers);
-});
-
-// ===================== USER MANAGEMENT ROUTES (ADMIN) =====================
-
-app.get('/api/users', requireAdmin, async (req, res) => {
-    let query = supabase
-        .from('users')
-        .select('id, username, full_name, role, created_at, barcode, is_active, specialization, total_points')
-        .order('id');
-
-    if (req.session.user.active_location_id) {
-        query = query.eq('location_id', req.session.user.active_location_id);
-    }
-    const { data, error } = await query;
-
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-});
-
-app.post('/api/users', requireAdmin, async (req, res) => {
-    const { username, password, full_name, role, barcode, location_id, specialization } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Логин и пароль обязательны' });
-
-    // Check if user exists
-    const { data: existing } = await supabase.from('users').select('id').eq('username', username).maybeSingle();
-    if (existing) return res.status(400).json({ error: 'Пользователь с таким логином уже существует' });
-
-    const hashedPassword = bcrypt.hashSync(password, 10);
-    const { data, error } = await supabase
-        .from('users')
-        .insert({
-            username,
-            password: hashedPassword,
-            full_name: full_name || null,
-            role: role || 'employee',
-            barcode: barcode || null,
-            specialization: specialization || null,
-            location_id: req.session.user.is_global_admin ? (location_id || 1) : req.session.user.location_id
-        })
-        .select('id, username, full_name, role, created_at, barcode, location_id, specialization')
-        .maybeSingle();
-
-    if (error) return res.status(500).json({ error: error.message });
-
-    // Audit Log
-    await supabase.from('audit_logs').insert({
-        user_id: req.session.user.id,
-        action: 'Создан пользователь',
-        target: username,
-        details: `Роль: ${role}, ФИО: ${full_name}`
-    });
-
-    res.json(data);
-});
-
-app.put('/api/users/:id', requireAdmin, async (req, res) => {
-    const id = parseInt(req.params.id);
-    const { username, full_name, role, password, barcode, is_active, location_id, specialization, total_points } = req.body;
-
-    // Protect modifying the main admin
-    const { data: user } = await supabase.from('users').select('username').eq('id', id).maybeSingle();
-    if (user && user.username === 'admin' && role && role !== 'admin') {
-        return res.status(400).json({ error: 'Нельзя изменить роль главному администратору' });
-    }
-    if (user && user.username === 'admin' && is_active === false) {
-        return res.status(400).json({ error: 'Нельзя заблокировать главного администратора' });
-    }
-
-    const updates = {};
-    if (username !== undefined) updates.username = username;
-    if (full_name !== undefined) updates.full_name = full_name;
-    if (role !== undefined) updates.role = role;
-    if (password) updates.password = bcrypt.hashSync(password, 10);
-    if (barcode !== undefined) updates.barcode = barcode || null;
-    if (is_active !== undefined) updates.is_active = is_active;
-    if (location_id !== undefined && req.session.user.is_global_admin) {
-        updates.location_id = location_id;
-    }
-    if (specialization !== undefined) updates.specialization = specialization;
-    if (total_points !== undefined) updates.total_points = total_points;
-
-    if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ error: 'Нет данных для обновления' });
-    }
-
-    const { data, error } = await supabase
-        .from('users')
-        .update(updates)
-        .eq('id', id)
-        .select('id, username, full_name, role, created_at, barcode, is_active, location_id')
-        .maybeSingle();
-
-    if (error) return res.status(500).json({ error: error.message });
-
-    // Audit Log
-    const changedFields = Object.keys(updates).filter(k => k !== 'password').join(', ');
-    await supabase.from('audit_logs').insert({
-        user_id: req.session.user.id,
-        action: 'Изменен пользователь',
-        target: data.username,
-        details: `Поля: ${changedFields} ${password ? '+ Пароль' : ''}`
-    });
-
-    res.json(data);
-});
-
-app.delete('/api/users/:id', requireAdmin, async (req, res) => {
-    const id = parseInt(req.params.id);
-
-    // Protect deleting the main admin
-    const { data: user } = await supabase.from('users').select('username').eq('id', id).maybeSingle();
-    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-    if (user.username === 'admin') {
-        return res.status(400).json({ error: 'Главного администратора нельзя удалить/заблокировать' });
-    }
-
-    // Soft delete (is_active = false)
-    const { error } = await supabase.from('users').update({ is_active: false }).eq('id', id);
-    if (error) return res.status(500).json({ error: error.message });
-
-    // Audit Log
-    await supabase.from('audit_logs').insert({
-        user_id: req.session.user.id,
-        action: 'Заблокирован пользователь',
-        target: user.username,
-        details: `Мягкое удаление (is_active = false)`
-    });
-
-    res.json({ success: true, message: 'Пользователь заблокирован' });
-});
 
 // ===================== AUDIT LOGS ROUTES =====================
 
@@ -791,6 +253,46 @@ app.post('/api/remark-templates', requireAdmin, async (req, res) => {
     }
 });
 
+app.post('/api/remark-templates/bulk', requireAdmin, async (req, res) => {
+    try {
+        const templates = req.body;
+        console.log(`POST /api/remark-templates/bulk - Received ${templates?.length} templates`);
+
+        if (!Array.isArray(templates) || templates.length === 0) {
+            return res.status(400).json({ error: 'Ожидается непустой массив шаблонов' });
+        }
+
+        const insertData = templates.map(t => ({
+            text: t.text?.trim() || 'Без описания',
+            specialization: t.specialization || null,
+            priority: t.priority || 'medium',
+            category: t.category || null,
+            estimated_hours: t.estimated_hours || null
+        }));
+
+        const { data, error } = await supabase
+            .from('remark_templates')
+            .insert(insertData)
+            .select();
+
+        if (error) throw error;
+
+        // Audit Log
+        await supabase.from('audit_logs').insert({
+            user_id: req.session.user.id,
+            action: 'Массовый импорт шаблонов замечаний',
+            target: `Записей: ${insertData.length}`,
+            details: `Успешно загружено: ${data ? data.length : 0}`
+        });
+
+        console.log(`Bulk templates inserted successfully: ${data ? data.length : 0} rows`);
+        res.json({ success: true, count: data ? data.length : 0, data });
+    } catch (err) {
+        console.error("Error bulk creating templates:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.put('/api/remark-templates/:id', requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
@@ -911,7 +413,7 @@ app.get('/api/roles', requireAuth, async (req, res) => {
 });
 
 app.post('/api/roles', requireAdmin, async (req, res) => {
-    let { name, description, can_view_dashboard, can_view_map, can_view_journal, can_move_locomotives, can_edit_catalog, can_manage_users } = req.body;
+    let { name, description, can_view_dashboard, can_view_map, can_view_journal, can_move_locomotives, can_edit_catalog, can_manage_users, can_complete_remarks, can_verify_remarks } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
 
     // Normalize role name to lowercase/no-spaces
@@ -928,7 +430,8 @@ app.post('/api/roles', requireAdmin, async (req, res) => {
             can_move_locomotives: can_move_locomotives || false,
             can_edit_catalog: can_edit_catalog || false,
             can_manage_users: can_manage_users || false,
-            can_complete_remarks: can_complete_remarks ?? true
+            can_complete_remarks: can_complete_remarks ?? true,
+            can_verify_remarks: can_verify_remarks || false
         }])
         .select()
         .maybeSingle();
@@ -944,7 +447,7 @@ app.post('/api/roles', requireAdmin, async (req, res) => {
 
 app.put('/api/roles/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
-    let { name, description, can_view_dashboard, can_view_map, can_view_journal, can_move_locomotives, can_edit_catalog, can_manage_users, can_complete_remarks } = req.body;
+    let { name, description, can_view_dashboard, can_view_map, can_view_journal, can_move_locomotives, can_edit_catalog, can_manage_users, can_complete_remarks, can_verify_remarks } = req.body;
 
     // First check if it's admin role, or if exists
     const { data: roleData } = await supabase.from('roles').select('*').eq('id', id).maybeSingle();
@@ -962,7 +465,8 @@ app.put('/api/roles/:id', requireAdmin, async (req, res) => {
                 can_move_locomotives: can_move_locomotives || false,
                 can_edit_catalog: can_edit_catalog || false,
                 can_manage_users: can_manage_users || false,
-                can_complete_remarks: can_complete_remarks ?? true
+                can_complete_remarks: can_complete_remarks ?? true,
+                can_verify_remarks: can_verify_remarks || false
             })
             .eq('id', id)
             .select()
@@ -982,7 +486,8 @@ app.put('/api/roles/:id', requireAdmin, async (req, res) => {
         can_move_locomotives: can_move_locomotives || false,
         can_edit_catalog: can_edit_catalog || false,
         can_manage_users: can_manage_users || false,
-        can_complete_remarks: can_complete_remarks ?? true
+        can_complete_remarks: can_complete_remarks ?? true,
+        can_verify_remarks: can_verify_remarks || false
     };
     if (name) updates.name = name;
     if (description !== undefined) updates.description = description;
@@ -1025,7 +530,7 @@ app.delete('/api/roles/:id', requireAdmin, async (req, res) => {
 app.get('/api/locomotives', requireAuth, async (req, res) => {
     let query = supabase
         .from('locomotives')
-        .select('id, number, status, track, position, created_at, repair_type, planned_release');
+        .select('id, number, status, track, position, created_at, repair_type, planned_release, acceptance_time');
 
     if (req.session.user.active_location_id) {
         query = query.eq('location_id', req.session.user.active_location_id);
@@ -1058,17 +563,19 @@ app.get('/api/locomotives/:id', requireAuth, async (req, res) => {
 });
 
 app.post('/api/locomotives', requirePermission('can_edit_catalog'), async (req, res) => {
-    const { number, status, track, position, repair_type, planned_release } = req.body;
+    const { number, status, track, position, repair_type, planned_release, acceptance_time } = req.body;
 
     if (!number) {
         return res.status(400).json({ error: 'Номер локомотива обязателен' });
     }
 
-    // Check if number already exists
+    // Check if number already exists (only active locomotives in the same location)
     const { data: existing } = await supabase
         .from('locomotives')
         .select('id')
         .eq('number', number)
+        .eq('location_id', req.session.user.active_location_id || 1)
+        .neq('status', 'completed')
         .maybeSingle();
 
     if (existing) {
@@ -1100,6 +607,7 @@ app.post('/api/locomotives', requirePermission('can_edit_catalog'), async (req, 
                 position: position || null,
                 repair_type: repair_type || null,
                 planned_release: planned_release || null,
+                acceptance_time: acceptance_time || new Date().toISOString(),
                 location_id: req.session.user.active_location_id || 1
             })
             .select()
@@ -1240,6 +748,7 @@ app.put('/api/locomotives/:id', requirePermission('can_edit_catalog'), async (re
     if (status !== undefined) updates.status = status;
     if (req.body.repair_type !== undefined) updates.repair_type = req.body.repair_type;
     if (req.body.planned_release !== undefined) updates.planned_release = req.body.planned_release;
+    if (req.body.acceptance_time !== undefined) updates.acceptance_time = req.body.acceptance_time;
 
     // Log status change to journal
     if (status !== undefined && status !== loco.status) {
@@ -1469,59 +978,74 @@ app.post('/api/locomotives/:id/remarks', requirePermission('can_edit_catalog'), 
 
 app.post('/api/locomotives/:id/remarks/template', requirePermission('can_edit_catalog'), async (req, res) => {
     const { id } = req.params;
-    const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
-
-    let locoId;
-    if (isIdNumeric) {
-        locoId = parseInt(id);
-    } else {
-        const { data: locoData } = await supabase.from('locomotives').select('id').eq('number', decodeURIComponent(id)).maybeSingle();
-        if (!locoData) return res.status(404).json({ error: 'Локомотив не найден' });
-        locoId = locoData.id;
-    }
-
     const { template_id } = req.body;
     if (!template_id) return res.status(400).json({ error: 'ID шаблона обязателен' });
 
-    // Fetch template
-    const { data: template, error: tErr } = await supabase.from('remark_templates').select('*').eq('id', template_id).maybeSingle();
-    if (tErr) return res.status(500).json({ error: tErr.message });
-    if (!template) return res.status(404).json({ error: 'Шаблон не найден' });
+    const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
 
-    const { data: loco } = await supabase.from('locomotives').select('number').eq('id', locoId).maybeSingle();
+    try {
+        let locoId;
+        let locoQuery;
 
-    const { data, error } = await supabase
-        .from('locomotive_remarks')
-        .insert({
-            locomotive_id: locoId,
-            text: template.text,
-            priority: template.priority || 'medium',
-            category: template.category || null,
-            points: template.points || 10,
-            estimated_hours: template.estimated_hours || 0,
-            created_by: req.session.user.id
-        })
-        .select(`
-            *,
-            created_by:users!locomotive_remarks_created_by_fkey(full_name, username)
-        `)
-        .maybeSingle();
+        if (isIdNumeric) {
+            locoId = parseInt(id);
+            locoQuery = supabase.from('locomotives').select('number').eq('id', locoId).maybeSingle();
+        } else {
+            locoQuery = supabase.from('locomotives').select('id, number').eq('number', decodeURIComponent(id)).maybeSingle();
+        }
 
-    if (error) return res.status(500).json({ error: error.message });
+        // Parallelize fetching template and locomotive info
+        const [templateRes, locoRes] = await Promise.all([
+            supabase.from('remark_templates').select('*').eq('id', template_id).maybeSingle(),
+            locoQuery
+        ]);
 
-    // Update usage count
-    await supabase.rpc('increment_template_usage', { t_id: template_id });
+        if (templateRes.error) throw templateRes.error;
+        if (!templateRes.data) return res.status(404).json({ error: 'Шаблон не найден' });
 
-    if (loco) {
-        await supabase.from('movements').insert({
-            locomotive_id: locoId,
-            locomotive_number: loco.number,
-            action: `remark_added_from_template: ${template.text}`,
-            moved_by: req.session.user.full_name || req.session.user.username
-        });
+        if (locoRes.error) throw locoRes.error;
+        if (!locoRes.data) return res.status(404).json({ error: 'Локомотив не найден' });
+
+        const template = templateRes.data;
+        const loco = locoRes.data;
+        if (!isIdNumeric) locoId = loco.id;
+
+        // Insert remark and get returned data
+        const { data, error } = await supabase
+            .from('locomotive_remarks')
+            .insert({
+                locomotive_id: locoId,
+                text: template.text,
+                priority: template.priority || 'medium',
+                category: template.category || null,
+                points: template.points || 10,
+                estimated_hours: template.estimated_hours || 0,
+                created_by: req.session.user.id
+            })
+            .select(`
+                *,
+                created_by:users!locomotive_remarks_created_by_fkey(full_name, username)
+            `)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        // Parallelize side-effects: update usage count and log movement
+        Promise.all([
+            supabase.rpc('increment_template_usage', { t_id: template_id }),
+            supabase.from('movements').insert({
+                locomotive_id: locoId,
+                locomotive_number: loco.number,
+                action: `remark_added_from_template: ${template.text}`,
+                moved_by: req.session.user.full_name || req.session.user.username
+            })
+        ]).catch(err => console.error("Side effect error (non-blocking):", err));
+
+        res.json(data);
+    } catch (err) {
+        console.error("Template add error:", err);
+        res.status(500).json({ error: err.message });
     }
-
-    res.json(data);
 });
 
 app.post('/api/locomotives/:id/remarks/bulk', requirePermission('can_edit_catalog'), async (req, res) => {
@@ -1597,6 +1121,13 @@ app.put('/api/remarks/:id/complete', requirePermission('can_complete_remarks'), 
             completed_by: is_completed ? req.session.user.id : null,
             completed_at: is_completed ? new Date().toISOString() : null
         };
+
+        // When reopening a remark, ensure it loses verified status
+        if (!is_completed) {
+            updates.is_verified = false;
+            updates.verified_by = null;
+            updates.verified_at = null;
+        }
         if (completion_photo_url) updates.completion_photo_url = completion_photo_url;
 
         const { data: updatedRemark, error: updateErr } = await supabase
@@ -1648,6 +1179,144 @@ app.put('/api/remarks/:id/complete', requirePermission('can_complete_remarks'), 
     }
 });
 
+// New Verify Route
+app.put('/api/remarks/:id/verify', requirePermission('can_verify_remarks'), async (req, res) => {
+    const remarkId = req.params.id;
+
+    try {
+        const { data: remark, error: fetchErr } = await supabase
+            .from('locomotive_remarks')
+            .select('*, locomotive:locomotives(number)')
+            .eq('id', remarkId)
+            .maybeSingle();
+
+        if (fetchErr) throw fetchErr;
+        if (!remark) return res.status(404).json({ error: 'Замечание не найдено' });
+        if (!remark.is_completed) return res.status(400).json({ error: 'Замечание еще не выполнено электриком' });
+
+        const updates = {
+            is_verified: true,
+            verified_by: req.session.user.id,
+            verified_at: new Date().toISOString()
+        };
+
+        const { data: updatedRemark, error: updateErr } = await supabase
+            .from('locomotive_remarks')
+            .update(updates)
+            .eq('id', remarkId)
+            .select(`
+                *,
+                completed_by: users!locomotive_remarks_completed_by_fkey(full_name, username),
+                created_by: users!locomotive_remarks_created_by_fkey(full_name, username),
+                verified_by: users!locomotive_remarks_verified_by_fkey(full_name, username)
+            `)
+            .maybeSingle();
+
+        if (updateErr) throw updateErr;
+
+        // --- LOGGING ---
+        await supabase.from('remark_history').insert({
+            remark_id: remarkId,
+            user_id: req.session.user.id,
+            action: 'verified',
+            details: 'Проверено и принято'
+        });
+
+        if (remark.locomotive) {
+            await supabase.from('movements').insert({
+                locomotive_id: remark.locomotive_id,
+                locomotive_number: remark.locomotive.number,
+                action: `remark_verified: ${remark.text}`,
+                moved_by: req.session.user.full_name || req.session.user.username
+            });
+        }
+
+        res.json(updatedRemark);
+    } catch (err) {
+        console.error("Error in verification logic:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// New Reject Route
+app.put('/api/remarks/:id/reject', requirePermission('can_verify_remarks'), async (req, res) => {
+    const remarkId = req.params.id;
+    const { comment } = req.body;
+
+    try {
+        const { data: remark, error: fetchErr } = await supabase
+            .from('locomotive_remarks')
+            .select('*, locomotive:locomotives(number)')
+            .eq('id', remarkId)
+            .maybeSingle();
+
+        if (fetchErr) throw fetchErr;
+        if (!remark) return res.status(404).json({ error: 'Замечание не найдено' });
+        if (!remark.is_completed) return res.status(400).json({ error: 'Замечание еще не выполнено электриком' });
+
+        const updates = {
+            is_completed: false, // Return to worker
+            completed_by: null,
+            completed_at: null,
+            is_verified: false,
+            verified_by: null,
+            verified_at: null
+        };
+
+        const { data: updatedRemark, error: updateErr } = await supabase
+            .from('locomotive_remarks')
+            .update(updates)
+            .eq('id', remarkId)
+            .select(`
+                *,
+                assigned_user: users!locomotive_remarks_assigned_to_fkey(full_name, username),
+                created_by: users!locomotive_remarks_created_by_fkey(full_name, username)
+                    `)
+            .maybeSingle();
+
+        if (updateErr) throw updateErr;
+
+        // --- POINT SYSTEM LOGIC ---
+        // Deduct points from the user who originally completed it
+        const pointsToAward = remark.points || 10;
+        if (remark.completed_by) {
+            await supabase.rpc('increment_user_points', { user_id: remark.completed_by, amount: -pointsToAward });
+        }
+
+        // --- LOGGING ---
+        const rejectionDetails = [
+            `Отклонено и возвращено в работу (-${pointsToAward} б.)`,
+            comment ? `Комментарий: "${comment}"` : null
+        ].filter(Boolean).join(' | ');
+
+        await supabase.from('remark_history').insert({
+            remark_id: remarkId,
+            user_id: req.session.user.id,
+            action: 'rejected',
+            details: rejectionDetails
+        });
+
+        if (remark.locomotive) {
+            const movementAction = [
+                `remark_rejected: ${remark.text}`,
+                comment ? `(Причина: ${comment})` : null
+            ].filter(Boolean).join(' ');
+
+            await supabase.from('movements').insert({
+                locomotive_id: remark.locomotive_id,
+                locomotive_number: remark.locomotive.number,
+                action: movementAction,
+                moved_by: req.session.user.full_name || req.session.user.username
+            });
+        }
+
+        res.json(updatedRemark);
+    } catch (err) {
+        console.error("Error in rejection logic:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // New Assignment Route
 app.put('/api/remarks/:id/assign', requirePermission('can_complete_remarks'), async (req, res) => {
     const remarkId = req.params.id;
@@ -1668,9 +1337,9 @@ app.put('/api/remarks/:id/assign', requirePermission('can_complete_remarks'), as
             .update({ assigned_to: assigned_to || null })
             .eq('id', remarkId)
             .select(`
-                *,
-                assigned_user:users!locomotive_remarks_assigned_to_fkey(full_name, username, specialization)
-            `)
+            *,
+                assigned_user: users!locomotive_remarks_assigned_to_fkey(full_name, username, specialization)
+                `)
             .maybeSingle();
 
         if (updateErr) throw updateErr;
@@ -1709,9 +1378,9 @@ app.put('/api/remarks/:id', requirePermission('can_complete_remarks'), async (re
         .eq('id', remarkId)
         .select(`
             id, text, is_completed, completed_at, created_at, priority, category, locomotive_id,
-            completed_by: users!locomotive_remarks_completed_by_fkey(full_name, username),
-            created_by: users!locomotive_remarks_created_by_fkey(full_name, username)
-            `);
+                completed_by: users!locomotive_remarks_completed_by_fkey(full_name, username),
+                created_by: users!locomotive_remarks_created_by_fkey(full_name, username)
+                `);
 
     if (error) return res.status(500).json({ error: error.message });
     if (!data || data.length === 0) return res.status(404).json({ error: 'Замечание не найдено' });
@@ -1743,8 +1412,8 @@ app.get('/api/remarks/:id/history', requireAuth, async (req, res) => {
         .from('remark_history')
         .select(`
             id, action, details, created_at,
-            user_id: users(full_name, username)
-            `)
+                user_id: users(full_name, username)
+                `)
         .eq('remark_id', remarkId)
         .order('created_at', { ascending: true });
 
@@ -1780,8 +1449,8 @@ app.post('/api/remarks/:id/photos', requireAuth, upload.single('photo'), async (
             })
             .select(`
                 id, photo_url, created_at,
-            user_id: users(full_name, username)
-            `)
+                user_id: users(full_name, username)
+                `)
             .maybeSingle();
 
         if (error) throw new Error(error.message);
@@ -1807,8 +1476,8 @@ app.get('/api/remarks/:id/photos', requireAuth, async (req, res) => {
         .from('remark_photos')
         .select(`
             id, photo_url, created_at,
-            user_id: users(full_name, username)
-            `)
+                user_id: users(full_name, username)
+                `)
         .eq('remark_id', remarkId)
         .order('created_at', { ascending: true });
 
@@ -1823,8 +1492,8 @@ app.get('/api/remarks/:id/comments', requireAuth, async (req, res) => {
         .from('remark_comments')
         .select(`
             id, text, created_at,
-            user_id: users(full_name, username)
-            `)
+                user_id: users(full_name, username)
+                `)
         .eq('remark_id', remarkId)
         .order('created_at', { ascending: true });
 
@@ -1849,8 +1518,8 @@ app.post('/api/remarks/:id/comments', requireAuth, async (req, res) => {
         })
         .select(`
             id, text, created_at,
-            user_id: users(full_name, username)
-            `)
+                user_id: users(full_name, username)
+                `)
         .maybeSingle();
 
     if (error) return res.status(500).json({ error: error.message });
@@ -1992,20 +1661,42 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 
 app.get('/api/movements/export', requireAuth, async (req, res) => {
     try {
-        let query = supabase
-            .from('movements')
-            .select('*')
-            .order('moved_at', { ascending: false })
-            .limit(5000);
+        const { startDate, endDate, user, loco, action } = req.query;
+        console.log(`📊 Exporting movements: User = ${req.session.user.username}, Filters = `, req.query);
+
+        let query = supabase.from('movements').select('*').order('moved_at', { ascending: false });
+
+        if (startDate) {
+            query = query.gte('moved_at', `${startDate}T00:00:00.000Z`);
+        }
+        if (endDate) {
+            query = query.lte('moved_at', `${endDate}T23: 59: 59.999Z`);
+        }
+        if (user && user !== 'all') {
+            query = query.eq('moved_by', user);
+        }
+        if (loco) {
+            query = query.ilike('locomotive_number', `% ${loco} % `);
+        }
+        if (action && action !== 'all') {
+            if (action === 'remove_from_track' || action === 'status_change' || action === 'remark') {
+                query = query.like('action', `${action === 'remark' ? 'remark_%' : action + '%'} `);
+            } else {
+                query = query.eq('action', action);
+            }
+        }
 
         const showAllLocations = req.query.all_locations === 'true' && req.session.user.is_global_admin;
         if (!showAllLocations && req.session.user.active_location_id) {
             query = query.eq('location_id', req.session.user.active_location_id);
         }
 
-        const { data: movements, error } = await query;
+        const { data: movements, error } = await query.limit(10000);
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+            console.error("❌ Export query error:", error);
+            return res.status(500).json({ error: error.message });
+        }
 
         // Build CSV
         const actionLabels = {
@@ -2016,20 +1707,33 @@ app.get('/api/movements/export', requireAuth, async (req, res) => {
 
         const header = '№;Дата;Локомотив;Действие;Откуда;Куда;Пользователь\n';
         const rows = (movements || []).map((m, i) => {
-            const action = m.action.startsWith('remove_from_track')
-                ? 'Убран с пути: ' + (m.action.includes(': ') ? m.action.split(': ').slice(1).join(': ') : '')
-                : (actionLabels[m.action] || m.action);
-            const from = m.from_track ? `Путь ${m.from_track}, Слот ${m.from_position}` : '—';
-            const to = m.to_track ? `Путь ${m.to_track}, Слот ${m.to_position}` : '—';
-            const date = new Date(m.moved_at).toLocaleString('ru-RU');
-            return `${i + 1};${date};${m.locomotive_number};${action};${from};${to};${m.moved_by} `;
+            let actionStr = m.action || '—';
+            if (actionStr.startsWith('remove_from_track')) {
+                actionStr = 'Убран с пути: ' + (actionStr.includes(': ') ? actionStr.split(': ').slice(1).join(': ') : '');
+            } else if (actionLabels[actionStr]) {
+                actionStr = actionLabels[actionStr];
+            } else {
+                // Handle complex actions like status_change: Repair → Active
+                actionStr = actionStr.replace('status_change:', 'Смена статуса:').replace('remark_added:', 'Добавлено замечание:').replace('remark_completed:', 'Замечание выполнено:');
+            }
+
+            const from = m.from_track ? `Путь ${m.from_track}, Слот ${m.from_position} ` : '—';
+            const to = m.to_track ? `Путь ${m.to_track}, Слот ${m.to_position} ` : '—';
+            const date = m.moved_at ? new Date(m.moved_at).toLocaleString('ru-RU') : '—';
+            const userStr = (m.moved_by || '—').replace(/;/g, ','); // Safety check for CSV separator
+            const locoStr = (m.locomotive_number || '—').replace(/;/g, ',');
+            const cleanAction = actionStr.replace(/;/g, ',');
+
+            return `${i + 1};${date};${locoStr};${cleanAction};${from};${to};${userStr} `;
         }).join('\n');
 
         const bom = '\ufeff'; // for Excel UTF-8 support
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', 'attachment; filename=journal_export.csv');
+        console.log(`✅ Export completed: ${movements?.length || 0} rows sent.`);
         res.send(bom + header + rows);
     } catch (err) {
+        console.error("❌ Export critical error:", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -2038,186 +1742,76 @@ app.get('/api/movements/export', requireAuth, async (req, res) => {
 
 app.put('/api/profile/password', requireAuth, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-        return res.status(400).json({ error: 'Укажите текущий и новый пароль' });
-    }
-    if (newPassword.length < 4) {
+
+    // In many recovery scenarios (Magic Link, Reset Password link), 
+    // the user might not have/know their "current" password.
+    // We allow skipping currentPassword if they are authenticated via a recovery flow.
+    const isRecoveryFlow = req.headers['x-auth-recovery'] === 'true';
+
+    if (!newPassword || newPassword.length < 4) {
         return res.status(400).json({ error: 'Новый пароль должен быть минимум 4 символа' });
     }
 
-    const { data: user } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', req.session.user.id)
-        .maybeSingle();
+    try {
+        const { data: user } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', req.session.user.id)
+            .maybeSingle();
 
-    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+        if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
 
-    const validPassword = await bcrypt.compare(currentPassword, user.password);
-    if (!validPassword) {
-        return res.status(400).json({ error: 'Неверный текущий пароль' });
+        // If not in recovery flow, we MUST check currentPassword
+        if (!isRecoveryFlow) {
+            if (!currentPassword) {
+                return res.status(400).json({ error: 'Укажите текущий пароль' });
+            }
+            // Check against stored bcrypt hash if it exists
+            if (user.password) {
+                const validPassword = await bcrypt.compare(currentPassword, user.password);
+                if (!validPassword) {
+                    return res.status(400).json({ error: 'Неверный текущий пароль' });
+                }
+            }
+        }
+
+        // 1. Update in Supabase Auth (Primary)
+        if (user.uuid) {
+            const { error: authError } = await supabase.auth.admin.updateUserById(
+                user.uuid,
+                { password: newPassword }
+            );
+            if (authError) {
+                console.error("❌ Auth update error:", authError);
+                return res.status(400).json({ error: `Ошибка Supabase Auth: ${authError.message} ` });
+            }
+        }
+
+        // 2. Update in legacy public.users (Optional/Sync)
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const { error: dbError } = await supabase
+            .from('users')
+            .update({ password: hashedPassword })
+            .eq('id', req.session.user.id);
+
+        if (dbError) {
+            console.error("❌ DB update error:", dbError);
+            return res.status(500).json({ error: 'Ошибка обновления пароля в БД' });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("❌ Password change exception:", err);
+        res.status(500).json({ error: 'Внутренняя ошибка сервера' });
     }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    const { error } = await supabase
-        .from('users')
-        .update({ password: hashedPassword })
-        .eq('id', req.session.user.id);
-
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ success: true });
 });
 
 
 // ===================== KIOSK ROUTES =====================
 
-// Temporary DEBUG route to set admin PIN to 1234
-app.get('/api/debug/reset-admin-pin', async (req, res) => {
-    try {
-        const { data, error } = await supabase.from('users').update({ pin_code: '1234' }).eq('username', 'admin');
-        if (error) throw error;
-        res.send('Admin PIN reset to 1234');
-    } catch (e) { res.status(500).send(e.message); }
-});
 
-// Temporary DEBUG route to list users
-app.get('/api/debug/users', async (req, res) => {
-    try {
-        const { data, error } = await supabase.from('users').select('username, pin_code, full_name');
-        res.json({ users: data, error });
-    } catch (e) { res.status(500).send(e.message); }
-});
 
-// Verify PIN-only (for Kiosk)
-app.get('/api/kiosk/verify-pin', async (req, res) => {
-    const { pin } = req.query;
-    console.log(`🔌 Kiosk: Attempting PIN verification for: ${pin}`);
-    if (!pin) return res.status(400).json({ error: 'PIN required' });
 
-    try {
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('id, username, full_name, role, location_id')
-            .eq('pin_code', pin)
-            .maybeSingle();
-
-        if (error) {
-            console.error('❌ Kiosk DB Error:', error);
-            return res.status(500).json({ error: 'Ошибка базы данных' });
-        }
-
-        if (!user) {
-            console.log('⚠️ Kiosk: User not found for this PIN');
-            return res.status(401).json({ error: 'Неверный PIN' });
-        }
-
-        console.log(`✅ Kiosk: Authenticated user: ${user.username} (${user.full_name})`);
-
-        // Log them in for this session
-        req.session.user = user;
-        res.json(user);
-    } catch (err) {
-        console.error('❌ Kiosk Server Error:', err);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
-});
-
-// Start work on a remark
-app.post('/api/work-logs/start', requireAuth, async (req, res) => {
-    const { remark_id } = req.body;
-    const user_id = req.session.user.id;
-    const location_id = req.session.user.location_id;
-
-    if (!remark_id) return res.status(400).json({ error: 'remark_id is required' });
-
-    try {
-        // Check if there's already an active work log for this user
-        const { data: activeLog, error: searchError } = await supabase
-            .from('work_logs')
-            .select('id')
-            .eq('user_id', user_id)
-            .is('finished_at', null)
-            .maybeSingle();
-
-        if (activeLog) {
-            return res.status(400).json({ error: 'У вас уже есть активная работа. Сначала завершите её.' });
-        }
-
-        const { data: log, error } = await supabase
-            .from('work_logs')
-            .insert([{ user_id, remark_id, location_id }])
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        // Also update the remark history
-        await supabase.from('remark_history').insert([{
-            remark_id,
-            user_id,
-            action: 'work_started',
-            details: `Сотрудник приступил к выполнению работы через Киоск`
-        }]);
-
-        res.json(log);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Stop work on a remark
-app.post('/api/work-logs/stop', requireAuth, async (req, res) => {
-    const { log_id } = req.body;
-    const user_id = req.session.user.id;
-
-    if (!log_id) return res.status(400).json({ error: 'log_id is required' });
-
-    try {
-        const finished_at = new Date().toISOString();
-
-        // Find the log and update it
-        const { data: log, error } = await supabase
-            .from('work_logs')
-            .update({ finished_at })
-            .eq('id', log_id)
-            .eq('user_id', user_id)
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        // Update remark history
-        await supabase.from('remark_history').insert([{
-            remark_id: log.remark_id,
-            user_id,
-            action: 'work_finished',
-            details: `Работа завершена через Киоск`
-        }]);
-
-        res.json(log);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get active work for the current user
-app.get('/api/work-logs/active', requireAuth, async (req, res) => {
-    const user_id = req.session.user.id;
-
-    try {
-        const { data: log, error } = await supabase
-            .from('work_logs')
-            .select('*, locomotive_remarks(*, locomotives(number))')
-            .eq('user_id', user_id)
-            .is('finished_at', null)
-            .maybeSingle();
-
-        if (error) throw error;
-        res.json(log);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 // ===================== PAGE ROUTES =====================
 
@@ -2227,10 +1821,7 @@ app.get('*', (req, res) => {
 
 // ===================== STARTUP =====================
 
-// Force admin PIN to 1234 on every startup for Kiosk mode consistency
-supabase.from('users').update({ pin_code: '1234' }).eq('username', 'admin').then(() => {
-    console.log('🚂 Admin PIN synchronized to 1234');
-});
+
 
 app.listen(PORT, () => {
     console.log(`🚂 Yamazumi Depot Server running at http://localhost:${PORT}`);

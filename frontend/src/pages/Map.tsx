@@ -4,17 +4,20 @@ import { useDebounce } from "@/hooks/useDebounce"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FloatingInput } from "@/components/ui/FloatingInput"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Plus, Search, RefreshCw, Trash2, ArrowLeftFromLine, Check, ChevronsUpDown, Printer, Clock, History, ListTodo } from "lucide-react"
+import { Plus, Search, RefreshCw, Trash2, Check, ChevronsUpDown, Printer, Clock, History, ListTodo, Loader2, QrCode } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/hooks/useAuth"
+import { QRCodeSVG } from 'qrcode.react'
 
 export type LocoStatus = 'active' | 'repair' | 'waiting' | 'completed';
 
@@ -36,7 +39,23 @@ export interface Locomotive {
     created_at: string;
     repair_type: string | null;
     planned_release: string | null;
+    acceptance_time: string | null;
 }
+
+const formatToDateTimeLocal = (dateStr: string | null) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "";
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 
 const statusColors = {
     active: 'bg-green-500',
@@ -52,7 +71,7 @@ const statusLabels: Record<string, string> = {
     completed: 'Завершён',
 };
 
-const LocoCard = React.memo(({ loco, isHighlighted, canMove, onDragStart, onClick }: { loco: Locomotive, isHighlighted: boolean, canMove: boolean, onDragStart: (e: React.DragEvent<HTMLDivElement>, id: number) => void, onClick: (loco: Locomotive) => void }) => {
+const LocoCard = React.memo(({ loco, isHighlighted, canMove, onDragStart, onClick, currentTime }: { loco: Locomotive, isHighlighted: boolean, canMove: boolean, onDragStart: (e: React.DragEvent<HTMLDivElement>, id: number) => void, onClick: (loco: Locomotive) => void, currentTime: Date }) => {
     return (
         <TooltipProvider delayDuration={200}>
             <Tooltip>
@@ -90,7 +109,7 @@ const LocoCard = React.memo(({ loco, isHighlighted, canMove, onDragStart, onClic
                     <p className="font-bold">{loco.number}</p>
                     <p>{statusLabels[loco.status]}{loco.repair_type ? ` • ${loco.repair_type}` : ''}</p>
                     {(() => {
-                        const days = Math.floor((Date.now() - new Date(loco.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                        const days = Math.floor((currentTime.getTime() - new Date(loco.created_at).getTime()) / (1000 * 60 * 60 * 24));
                         return <p>На пути: {days === 0 ? 'сегодня' : `${days} дн.`}</p>
                     })()}
                     {loco.planned_release && (
@@ -114,6 +133,19 @@ export default function MapPage() {
     const [searchQuery, setSearchQuery] = useState("")
     const debouncedSearch = useDebounce(searchQuery, 400)
     const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [currentTime, setCurrentTime] = useState(new Date())
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 60000)
+        return () => clearInterval(timer)
+    }, [])
+
+    const getHoursSince = (dateStr: string | null) => {
+        if (!dateStr) return 0
+        const diff = currentTime.getTime() - new Date(dateStr).getTime()
+        const hours = Math.floor(diff / (1000 * 60 * 60))
+        return hours > 0 ? hours : 0
+    }
 
     // Add Form State
     const [isAddOpen, setIsAddOpen] = useState(false)
@@ -125,17 +157,15 @@ export default function MapPage() {
     const [addPosition, setAddPosition] = useState<string>("")
     const [addRepairType, setAddRepairType] = useState<string>("")
     const [addPlannedRelease, setAddPlannedRelease] = useState<string>("")
+    const [addAcceptanceTime, setAddAcceptanceTime] = useState<string>(formatToDateTimeLocal(new Date().toISOString()))
     const [isNumberOpen, setIsNumberOpen] = useState(false)
 
-    // Transfer State
-    const [isTransferOpen, setIsTransferOpen] = useState(false)
-    const [transferLocationId, setTransferLocationId] = useState<string>("")
+
+    // QR State
+    const [qrLoco, setQrLoco] = useState<Locomotive | null>(null)
 
     // React Query Hooks
-    const { data: user } = useQuery({
-        queryKey: ['me'],
-        queryFn: () => fetch('/api/me').then(res => res.json()).then(d => d.user)
-    })
+    const { user } = useAuth()
 
     const { data: locations = [] } = useQuery({
         queryKey: ['locations'],
@@ -144,8 +174,15 @@ export default function MapPage() {
     })
 
     const { data: locomotives = [], isLoading: isLoadingLocos } = useQuery({
-        queryKey: ['locomotives'],
-        queryFn: () => fetch("/api/locomotives").then(res => res.json())
+        queryKey: ['locomotives', user?.active_location_id],
+        queryFn: async () => {
+            const url = user?.active_location_id
+                ? `/api/locomotives?location_id=${user.active_location_id}`
+                : "/api/locomotives"
+            const res = await fetch(url)
+            return res.json()
+        },
+        enabled: !!user
     })
 
     const { data: catalog = [] } = useQuery({
@@ -177,6 +214,15 @@ export default function MapPage() {
         acc[t] = l;
         return acc;
     }, {});
+
+    // Fallback: If "Whole network" is selected, try to show zone labels from first location that has them
+    const effectiveTrackConfig = Object.keys(trackConfigObj).length > 0
+        ? trackConfigObj
+        : (locations as Location[]).find(l => l.track_config)?.track_config?.split(',').filter(s => s).reduce((acc: Record<string, string>, curr: string) => {
+            const [t, l] = curr.split(':');
+            acc[t] = l;
+            return acc;
+        }, {}) || {};
 
     // No manual fetch needed on mount, handled by React Query
 
@@ -219,6 +265,7 @@ export default function MapPage() {
             setAddPosition("")
             setAddRepairType("")
             setAddPlannedRelease("")
+            setAddAcceptanceTime(formatToDateTimeLocal(new Date().toISOString()))
             queryClient.invalidateQueries({ queryKey: ['locomotives'] })
         },
         onError: (err: Error) => toast.error(err.message)
@@ -257,25 +304,23 @@ export default function MapPage() {
         onError: (err: Error) => toast.error(err.message)
     })
 
-    const transferMutation = useMutation({
-        mutationFn: ({ id, target_location_id }: { id: number, target_location_id: number }) =>
-            fetch(`/api/locomotives/${id}/transfer`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ target_location_id })
-            }).then(async res => {
-                const data = await res.json()
-                if (!res.ok) throw new Error(data.error)
-                return data
-            }),
-        onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: ['locomotives'] })
-            setIsTransferOpen(false)
-            setIsInfoOpen(false)
-            toast.success(`Локомотив #${data.number} передан`)
-        },
-        onError: (err: Error) => toast.error(err.message)
-    })
+    const handlePrefetchRemarks = (id: number) => {
+        queryClient.prefetchQuery({
+            queryKey: ['locomotive', id.toString()],
+            queryFn: () => fetch(`/api/locomotives/${id}`).then(res => res.json())
+        })
+        queryClient.prefetchQuery({
+            queryKey: ['locomotive-remarks', id.toString()],
+            queryFn: () => fetch(`/api/remarks/locomotive/${id}`).then(res => res.json())
+        })
+    }
+
+    const handlePrefetchHistory = (number: string) => {
+        queryClient.prefetchQuery({
+            queryKey: ['locomotive-history', number],
+            queryFn: () => fetch(`/api/history/${encodeURIComponent(number)}`).then(res => res.json())
+        })
+    }
 
     const handleAddSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -286,7 +331,8 @@ export default function MapPage() {
             track: addTrack ? parseInt(addTrack) : null,
             position: addPosition ? parseInt(addPosition) : null,
             repair_type: addRepairType || null,
-            planned_release: addPlannedRelease || null
+            planned_release: addPlannedRelease || null,
+            acceptance_time: addAcceptanceTime || null
         })
     }
 
@@ -296,22 +342,13 @@ export default function MapPage() {
         deleteMutation.mutate(selectedLoco.id)
     }
 
-    const handleRemoveFromTrack = () => {
-        if (!selectedLoco) return
-        setRemoveReason("")
-        setIsRemoveReasonOpen(true)
-    }
+
 
     const confirmRemoveFromTrack = () => {
         if (!selectedLoco || !removeReason) return
         moveMutation.mutate({ id: selectedLoco.id, track: null, position: null, reason: removeReason })
         setIsRemoveReasonOpen(false)
         setIsInfoOpen(false)
-    }
-
-    const handleTransfer = () => {
-        if (!selectedLoco || !transferLocationId) return
-        transferMutation.mutate({ id: selectedLoco.id, target_location_id: parseInt(transferLocationId) })
     }
 
     const confirmMove = () => {
@@ -387,6 +424,7 @@ export default function MapPage() {
         setAddStatus("active")
         setAddRepairType("")
         setAddPlannedRelease("")
+        setAddAcceptanceTime(formatToDateTimeLocal(new Date().toISOString()))
         setIsAddOpen(true)
     }
 
@@ -415,8 +453,20 @@ export default function MapPage() {
                         loco={loco}
                         isHighlighted={isHighlighted}
                         canMove={canMove}
+                        currentTime={currentTime}
                         onDragStart={handleDragStart}
-                        onClick={(loco) => { setSelectedLoco(loco); setIsInfoOpen(true) }}
+                        onClick={async (loco) => {
+                            // Ensure we have the latest data including acceptance_time
+                            setSelectedLoco(loco);
+                            setIsInfoOpen(true);
+                            try {
+                                const res = await fetch(`/api/locomotives/${loco.id}`);
+                                if (res.ok) {
+                                    const fullLoco = await res.json();
+                                    setSelectedLoco(fullLoco);
+                                }
+                            } catch (e) { console.error("Error fetching full loco", e) }
+                        }}
                     />
                 ) : (
                     <Plus className="w-5 h-5 text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -457,26 +507,30 @@ export default function MapPage() {
                     </div>
 
                     <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-none pt-4 lg:pt-0">
-                        <div className="flex items-center gap-3 flex-1 lg:flex-none">
-                            <div className="relative flex-1 lg:flex-none">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                                <Input
-                                    placeholder="Поиск..."
-                                    className="pl-9 w-full lg:w-48 bg-white"
+                        <div className="flex items-center gap-2 flex-1 lg:flex-none">
+                            <div className="relative flex-1 lg:w-64 group">
+                                <Search className={cn(
+                                    "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
+                                    searchQuery ? "text-indigo-500" : "text-slate-400 group-hover:text-slate-500"
+                                )} />
+                                <FloatingInput
+                                    label="Поиск..."
                                     value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
+                                    className="pl-9 h-11"
+                                    labelClassName="left-9"
                                 />
                             </div>
-                            <Button variant="outline" size="icon" className="shrink-0 bg-white" onClick={() => queryClient.invalidateQueries({ queryKey: ['locomotives'] })}>
+                            <Button variant="outline" size="icon" className="shrink-0 bg-white h-11 w-11" onClick={() => queryClient.invalidateQueries({ queryKey: ['locomotives'] })}>
                                 <RefreshCw className={`h-4 w-4 ${isLoadingLocos ? 'animate-spin' : ''}`} />
                             </Button>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                            <Button variant="outline" size="icon" className="bg-white hidden sm:flex" onClick={() => window.print()} title="Печать карты">
+                            <Button variant="outline" size="icon" className="bg-white hidden sm:flex h-11 w-11" onClick={() => window.print()} title="Печать карты">
                                 <Printer className="h-4 w-4" />
                             </Button>
                             {(user?.role === 'admin' || user?.permissions?.can_edit_catalog) && (
-                                <Button onClick={() => setIsAddOpen(true)} className="gap-2 shadow-sm">
+                                <Button onClick={() => setIsAddOpen(true)} className="gap-2 shadow-sm h-11 px-6">
                                     <Plus className="h-4 w-4" /> <span className="hidden xs:inline">Добавить</span>
                                 </Button>
                             )}
@@ -522,7 +576,7 @@ export default function MapPage() {
                             <div className="space-y-4">
                                 {Array.from({ length: trackCount }).map((_, i) => {
                                     const trackNum = i + 1;
-                                    const trackLabel = trackConfigObj[trackNum];
+                                    const trackLabel = effectiveTrackConfig[trackNum];
                                     return (
                                         <React.Fragment key={trackNum}>
                                             {trackLabel && (
@@ -576,8 +630,14 @@ export default function MapPage() {
                     </DialogHeader>
 
                     <form onSubmit={handleAddSubmit} className="space-y-4 pt-4">
-                        <div className="space-y-2 flex flex-col">
-                            <Label>Номер локомотива</Label>
+                        <div className="space-y-2 flex flex-col pt-2">
+                            <FloatingInput
+                                label="Номер локомотива *"
+                                required
+                                value={addNumber}
+                                onChange={e => setAddNumber(e.target.value)}
+                                placeholder="Например: 0001"
+                            />
                             <Popover open={isNumberOpen} onOpenChange={setIsNumberOpen}>
                                 <PopoverTrigger asChild>
                                     <Button
@@ -675,9 +735,17 @@ export default function MapPage() {
                                 <Input type="date" value={addPlannedRelease} onChange={e => setAddPlannedRelease(e.target.value)} />
                             </div>
                         </div>
+
+                        <div className="space-y-2">
+                            <Label>Время приемки</Label>
+                            <Input type="datetime-local" value={addAcceptanceTime} onChange={e => setAddAcceptanceTime(e.target.value)} />
+                        </div>
                         <DialogFooter className="pt-4">
                             <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Отмена</Button>
-                            <Button type="submit">Добавить на карту</Button>
+                            <Button type="submit" disabled={addMutation.isPending} className="flex items-center gap-2">
+                                {addMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Добавить на карту
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
@@ -691,7 +759,7 @@ export default function MapPage() {
                     </DialogHeader>
                     {selectedLoco && (() => {
                         const daysOnTrack = selectedLoco.track
-                            ? Math.floor((Date.now() - new Date(selectedLoco.created_at).getTime()) / (1000 * 60 * 60 * 24))
+                            ? Math.floor((currentTime.getTime() - new Date(selectedLoco.created_at).getTime()) / (1000 * 60 * 60 * 24))
                             : null
                         return (
                             <div className="space-y-4 py-4">
@@ -715,6 +783,12 @@ export default function MapPage() {
                                                         toast.success(`Статус изменён на: ${statusLabels[val as LocoStatus]}`)
                                                         setSelectedLoco({ ...selectedLoco, status: val as LocoStatus })
                                                         queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+
+                                                        // Automatically open removal dialog if status is completed and loco is on track
+                                                        if (val === 'completed' && selectedLoco.track) {
+                                                            setRemoveReason("Выпуск из ремонта")
+                                                            setIsRemoveReasonOpen(true)
+                                                        }
                                                     }
                                                 } catch (e) { toast.error("Ошибка сети") }
                                             }}
@@ -754,8 +828,48 @@ export default function MapPage() {
                                         </>
                                     )}
 
-                                    <div className="text-slate-500">Добавлен:</div>
+                                    <div className="text-slate-500">Добавлен в депо:</div>
                                     <div>{new Date(selectedLoco.created_at).toLocaleString()}</div>
+
+                                    <div className="text-slate-500 font-semibold text-indigo-700">Время приемки:</div>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            disabled={!!selectedLoco.acceptance_time || !(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
+                                            type="datetime-local"
+                                            className={cn(
+                                                "h-8 w-48 text-sm",
+                                                selectedLoco.acceptance_time ? "bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed" : "border-indigo-200"
+                                            )}
+                                            value={formatToDateTimeLocal(selectedLoco.acceptance_time)}
+                                            onChange={async (e) => {
+                                                const val = e.target.value || null;
+                                                try {
+                                                    const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
+                                                        method: "PUT",
+                                                        headers: { "Content-Type": "application/json" },
+                                                        body: JSON.stringify({ acceptance_time: val ? new Date(val).toISOString() : null })
+                                                    })
+                                                    if (res.ok) {
+                                                        const updatedLoco = await res.json();
+                                                        toast.success(`Время приемки обновлено`)
+                                                        setSelectedLoco(updatedLoco)
+                                                        queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+                                                    }
+                                                } catch (err) { toast.error("Ошибка сети") }
+                                            }}
+                                        />
+                                        {selectedLoco.acceptance_time && (
+                                            <div className="h-7 bg-slate-900 text-indigo-300 border border-slate-700 shadow-inner rounded flex items-center gap-2 px-2.5 animate-pulse-subtle shrink-0">
+                                                <div className="relative flex h-1.5 w-1.5">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
+                                                </div>
+                                                <span className="font-mono font-bold tracking-tight text-[10px] whitespace-nowrap uppercase">
+                                                    {getHoursSince(selectedLoco.acceptance_time)} ч
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     <div className="text-slate-500">Тип ремонта:</div>
                                     <div>
@@ -834,28 +948,61 @@ export default function MapPage() {
                                             <Trash2 className="w-4 h-4" /> Удалить
                                         </Button>
                                     )}
-                                    <Button variant="outline" onClick={() => { setIsInfoOpen(false); navigate(`/locomotive/${selectedLoco.id}/remarks`) }} className="gap-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => { setIsInfoOpen(false); navigate(`/locomotive/${selectedLoco.id}/remarks`) }}
+                                        onMouseEnter={() => handlePrefetchRemarks(selectedLoco.id)}
+                                        className="gap-2"
+                                    >
                                         <ListTodo className="w-4 h-4" /> Замечания
                                     </Button>
-                                    <Button variant="outline" onClick={() => { setIsInfoOpen(false); navigate(`/history/${encodeURIComponent(selectedLoco.number)}`) }} className="gap-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => { setIsInfoOpen(false); navigate(`/history/${encodeURIComponent(selectedLoco.number)}`) }}
+                                        onMouseEnter={() => handlePrefetchHistory(selectedLoco.number)}
+                                        className="gap-2"
+                                    >
                                         <History className="w-4 h-4" /> История
                                     </Button>
-                                    {selectedLoco.track && (user?.role === 'admin' || user?.permissions?.can_move_locomotives) && (
-                                        <Button variant="secondary" onClick={handleRemoveFromTrack} className="gap-2">
-                                            <ArrowLeftFromLine className="w-4 h-4" /> Убрать с пути
-                                        </Button>
-                                    )}
-                                    {user?.is_global_admin && (
-                                        <Button variant="outline" onClick={() => setIsTransferOpen(true)} className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800">
-                                            Передать в другое депо
-                                        </Button>
-                                    )}
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setQrLoco(selectedLoco)}
+                                        className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                    >
+                                        <QrCode className="w-4 h-4" /> QR код
+                                    </Button>
+
                                 </div>
                             </div>
                         )
                     })()}
                 </DialogContent>
             </Dialog >
+
+            {/* QR Modal */}
+            <Dialog open={!!qrLoco} onOpenChange={(open) => !open && setQrLoco(null)}>
+                <DialogContent className="sm:max-w-xs text-center border-slate-200 shadow-xl print-area">
+                    <DialogHeader><DialogTitle className="text-center">Тепловоз {qrLoco?.number}</DialogTitle></DialogHeader>
+                    <div className="flex flex-col items-center justify-center p-6 bg-white rounded-xl">
+                        {qrLoco && (
+                            <QRCodeSVG
+                                value={`loco:${qrLoco.id}`}
+                                size={220}
+                                level="H"
+                                includeMargin={true}
+                                className="qr-code-svg-element"
+                            />
+                        )}
+                        <p className="mt-4 font-black text-3xl tracking-tight text-slate-900 border-2 border-slate-900 rounded-lg px-6 py-2 uppercase">{qrLoco?.number}</p>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-2">Распечатайте и наклейте в кабине</p>
+                    <DialogFooter className="sm:justify-center">
+                        <Button onClick={() => window.print()} className="w-full gap-2 bg-slate-900 hover:bg-slate-800 text-white shadow-md">
+                            <QrCode className="w-4 h-4" /> Печать
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Move Confirmation Dialog */}
             < Dialog open={!!pendingMove} onOpenChange={(open) => { if (!open) setPendingMove(null) }}>
@@ -903,7 +1050,6 @@ export default function MapPage() {
                                 "Выпуск из ремонта",
                                 "Перестановка на другой путь",
                                 "Отправка на линию",
-                                "Передача другому депо",
                                 "Ожидание запчастей",
                                 "Другое"
                             ].map((reason) => (
@@ -933,31 +1079,7 @@ export default function MapPage() {
                 </DialogContent>
             </Dialog >
 
-            {/* Transfer Dialog */}
-            < Dialog open={isTransferOpen} onOpenChange={setIsTransferOpen} >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Передача локомотива #{selectedLoco?.number}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 pt-4">
-                        <div className="space-y-2">
-                            <Label>Депо назначения</Label>
-                            <Select value={transferLocationId} onValueChange={setTransferLocationId}>
-                                <SelectTrigger><SelectValue placeholder="Выберите депо..." /></SelectTrigger>
-                                <SelectContent>
-                                    {locations.filter((l: Location) => l.id !== user?.active_location_id).map((l: Location) => (
-                                        <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsTransferOpen(false)}>Отмена</Button>
-                        <Button onClick={handleTransfer} disabled={!transferLocationId}>Передать</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog >
+
         </div >
     )
 }
