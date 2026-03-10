@@ -1,5 +1,30 @@
 # Troubleshooting Users Not Loading on VPS
 
+> [!IMPORTANT]
+> **502 Bad Gateway?** Это означает, что Node.js сервер не запущен или упал. Скорее всего, после обновления не были установлены новые модули (`helmet`, `cors`).
+
+## ⚡ Быстрое решение (Quick Fix)
+
+Выполните эти команды по очереди в терминале вашего VPS:
+
+```bash
+# 1. Зайдите в папку проекта
+cd /root/yamazumi-depot
+
+# 2. Установите новые зависимости
+npm install
+
+# 3. Перезапустите сервер через PM2
+pm2 restart yamazumi
+
+# 4. Проверьте статус (должно быть online)
+pm2 list
+```
+
+Если после этого всё равно 502, переходите к шагам ниже.
+
+---
+
 The issue "users not loading" (and the `ERR_CONNECTION_REFUSED` on port 3000) is caused by two separate problems:
 
 1. **Database Permission (RLS):** The `users` table is protected by Row Level Security (RLS), and currently, it doesn't allow the Login page to see the names of people for selection before they sign in.
