@@ -91,4 +91,51 @@ router.get('/', requireAuth, async (req, res) => {
     }
 });
 
+// Get summary of active remarks per locomotive for overview page
+router.get('/active', requireAuth, async (req, res) => {
+    try {
+        const locationId = req.session.user.active_location_id;
+
+        // 1. Get all locomotives with non-verified remarks
+        let query = supabase
+            .from('locomotive_remarks')
+            .select(`
+                id,
+                is_completed,
+                is_verified,
+                locomotive:locomotives (id, number, series, location_id)
+            `)
+            .eq('is_verified', false);
+
+        const { data: remarks, error } = await query;
+
+        if (error) throw error;
+
+        // Filter by location and group by locomotive
+        const stats = remarks.reduce((acc, remark) => {
+            const loco = remark.locomotive;
+            if (!loco) return acc;
+            if (locationId && loco.location_id !== locationId) return acc;
+
+            if (!acc[loco.id]) {
+                acc[loco.id] = {
+                    locomotive: loco,
+                    total_remarks: 0,
+                    completed_remarks: 0
+                };
+            }
+            acc[loco.id].total_remarks++;
+            if (remark.is_completed) {
+                acc[loco.id].completed_remarks++;
+            }
+            return acc;
+        }, {});
+
+        res.json(Object.values(stats));
+    } catch (err) {
+        console.error('Error fetching active remark stats:', err);
+        res.status(500).json({ error: 'Failed to fetch active remark stats' });
+    }
+});
+
 module.exports = router;

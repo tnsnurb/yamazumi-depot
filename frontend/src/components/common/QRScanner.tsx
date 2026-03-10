@@ -30,12 +30,31 @@ export function QRScannerModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
             { facingMode: "environment" },
             { fps: 10, qrbox: { width: 250, height: 250 } },
             (decodedText) => {
-              // Extract ID from QR code (e.g. "loco:42" -> "42" or just "42")
-              const id = decodedText.replace('loco:', '')
-              if (id && !isNaN(Number(id))) {
+              // Handle various formats:
+              // 1. Full URL: ".../locomotive/41/remarks"
+              // 2. Old format: "loco:41"
+              // 3. Raw ID: "41"
+              let extractedId = '';
+
+              if (decodedText.includes('/locomotive/')) {
+                // Extract from URL pattern
+                const parts = decodedText.split('/locomotive/');
+                if (parts.length > 1) {
+                  extractedId = decodeURIComponent(parts[1].split('/')[0].trim());
+                }
+              } else if (decodedText.includes(':')) {
+                // Handle "loco:ID"
+                extractedId = decodedText.split(':')[1].trim();
+              } else {
+                // Handle raw ID or "Series Number"
+                extractedId = decodedText.trim();
+              }
+
+              if (extractedId) {
                 if (scannerRef.current) scannerRef.current.stop()
                 onClose()
-                navigate(`/locomotive/${id}/remarks`)
+                // Use encodeURIComponent to handle spaces and cyrillic in series
+                navigate(`/locomotive/${encodeURIComponent(extractedId)}/remarks`)
                 toast.success('Локомотив найден!', { position: 'top-center' })
               }
             },

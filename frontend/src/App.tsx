@@ -11,6 +11,8 @@ const Admin = lazy(() => import("./pages/Admin"))
 const Dashboard = lazy(() => import("./pages/Dashboard"))
 const Profile = lazy(() => import("./pages/Profile"))
 const LocomotiveRemarks = lazy(() => import("./pages/LocomotiveRemarks"))
+const LocomotiveChecklistPage = lazy(() => import("./pages/LocomotiveChecklistPage"))
+const ActiveChecklists = lazy(() => import("./pages/ActiveChecklists"))
 const History = lazy(() => import("./pages/History"))
 
 const ActiveRemarks = lazy(() => import("./pages/ActiveRemarks"))
@@ -84,18 +86,18 @@ function App() {
     const resetTimer = () => {
       if (timerRef.current) clearTimeout(timerRef.current)
       if (location.pathname !== '/') {
-        timerRef.current = setTimeout(logout, 5 * 60 * 1000) // 5 minutes
+        timerRef.current = setTimeout(logout, 30 * 60 * 1000) // 30 minutes
       }
     }
 
-    // Throttle the reset to at most once per second to save CPU
+    // Throttle the reset to at most once every 2 seconds to save CPU
     let throttleTimer: ReturnType<typeof setTimeout> | null = null;
     const throttledResetTimer = () => {
       if (throttleTimer) return;
       throttleTimer = setTimeout(() => {
         resetTimer();
         throttleTimer = null;
-      }, 1000);
+      }, 2000);
     };
 
     // Only set up listeners if we are logged in (not on login page)
@@ -104,8 +106,8 @@ function App() {
       return
     }
 
-    // Removed high-frequency events: 'mousemove', 'scroll'
-    const events = ['mousedown', 'keydown', 'touchstart']
+    // Added 'mousemove', 'scroll', 'wheel' with throttling
+    const events = ['mousedown', 'keydown', 'touchstart', 'mousemove', 'scroll', 'wheel']
     events.forEach(e => document.addEventListener(e, throttledResetTimer))
     resetTimer()
 
@@ -131,7 +133,9 @@ function App() {
               <Route path="/admin" element={<Admin />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/remarks" element={<ActiveRemarks />} />
+              <Route path="/checklists" element={<ActiveChecklists />} />
               <Route path="/locomotive/:id/remarks" element={<LocomotiveRemarks />} />
+              <Route path="/locomotive/:id/checklist" element={<LocomotiveChecklistPage />} />
               <Route path="/history/:number" element={<History />} />
             </Route>
           </Route>

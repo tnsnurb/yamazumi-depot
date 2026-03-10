@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
-import { Trash2, Plus, Edit, KeyRound, ShieldAlert, FileDown, Upload, BookOpen, Search, Wrench, Lock, ArrowDown, ArrowUp, Activity, Loader2, MapPin, Warehouse, ClipboardList, QrCode } from "lucide-react"
+import { Trash2, Plus, Edit, KeyRound, ShieldAlert, FileDown, Upload, BookOpen, Search, Wrench, Lock, ArrowDown, ArrowUp, Activity, Loader2, MapPin, Warehouse, ClipboardList, QrCode, CheckSquare } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { FloatingInput } from "@/components/ui/FloatingInput"
@@ -15,6 +15,8 @@ import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/hooks/useAuth"
 import { QRCodeSVG } from 'qrcode.react'
+import { ChecklistAdmin } from "../components/admin/ChecklistAdmin"
+
 
 interface User {
     id: number
@@ -239,7 +241,7 @@ export default function Admin() {
     const [isSavingRole, setIsSavingRole] = useState(false)
 
     // --- CATALOG STATE ---
-    const [catalog, setCatalog] = useState<{ id: number, number: string }[]>([])
+    const [catalog, setCatalog] = useState<{ id: number, series?: string, number: string }[]>([])
     const [isLoadingCatalog, setIsLoadingCatalog] = useState(true)
     const [catalogSearch, setCatalogSearch] = useState("")
     const [catalogPage, setCatalogPage] = useState(1)
@@ -247,13 +249,15 @@ export default function Admin() {
     const [isUploading, setIsUploading] = useState(false)
 
     const [isAddLocoOpen, setIsAddLocoOpen] = useState(false)
+    const [addLocoSeries, setAddLocoSeries] = useState("")
     const [addLocoNumber, setAddLocoNumber] = useState("")
 
     const [isEditLocoOpen, setIsEditLocoOpen] = useState(false)
     const [editLocoId, setEditLocoId] = useState<number | null>(null)
+    const [editLocoSeries, setEditLocoSeries] = useState("")
     const [editLocoNumber, setEditLocoNumber] = useState("")
 
-    const [qrLoco, setQrLoco] = useState<{ id: number, number: string } | null>(null)
+    const [qrLoco, setQrLoco] = useState<{ id: number, series?: string, number: string } | null>(null)
 
     // --- REPAIR TYPES STATE ---
     const [repairTypes, setRepairTypes] = useState<RepairType[]>([])
@@ -453,30 +457,68 @@ export default function Admin() {
     }
 
     const exportTemplatesToExcel = async () => {
-        const XLSX = await import("xlsx-js-style");
-        const ws = XLSX.utils.json_to_sheet(remarkTemplates.map(t => ({
-            'Текст замечания': t.text,
-            'Специализация': t.specialization === 'none' ? 'Нет' : t.specialization,
-            'Приоритет': t.priority === 'high' ? 'Высокий' : t.priority === 'medium' ? 'Средний' : 'Низкий',
-            'Категория': t.category || '',
-            'Норма часов': t.estimated_hours || '',
-            'Кол-во использований': t.usage_count
-        })))
-        const wb = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(wb, ws, "Шаблоны")
-        XLSX.writeFile(wb, "Remark_Templates.xlsx")
+        const ExcelJS = await import("exceljs");
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Шаблоны');
+
+        worksheet.columns = [
+            { header: 'Текст замечания', key: 'text', width: 40 },
+            { header: 'Специализация', key: 'specialization', width: 20 },
+            { header: 'Приоритет', key: 'priority', width: 15 },
+            { header: 'Категория', key: 'category', width: 20 },
+            { header: 'Норма часов', key: 'hours', width: 15 },
+            { header: 'Кол-во использований', key: 'usage', width: 20 }
+        ];
+
+        remarkTemplates.forEach(t => {
+            worksheet.addRow({
+                text: t.text,
+                specialization: t.specialization === 'none' ? 'Нет' : t.specialization,
+                priority: t.priority === 'high' ? 'Высокий' : t.priority === 'medium' ? 'Средний' : 'Низкий',
+                category: t.category || '',
+                hours: t.estimated_hours || '',
+                usage: t.usage_count
+            });
+        });
+
+        worksheet.getRow(1).font = { bold: true };
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "Remark_Templates.xlsx";
+        a.click();
+        window.URL.revokeObjectURL(url);
     }
 
     const downloadTemplateSchema = async () => {
-        const XLSX = await import("xlsx-js-style");
-        const ws = XLSX.utils.aoa_to_sheet([
-            ["Текст замечания", "Специализация", "Приоритет", "Категория", "Норма часов"],
-            ["Течь масла ТК", "Дизелист", "Высокий", "Дизель", "1.5"],
-            ["Ослабление крепления контакта", "Электрик", "Средний", "Электро", "0.5"]
-        ])
-        const wb = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(wb, ws, "Шаблон_для_заполнения")
-        XLSX.writeFile(wb, "Import_Remark_Templates_Example.xlsx")
+        const ExcelJS = await import("exceljs");
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Шаблон_для_заполнения');
+
+        worksheet.columns = [
+            { header: 'Текст замечания', key: 'text', width: 30 },
+            { header: 'Специализация', key: 'specialization', width: 20 },
+            { header: 'Приоритет', key: 'priority', width: 15 },
+            { header: 'Категория', key: 'category', width: 20 },
+            { header: 'Норма часов', key: 'hours', width: 15 }
+        ];
+
+        worksheet.addRow(['Течь масла ТК', 'Дизелист', 'Высокий', 'Дизель', '1.5']);
+        worksheet.addRow(['Ослабление крепления контакта', 'Электрик', 'Средний', 'Электро', '0.5']);
+
+        worksheet.getRow(1).font = { bold: true };
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "Import_Remark_Templates_Example.xlsx";
+        a.click();
+        window.URL.revokeObjectURL(url);
     }
 
     const handleTemplateFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -486,12 +528,29 @@ export default function Admin() {
         const reader = new FileReader()
         reader.onload = async (e) => {
             try {
-                const XLSX = await import("xlsx-js-style");
-                const data = e.target?.result
-                const workbook = XLSX.read(data, { type: 'binary' })
-                const firstSheetName = workbook.SheetNames[0]
-                const worksheet = workbook.Sheets[firstSheetName]
-                const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet)
+                const ExcelJS = await import("exceljs");
+                const buffer = e.target?.result as ArrayBuffer;
+                const workbook = new ExcelJS.Workbook();
+                await workbook.xlsx.load(buffer);
+                const worksheet = workbook.getWorksheet(1);
+
+                if (!worksheet) throw new Error("Лист не найден");
+
+                const jsonData: any[] = [];
+                const headers: string[] = [];
+
+                worksheet.getRow(1).eachCell((cell, colNumber) => {
+                    headers[colNumber] = cell.text;
+                });
+
+                worksheet.eachRow((row, rowNumber) => {
+                    if (rowNumber === 1) return;
+                    const rowData: any = {};
+                    row.eachCell((cell, colNumber) => {
+                        rowData[headers[colNumber]] = cell.text;
+                    });
+                    jsonData.push(rowData);
+                });
 
                 if (jsonData.length === 0) {
                     toast.error("Файл пуст или имеет неверный формат")
@@ -530,12 +589,13 @@ export default function Admin() {
                 setTemplatePreviewData(mappedData)
                 setIsTemplatePreviewOpen(true)
             } catch (err: any) {
+                console.error("Excel import error:", err);
                 toast.error("Ошибка при чтении файла")
             } finally {
                 event.target.value = ''
             }
         }
-        reader.readAsBinaryString(file)
+        reader.readAsArrayBuffer(file)
     }
 
     const confirmImportTemplates = async () => {
@@ -658,19 +718,42 @@ export default function Admin() {
     }
 
     const exportUsersToExcel = async () => {
-        const XLSX = await import("xlsx-js-style");
-        const ws = XLSX.utils.json_to_sheet(users.map(u => ({
-            'ID': u.id,
-            'Логин': u.username,
-            'ФИО': u.full_name || '',
-            'Роль': roles.find(r => r.name === u.role)?.description || u.role,
-            'Штрих-код': u.barcode || '',
-            'Дата регистрации': new Date(u.created_at).toLocaleDateString('ru-RU'),
-            'Статус': u.is_active === false ? 'Заблокирован' : 'Активен'
-        })))
-        const wb = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(wb, ws, "Сотрудники")
-        XLSX.writeFile(wb, "Users_List.xlsx")
+        const ExcelJS = await import("exceljs");
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Сотрудники');
+
+        worksheet.columns = [
+            { header: 'ID', key: 'id', width: 10 },
+            { header: 'Логин', key: 'username', width: 20 },
+            { header: 'ФИО', key: 'full_name', width: 30 },
+            { header: 'Роль', key: 'role', width: 20 },
+            { header: 'Штрих-код', key: 'barcode', width: 20 },
+            { header: 'Дата регистрации', key: 'created_at', width: 20 },
+            { header: 'Статус', key: 'status', width: 15 }
+        ];
+
+        users.forEach(u => {
+            worksheet.addRow({
+                id: u.id,
+                username: u.username,
+                full_name: u.full_name || '',
+                role: roles.find(r => r.name === u.role)?.description || u.role,
+                barcode: u.barcode || '',
+                created_at: new Date(u.created_at).toLocaleDateString('ru-RU'),
+                status: u.is_active === false ? 'Заблокирован' : 'Активен'
+            });
+        });
+
+        worksheet.getRow(1).font = { bold: true };
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "Users_List.xlsx";
+        a.click();
+        window.URL.revokeObjectURL(url);
     }
 
     const generatePassword = () => {
@@ -723,11 +806,11 @@ export default function Admin() {
     const handleAddLoco = async (e: React.FormEvent) => {
         e.preventDefault()
         const res = await fetch('/api/catalog/manual', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ number: addLocoNumber })
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ series: addLocoSeries, number: addLocoNumber })
         })
         if (res.ok) {
             toast.success('Локомотив добавлен')
-            setIsAddLocoOpen(false); setAddLocoNumber(""); fetchCatalog()
+            setIsAddLocoOpen(false); setAddLocoSeries(""); setAddLocoNumber(""); fetchCatalog()
         } else {
             const err = await res.json()
             toast.error(err.error || 'Ошибка добавления')
@@ -737,7 +820,7 @@ export default function Admin() {
     const handleEditLoco = async (e: React.FormEvent) => {
         e.preventDefault()
         const res = await fetch(`/api/catalog/${editLocoId}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ number: editLocoNumber })
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ series: editLocoSeries, number: editLocoNumber })
         })
         if (res.ok) {
             toast.success('Локомотив обновлен')
@@ -748,8 +831,8 @@ export default function Admin() {
         }
     }
 
-    const handleDeleteLoco = async (id: number, number: string) => {
-        if (!confirm(`Удалить локомотив ${number} из каталога? Вы сможете добавить его заново.`)) return
+    const handleDeleteLoco = async (id: number, series: string, number: string) => {
+        if (!confirm(`Удалить локомотив ${series} ${number} из каталога? Вы сможете добавить его заново.`)) return
         const res = await fetch(`/api/catalog/${id}`, { method: 'DELETE' })
         if (res.ok) {
             toast.success('Локомотив удален')
@@ -767,22 +850,48 @@ export default function Admin() {
         const reader = new FileReader()
         reader.onload = async (e) => {
             try {
-                const XLSX = await import("xlsx-js-style");
-                const data = e.target?.result
-                const workbook = XLSX.read(data, { type: 'binary' })
-                const firstSheetName = workbook.SheetNames[0]
-                const worksheet = workbook.Sheets[firstSheetName]
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+                const ExcelJS = await import("exceljs");
+                const buffer = e.target?.result as ArrayBuffer;
+                const workbook = new ExcelJS.Workbook();
+                await workbook.xlsx.load(buffer);
+                const worksheet = workbook.getWorksheet(1);
 
-                const numbers = jsonData
+                if (!worksheet) throw new Error("Лист не найден");
+
+                const jsonData: any[][] = [];
+                worksheet.eachRow((row) => {
+                    const rowData: any[] = [];
+                    // We need to use row.eachCell({ includeEmpty: true }) to maintain column indices
+                    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                        rowData[colNumber - 1] = cell.text;
+                    });
+                    jsonData.push(rowData);
+                });
+
+                if (jsonData.length < 2) throw new Error("Файл пуст или имеет неверный формат");
+
+                const headers = jsonData[0] as string[]
+                const seriesIdx = headers.findIndex(h => /Серия|Series/i.test(h))
+                const numberIdx = headers.findIndex(h => /Номер|Number/i.test(h))
+
+                const items = jsonData
                     .slice(1) // skip header
-                    .map((row: any) => row[0])
-                    .filter((n: any) => n !== undefined && n !== null && String(n).trim() !== '')
+                    .map((row: any) => {
+                        if (numberIdx !== -1) {
+                            return {
+                                series: seriesIdx !== -1 ? String(row[seriesIdx] || '').trim() : '',
+                                number: String(row[numberIdx] || '').trim()
+                            }
+                        }
+                        // Default to first column if no named headers found
+                        return { series: '', number: String(row[0] || '').trim() }
+                    })
+                    .filter((n: { series: string; number: string }) => n.number)
 
-                if (numbers.length === 0) throw new Error("Не найдено номеров в первой колонке")
+                if (items.length === 0) throw new Error("Не найдено данных для загрузки")
 
                 const response = await fetch('/api/catalog/bulk', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(numbers)
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items)
                 })
                 const result = await response.json()
                 if (response.ok) {
@@ -790,25 +899,43 @@ export default function Admin() {
                     fetchCatalog()
                 } else throw new Error(result.error)
             } catch (err: any) {
+                console.error("Catalog import error:", err);
                 toast.error(err.message || "Ошибка при чтении файла")
             } finally {
                 setIsUploading(false)
                 event.target.value = ''
             }
         }
-        reader.readAsBinaryString(file)
+        reader.readAsArrayBuffer(file)
     }
 
     const downloadTemplate = async () => {
-        const XLSX = await import("xlsx-js-style");
-        const ws = XLSX.utils.aoa_to_sheet([["Номер"], ["2345"], ["9876"]])
-        const wb = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(wb, ws, "Шаблон")
-        XLSX.writeFile(wb, "Locomotives_Template.xlsx")
+        const ExcelJS = await import("exceljs");
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Шаблон');
+
+        worksheet.columns = [
+            { header: 'Серия', key: 'series', width: 15 },
+            { header: 'Номер', key: 'number', width: 15 }
+        ];
+
+        worksheet.addRow(['ТЭ33А', '0001']);
+        worksheet.addRow(['ТЭ33АС', '0123']);
+
+        worksheet.getRow(1).font = { bold: true };
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "Locomotives_Template.xlsx";
+        a.click();
+        window.URL.revokeObjectURL(url);
     }
 
     // --- Catalog Pagination ---
-    const processedCatalog = [...catalog].filter(c => c.number.toLowerCase().includes(catalogSearch.toLowerCase()))
+    const processedCatalog = [...catalog].filter(c => ((c.series || '') + ' ' + c.number).toLowerCase().includes(catalogSearch.toLowerCase()))
     const totalCatalogPages = Math.ceil(processedCatalog.length / CATALOG_PER_PAGE) || 1
     const pagedCatalog = processedCatalog.slice((catalogPage - 1) * CATALOG_PER_PAGE, catalogPage * CATALOG_PER_PAGE)
 
@@ -886,6 +1013,7 @@ export default function Admin() {
                             <TabsList className="mb-2 w-max min-w-full justify-start md:w-full md:justify-center">
                                 <TabsTrigger value="users" className="flex items-center gap-2"><KeyRound className="w-4 h-4" /> <span className="hidden sm:inline">Сотрудники</span><span className="sm:hidden">Люди</span></TabsTrigger>
                                 <TabsTrigger value="remarkTemplates" className="flex items-center gap-2"><ClipboardList className="w-4 h-4" /> <span className="hidden sm:inline">Шаблоны замечаний</span><span className="sm:hidden">Шаблоны</span></TabsTrigger>
+                                <TabsTrigger value="checklists" className="flex items-center gap-2"><CheckSquare className="w-4 h-4" /> <span className="hidden sm:inline">Чек-листы</span><span className="sm:hidden">Чек-листы</span></TabsTrigger>
                                 <TabsTrigger value="roles" className="flex items-center gap-2"><ShieldAlert className="w-4 h-4" /> <span className="hidden sm:inline">Роли</span><span className="sm:hidden">Роли</span></TabsTrigger>
                                 <TabsTrigger value="catalog" className="flex items-center gap-2"><BookOpen className="w-4 h-4" /> <span className="hidden sm:inline">Справочник номеров</span><span className="sm:hidden">Номера</span></TabsTrigger>
                                 <TabsTrigger value="repairTypes" className="flex items-center gap-2"><Wrench className="w-4 h-4" /> <span className="hidden sm:inline">Типы ремонта</span><span className="sm:hidden">Ремонт</span></TabsTrigger>
@@ -1071,28 +1199,35 @@ export default function Admin() {
                                         <TableHeader>
                                             <TableRow className="bg-slate-50">
                                                 <TableHead className="w-20 md:w-24 text-center px-2 md:px-4">ID</TableHead>
-                                                <TableHead className="px-2 md:px-4">Номер локомотива</TableHead>
+                                                <TableHead className="px-2 md:px-4">Серия</TableHead>
+                                                <TableHead className="px-2 md:px-4">Номер</TableHead>
                                                 <TableHead className="text-right px-2 md:px-4 sticky right-0 bg-slate-50 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.1)]">Действия</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {isLoadingCatalog ? (
                                                 Array(5).fill(0).map((_, i) => (
-                                                    <TableRow key={`c-${i}`}><TableCell><Skeleton className="h-4 w-8 mx-auto" /></TableCell><TableCell><Skeleton className="h-4 w-32" /></TableCell><TableCell><Skeleton className="h-8 w-16 ml-auto" /></TableCell></TableRow>
+                                                    <TableRow key={`c-${i}`}>
+                                                        <TableCell><Skeleton className="h-4 w-8 mx-auto" /></TableCell>
+                                                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                                                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                                                        <TableCell><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                                                    </TableRow>
                                                 ))
                                             ) : pagedCatalog.length === 0 ? (
-                                                <TableRow><TableCell colSpan={3} className="text-center py-8 text-slate-500">Ничего не найдено</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={4} className="text-center py-8 text-slate-500">Ничего не найдено</TableCell></TableRow>
                                             ) : (
                                                 pagedCatalog.map(item => (
                                                     <TableRow key={item.id} className="hover:bg-slate-50 transition-colors">
                                                         <TableCell className="text-center text-slate-500 font-mono text-xs px-2 md:px-4">{item.id}</TableCell>
+                                                        <TableCell className="text-slate-600 text-sm px-2 md:px-4">{item.series || '—'}</TableCell>
                                                         <TableCell className="font-semibold text-slate-900 text-sm px-2 md:px-4">{item.number}</TableCell>
                                                         <TableCell className="text-right px-2 md:px-4 space-x-1 sticky right-0 bg-white/95 backdrop-blur-sm shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50/95">
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50" onClick={() => setQrLoco({ id: item.id, number: item.number })} title="QR Код">
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50" onClick={() => setQrLoco({ id: item.id, series: item.series, number: item.number })} title="QR Код">
                                                                 <QrCode className="w-3.5 h-3.5" />
                                                             </Button>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50" onClick={() => { setEditLocoId(item.id); setEditLocoNumber(item.number); setIsEditLocoOpen(true); }}><Edit className="w-3.5 h-3.5" /></Button>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => handleDeleteLoco(item.id, item.number)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50" onClick={() => { setEditLocoId(item.id); setEditLocoSeries(item.series || ""); setEditLocoNumber(item.number); setIsEditLocoOpen(true); }}><Edit className="w-3.5 h-3.5" /></Button>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => handleDeleteLoco(item.id, item.series || "", item.number)}><Trash2 className="w-3.5 h-3.5" /></Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -1327,6 +1462,11 @@ export default function Admin() {
                                 )}
                             </div>
                         </TabsContent>
+
+                        {/* CHECKLISTS TAB */}
+                        <TabsContent value="checklists" className="space-y-4 outline-none">
+                            <ChecklistAdmin repairTypes={repairTypes} />
+                        </TabsContent>
                     </Tabs>
                 </div>
             </main>
@@ -1557,16 +1697,30 @@ export default function Admin() {
                 <DialogContent>
                     <DialogHeader><DialogTitle>Добавить локомотив</DialogTitle></DialogHeader>
                     <form onSubmit={handleAddLoco} className="space-y-4">
-                        <FloatingInput label="Номер локомотива" required value={addLocoNumber} onChange={e => setAddLocoNumber(e.target.value)} placeholder="0001" />
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="col-span-1">
+                                <FloatingInput label="Серия" value={addLocoSeries} onChange={e => setAddLocoSeries(e.target.value)} placeholder="ТЭ33А" />
+                            </div>
+                            <div className="col-span-2">
+                                <FloatingInput label="Номер" required value={addLocoNumber} onChange={e => setAddLocoNumber(e.target.value)} placeholder="0001" />
+                            </div>
+                        </div>
                         <DialogFooter><Button type="submit">Добавить</Button></DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
             <Dialog open={isEditLocoOpen} onOpenChange={setIsEditLocoOpen}>
                 <DialogContent>
-                    <DialogHeader><DialogTitle>Редактировать номер</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>Редактировать локомотив</DialogTitle></DialogHeader>
                     <form onSubmit={handleEditLoco} className="space-y-4">
-                        <FloatingInput label="Номер локомотива" required value={editLocoNumber} onChange={e => setEditLocoNumber(e.target.value)} />
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="col-span-1">
+                                <FloatingInput label="Серия" value={editLocoSeries} onChange={e => setEditLocoSeries(e.target.value)} />
+                            </div>
+                            <div className="col-span-2">
+                                <FloatingInput label="Номер" required value={editLocoNumber} onChange={e => setEditLocoNumber(e.target.value)} />
+                            </div>
+                        </div>
                         <DialogFooter><Button type="submit">Сохранить</Button></DialogFooter>
                     </form>
                 </DialogContent>
@@ -1574,18 +1728,18 @@ export default function Admin() {
 
             <Dialog open={!!qrLoco} onOpenChange={(open) => !open && setQrLoco(null)}>
                 <DialogContent className="sm:max-w-xs text-center border-slate-200 shadow-xl">
-                    <DialogHeader><DialogTitle className="text-center">Тепловоз {qrLoco?.number}</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle className="text-center">Тепловоз {qrLoco?.series} {qrLoco?.number}</DialogTitle></DialogHeader>
                     <div className="flex flex-col items-center justify-center p-6 bg-white rounded-xl">
                         {qrLoco && (
                             <QRCodeSVG
-                                value={`loco:${qrLoco.id}`}
+                                value={`${window.location.origin}/locomotive/${encodeURIComponent((qrLoco.series + ' ' + qrLoco.number).trim())}/remarks`}
                                 size={220}
                                 level="H"
                                 includeMargin={true}
                                 className="qr-code-svg-element"
                             />
                         )}
-                        <p className="mt-4 font-black text-3xl tracking-tight text-slate-900 border-2 border-slate-900 rounded-lg px-6 py-2 uppercase">{qrLoco?.number}</p>
+                        <p className="mt-4 font-black text-3xl tracking-tight text-slate-900 border-2 border-slate-900 rounded-lg px-6 py-2 uppercase">{(qrLoco?.series + ' ' + qrLoco?.number).trim()}</p>
                     </div>
                     <p className="text-xs text-slate-500 mb-2">Распечатайте и наклейте в кабине</p>
                     <DialogFooter className="sm:justify-center">

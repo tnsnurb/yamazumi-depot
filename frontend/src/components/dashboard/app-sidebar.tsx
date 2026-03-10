@@ -10,6 +10,7 @@ import {
     LogOut,
     TrainFront,
     ShieldCheck,
+    ClipboardCheck,
     ListTodo
 } from "lucide-react"
 
@@ -46,6 +47,11 @@ const navMain = [
         title: "Замечания",
         url: "/remarks",
         icon: ListTodo,
+    },
+    {
+        title: "Чек-листы",
+        url: "/checklists",
+        icon: ClipboardCheck,
     },
 ]
 

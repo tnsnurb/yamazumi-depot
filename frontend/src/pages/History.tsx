@@ -1,19 +1,13 @@
 import { useEffect, useState, useRef } from "react"
 import { useParams, Link } from "react-router-dom"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
-import { toast } from "sonner"
-import { ArrowLeft, Plus, MapPin, Trash2, ArrowLeftFromLine } from "lucide-react"
+import { ArrowLeft, Plus, MapPin, Trash2, ArrowLeftFromLine, ArrowRight, Activity, MessageSquarePlus, CheckCircle2, Edit3, Train, History as HistoryIcon, Clock, User } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 
 interface Movement {
     id: number
@@ -37,15 +31,11 @@ export default function History() {
     const rowVirtualizer = useVirtualizer({
         count: movements.length,
         getScrollElement: () => parentRef.current,
-        estimateSize: () => 61, // Roughly the height of a table row
-        overscan: 10,
+        estimateSize: () => 160, // Much larger for the timeline cards
+        overscan: 5,
     })
 
     const virtualItems = rowVirtualizer.getVirtualItems()
-    const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0
-    const paddingBottom = virtualItems.length > 0
-        ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
-        : 0
 
     useEffect(() => {
         if (number) fetchHistory()
@@ -63,199 +53,225 @@ export default function History() {
         }
     }
 
-    const renderActionBadge = (action: string) => {
+    const getActionDetails = (action: string) => {
         if (action.startsWith('status_change')) {
-            const detail = action.includes(': ') ? action.split(': ').slice(1).join(': ') : null
-            return (
-                <div className="flex flex-col gap-0.5">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                        🔄 Смена статуса
-                    </span>
-                    {detail && <span className="text-xs text-slate-500 pl-1">{detail}</span>}
-                </div>
-            )
+            const parts = action.split('→')
+            if (parts.length === 2) {
+                const was = parts[0].replace('status_change:', '').trim()
+                const became = parts[1].trim()
+                return {
+                    label: 'Смена статуса',
+                    icon: <Activity className="w-4 h-4" />,
+                    color: 'text-purple-600 bg-purple-50 border-purple-100',
+                    content: (
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-slate-400 line-through decoration-slate-300">{was}</span>
+                            <ArrowRight className="w-3 h-3 text-slate-300" />
+                            <span className="font-semibold text-purple-700">{became}</span>
+                        </div>
+                    )
+                }
+            }
+            return {
+                label: 'Смена статуса',
+                icon: <Activity className="w-4 h-4" />,
+                color: 'text-purple-600 bg-purple-50 border-purple-100',
+                content: <div className="mt-1 font-medium">{action.split(': ').slice(1).join(': ')}</div>
+            }
         }
         if (action.startsWith('remove_from_track')) {
-            const reason = action.includes(': ') ? action.split(': ').slice(1).join(': ') : null
-            return (
-                <div className="flex flex-col gap-0.5">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                        <ArrowLeftFromLine className="w-3 h-3" /> Убран с пути
-                    </span>
-                    {reason && <span className="text-xs text-slate-500 pl-1">Причина: {reason}</span>}
-                </div>
-            )
+            return {
+                label: 'Убран с пути',
+                icon: <ArrowLeftFromLine className="w-4 h-4" />,
+                color: 'text-amber-600 bg-amber-50 border-amber-100',
+                content: <div className="mt-1 italic text-slate-500">{action.includes(': ') ? action.split(': ').slice(1).join(': ') : ''}</div>
+            }
         }
         if (action.startsWith('remark_added')) {
-            const detail = action.includes(': ') ? action.split(': ').slice(1).join(': ') : null
-            return (
-                <div className="flex flex-col gap-0.5">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                        ✍️ Добавлено замечание
-                    </span>
-                    {detail && <span className="text-xs text-slate-500 pl-1">{detail}</span>}
-                </div>
-            )
+            return {
+                label: 'Добавлены замечания',
+                icon: <MessageSquarePlus className="w-4 h-4" />,
+                color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+                content: <div className="mt-1 font-medium">{action.split(': ').slice(1).join(': ')}</div>
+            }
         }
         if (action.startsWith('remark_completed')) {
-            const detail = action.includes(': ') ? action.split(': ').slice(1).join(': ') : null
-            return (
-                <div className="flex flex-col gap-0.5">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        ✅ Замечание закрыто
-                    </span>
-                    {detail && <span className="text-xs text-slate-500 pl-1">{detail}</span>}
-                </div>
-            )
+            return {
+                label: 'Замечание закрыто',
+                icon: <CheckCircle2 className="w-4 h-4" />,
+                color: 'text-green-600 bg-green-50 border-green-100',
+                content: <div className="mt-1 font-medium text-slate-700">{action.split(': ').slice(1).join(': ')}</div>
+            }
         }
         if (action.startsWith('remark_reopened')) {
-            const detail = action.includes(': ') ? action.split(': ').slice(1).join(': ') : null
-            return (
-                <div className="flex flex-col gap-0.5">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                        🔓 Замечание переоткрыто
-                    </span>
-                    {detail && <span className="text-xs text-slate-500 pl-1">{detail}</span>}
-                </div>
-            )
+            return {
+                label: 'Замечание переоткрыто',
+                icon: <Edit3 className="w-4 h-4" />,
+                color: 'text-amber-600 bg-amber-50 border-amber-100',
+                content: <div className="mt-1 font-medium text-slate-700">{action.split(': ').slice(1).join(': ')}</div>
+            }
         }
         switch (action) {
-            case 'add': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800"><Plus className="w-3 h-3" /> Добавлен</span>
-            case 'move': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><MapPin className="w-3 h-3" /> Перемещён</span>
-            case 'remove': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-800"><Trash2 className="w-3 h-3" /> Удалён</span>
-            default: return <span className="text-sm text-slate-600">{action}</span>
+            case 'add': return {
+                label: 'Добавлен в систему',
+                icon: <Plus className="w-4 h-4" />,
+                color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+                content: null
+            }
+            case 'move': return {
+                label: 'Перемещён',
+                icon: <MapPin className="w-4 h-4" />,
+                color: 'text-blue-600 bg-blue-50 border-blue-100',
+                content: null
+            }
+            case 'remove': return {
+                label: 'Удалён',
+                icon: <Trash2 className="w-4 h-4" />,
+                color: 'text-rose-600 bg-rose-50 border-rose-100',
+                content: null
+            }
+            default: return {
+                label: action,
+                icon: <Activity className="w-4 h-4" />,
+                color: 'text-slate-600 bg-slate-50 border-slate-100',
+                content: null
+            }
         }
-    }
-
-    const formatLocation = (track: number | null, pos: number | null) => {
-        if (track && pos) return `Путь ${track}, Слот ${pos}`
-        return "—"
     }
 
     return (
-        <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
-            <main className="flex-1 w-full p-6 flex flex-col items-center">
-                <div className="w-full max-w-5xl">
-                    <div className="flex items-center gap-4 mb-6">
-                        <Button variant="ghost" size="icon" asChild>
+        <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/30">
+            <main className="flex-1 w-full p-4 md:p-6 flex flex-col items-center">
+                <div className="w-full max-w-4xl">
+                    <div className="flex items-center gap-4 mb-8">
+                        <Button variant="outline" size="icon" asChild className="rounded-full bg-white shadow-sm h-10 w-10">
                             <Link to="/journal"><ArrowLeft className="w-5 h-5" /></Link>
                         </Button>
-                        <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-                            История локомотива #{number}
-                        </h2>
-                        <span className="text-sm text-slate-500">{movements.length} записей</span>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <Train className="w-6 h-6 text-slate-400" />
+                                <h2 className="text-2xl font-black tracking-tight text-slate-900">
+                                    История локомотива #{number}
+                                </h2>
+                            </div>
+                            <p className="text-sm text-slate-500 mt-0.5">Всего {movements.length} событий в хронологическом порядке</p>
+                        </div>
                     </div>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-lg">Хронология перемещений</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            {isLoading ? (
-                                <div className="space-y-4 animate-pulse p-6">
-                                    {[1, 2, 3, 4, 5].map(i => (
-                                        <div key={i} className="flex items-center gap-4">
-                                            <Skeleton className="h-4 w-6 bg-slate-200" />
-                                            <Skeleton className="h-4 w-36 bg-slate-200" />
-                                            <Skeleton className="h-6 w-28 rounded-full bg-slate-100" />
-                                            <Skeleton className="h-4 w-28 bg-slate-200" />
-                                            <Skeleton className="h-4 w-28 bg-slate-200" />
-                                            <Skeleton className="h-4 w-20 bg-slate-100" />
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : movements.length === 0 ? (
-                                <div className="text-center text-slate-400 py-8">Нет записей</div>
-                            ) : (
-                                <div ref={parentRef} className="max-h-[800px] overflow-auto relative rounded-b-xl border-t md:border-t-0 mt-4 md:mt-0">
-                                    {/* Table View (Desktop) */}
-                                    <div className="hidden md:block">
-                                        <Table>
-                                            <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
-                                                <TableRow>
-                                                    <TableHead className="w-12">№</TableHead>
-                                                    <TableHead>Дата</TableHead>
-                                                    <TableHead>Действие</TableHead>
-                                                    <TableHead>Откуда</TableHead>
-                                                    <TableHead>Куда</TableHead>
-                                                    <TableHead>Пользователь</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {paddingTop > 0 && (
-                                                    <TableRow>
-                                                        <TableCell style={{ height: `${paddingTop}px`, padding: 0 }} colSpan={6} />
-                                                    </TableRow>
-                                                )}
-                                                {virtualItems.map((virtualRow) => {
-                                                    const m = movements[virtualRow.index]
-                                                    return (
-                                                        <TableRow key={m.id} ref={rowVirtualizer.measureElement} data-index={virtualRow.index}>
-                                                            <TableCell className="text-slate-400 text-xs py-3">{movements.length - virtualRow.index}</TableCell>
-                                                            <TableCell className="text-sm py-3">{new Date(m.moved_at).toLocaleString('ru-RU')}</TableCell>
-                                                            <TableCell className="py-3">{renderActionBadge(m.action)}</TableCell>
-                                                            <TableCell className="text-sm py-3">{formatLocation(m.from_track, m.from_position)}</TableCell>
-                                                            <TableCell className="text-sm py-3">{formatLocation(m.to_track, m.to_position)}</TableCell>
-                                                            <TableCell className="text-sm text-slate-500 py-3">{m.moved_by}</TableCell>
-                                                        </TableRow>
-                                                    )
-                                                })}
-                                                {paddingBottom > 0 && (
-                                                    <TableRow>
-                                                        <TableCell style={{ height: `${paddingBottom}px`, padding: 0 }} colSpan={6} />
-                                                    </TableRow>
-                                                )}
-                                            </TableBody>
-                                        </Table>
+                    {isLoading ? (
+                        <div className="space-y-8 p-6">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className="flex gap-6">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <Skeleton className="h-10 w-10 rounded-full" />
+                                        <Skeleton className="h-20 w-1 rounded" />
                                     </div>
+                                    <div className="flex-1 space-y-4 pt-2">
+                                        <Skeleton className="h-6 w-1/4" />
+                                        <Skeleton className="h-24 w-full rounded-xl" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : movements.length === 0 ? (
+                        <Card className="border-dashed border-2 py-12 flex flex-col items-center justify-center text-slate-400">
+                            <HistoryIcon className="w-12 h-12 mb-3 opacity-20" />
+                            <p>История пуста</p>
+                        </Card>
+                    ) : (
+                        <div ref={parentRef} className="max-h-[85vh] overflow-auto relative pr-4 scrollbar-thin scrollbar-thumb-slate-200">
+                            <div className="absolute left-[20px] top-6 bottom-6 w-px bg-slate-200" />
 
-                                    {/* Card View (Mobile) */}
-                                    <div className="md:hidden space-y-3 p-4">
-                                        {virtualItems.map((virtualRow) => {
-                                            const m = movements[virtualRow.index]
-                                            return (
-                                                <div
-                                                    key={m.id}
-                                                    ref={rowVirtualizer.measureElement}
-                                                    data-index={virtualRow.index}
-                                                    className="bg-slate-50 border rounded-xl p-3 shadow-sm"
-                                                >
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <span className="text-[10px] text-slate-400 font-mono">#{movements.length - virtualRow.index}</span>
-                                                        <span className="text-[10px] font-medium text-slate-500">
+                            <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+                                {virtualItems.map((virtualRow) => {
+                                    const m = movements[virtualRow.index]
+                                    const details = getActionDetails(m.action)
+
+                                    return (
+                                        <div
+                                            key={m.id}
+                                            ref={rowVirtualizer.measureElement}
+                                            data-index={virtualRow.index}
+                                            style={{
+                                                position: 'absolute',
+                                                top: 0,
+                                                transform: `translateY(${virtualRow.start}px)`,
+                                                width: '100%',
+                                                paddingBottom: '2rem'
+                                            }}
+                                            className="flex gap-6 group"
+                                        >
+                                            {/* Timeline Node */}
+                                            <div className="relative flex flex-col items-center flex-shrink-0 pt-1">
+                                                <div className={cn(
+                                                    "w-10 h-10 rounded-full flex items-center justify-center z-10 border-2 bg-white transition-all duration-300 group-hover:scale-110 shadow-sm",
+                                                    details.color.split(' ')[0], // Text color
+                                                    details.color.split(' ')[2]  // Border color
+                                                )}>
+                                                    {details.icon}
+                                                </div>
+                                            </div>
+
+                                            {/* Label & Content */}
+                                            <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-300 relative">
+                                                {/* Arrow */}
+                                                <div className="absolute -left-[7px] top-4 w-3 h-3 bg-white border-l border-b border-slate-200 rotate-45" />
+
+                                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
+                                                    <div>
+                                                        <Badge variant="outline" className={cn("rounded-full font-bold px-3 py-0.5 text-[10px] uppercase tracking-wider", details.color)}>
+                                                            {details.label}
+                                                        </Badge>
+                                                        <div className="text-[11px] text-slate-400 font-mono mt-1 flex items-center gap-1.5">
+                                                            <Clock className="w-3 h-3" />
                                                             {new Date(m.moved_at).toLocaleString('ru-RU', {
-                                                                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                                day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
                                                             })}
-                                                        </span>
-                                                    </div>
-                                                    <div className="mb-3">
-                                                        {renderActionBadge(m.action)}
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-2 text-xs">
-                                                        <div>
-                                                            <div className="text-slate-400 mb-0.5">Откуда:</div>
-                                                            <div className="font-medium text-slate-700 truncate">
-                                                                {formatLocation(m.from_track, m.from_position)}
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-slate-400 mb-0.5">Куда:</div>
-                                                            <div className="font-medium text-slate-700 truncate">
-                                                                {formatLocation(m.to_track, m.to_position)}
-                                                            </div>
                                                         </div>
                                                     </div>
-                                                    <div className="mt-3 pt-2 border-t border-slate-200 flex items-center justify-between">
-                                                        <span className="text-[10px] text-slate-400 text-right w-full">Исполнитель: {m.moved_by}</span>
+                                                    <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100 self-start md:self-center">
+                                                        <User className="w-3.5 h-3.5" />
+                                                        <span className="font-medium">{m.moved_by}</span>
                                                     </div>
                                                 </div>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+
+                                                <div className="text-slate-700 text-sm">
+                                                    {details.content}
+
+                                                    {(m.from_track || m.to_track) && (
+                                                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                                                            <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mb-1">Откуда</div>
+                                                                <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                                                                    {m.from_track ? (
+                                                                        <>
+                                                                            <span className="w-5 h-5 rounded bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px]">{m.from_track}</span>
+                                                                            <span>Слот {m.from_position}</span>
+                                                                        </>
+                                                                    ) : "Вне путей"}
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-2.5 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                                                                <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-tight mb-1">Куда</div>
+                                                                <div className="flex items-center gap-2 text-xs font-medium text-indigo-700">
+                                                                    {m.to_track ? (
+                                                                        <>
+                                                                            <span className="w-5 h-5 rounded bg-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-[10px]">{m.to_track}</span>
+                                                                            <span>Слот {m.to_position}</span>
+                                                                        </>
+                                                                    ) : "Убран"}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </main>
         </div>

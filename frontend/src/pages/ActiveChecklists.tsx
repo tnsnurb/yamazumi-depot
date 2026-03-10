@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Search, ChevronRight, Train, MessageSquare } from "lucide-react"
+import { Search, ClipboardCheck, ChevronRight, Train } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -15,43 +15,50 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
 
-interface ActiveRemarkStat {
-    total_remarks: number;
-    completed_remarks: number;
+interface ActiveChecklist {
+    id: string;
+    status: string;
+    created_at: string;
+    total_items: number;
+    completed_items: number;
     locomotive: {
         id: number;
         number: string;
         series: string;
     };
+    template: {
+        name: string;
+    };
 }
 
-export default function ActiveRemarks() {
-    const [stats, setStats] = useState<ActiveRemarkStat[]>([])
+export default function ActiveChecklists() {
+    const [checklists, setChecklists] = useState<ActiveChecklist[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
 
     useEffect(() => {
-        fetchActiveRemarks()
+        fetchActiveChecklists()
     }, [])
 
-    const fetchActiveRemarks = async () => {
+    const fetchActiveChecklists = async () => {
         try {
             setIsLoading(true)
-            const res = await fetch('/api/remarks/active')
+            const res = await fetch('/api/checklists/active')
             if (res.ok) {
                 const data = await res.json()
-                setStats(data)
+                setChecklists(data)
             }
         } catch (e) {
-            toast.error("Ошибка загрузки замечаний")
+            toast.error("Ошибка загрузки чек-листов")
         } finally {
             setIsLoading(false)
         }
     }
 
-    const filtered = stats.filter(s =>
-        s.locomotive.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.locomotive.series.toLowerCase().includes(searchQuery.toLowerCase())
+    const filtered = checklists.filter(cl =>
+        cl.locomotive.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        cl.locomotive.series.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        cl.template.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     return (
@@ -61,9 +68,9 @@ export default function ActiveRemarks() {
                     <div className="mb-6 md:mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-8">
                         <div>
                             <h1 className="text-xl md:text-2xl font-black text-slate-900 border-l-4 border-indigo-600 pl-4 tracking-tight uppercase">
-                                Активные замечания
+                                Активные чек-листы
                             </h1>
-                            <p className="text-slate-500 text-[11px] md:text-sm mt-1 font-medium">Прогресс устранения неисправностей</p>
+                            <p className="text-slate-500 text-[11px] md:text-sm mt-1 font-medium">Прогресс выполнения технического обслуживания</p>
                         </div>
 
                         <div className="relative w-full md:max-w-md">
@@ -71,7 +78,7 @@ export default function ActiveRemarks() {
                             <input
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Поиск по номеру или серии..."
+                                placeholder="Поиск по тепловозу или шаблону..."
                                 className="w-full pl-11 pr-4 h-12 md:h-11 bg-white rounded-xl border border-slate-200 shadow-sm text-sm md:text-base focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all focus:shadow-md"
                             />
                         </div>
@@ -96,38 +103,38 @@ export default function ActiveRemarks() {
                     ) : filtered.length === 0 ? (
                         <div className="text-center py-24 bg-white rounded-[2rem] border border-dashed border-slate-300 max-w-2xl mx-auto shadow-sm">
                             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                                <MessageSquare className="w-10 h-10 text-slate-300" />
+                                <ClipboardCheck className="w-10 h-10 text-slate-300" />
                             </div>
-                            <h3 className="text-xl font-bold text-slate-900 mb-2">Активных замечаний нет</h3>
-                            <p className="text-slate-500 font-medium">Для выбранного депо не зафиксировано активных неисправностей.</p>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Активных чек-листов нет</h3>
+                            <p className="text-slate-500 font-medium">Все работы по техобслуживанию завершены или еще не начаты.</p>
                         </div>
                     ) : (
                         <ItemGroup className="space-y-4">
-                            {filtered.map(s => {
-                                const progress = s.total_remarks > 0 ? (s.completed_remarks / s.total_remarks) * 100 : 0;
+                            {filtered.map(cl => {
+                                const progress = cl.total_items > 0 ? (cl.completed_items / cl.total_items) * 100 : 0;
                                 return (
-                                    <Item key={s.locomotive.id} variant="outline" size="default" asChild className="bg-white border-slate-200 shadow-sm hover:border-indigo-400 hover:bg-slate-50/50 transition-all cursor-pointer group px-4 py-4 rounded-2xl">
-                                        <Link to={`/locomotive/${s.locomotive.id}/remarks`}>
+                                    <Item key={cl.id} variant="outline" size="default" asChild className="bg-white border-slate-200 shadow-sm hover:border-indigo-400 hover:bg-slate-50/50 transition-all cursor-pointer group px-4 py-4 rounded-2xl">
+                                        <Link to={`/locomotive/${cl.locomotive.id}/checklist`}>
                                             <ItemMedia variant="icon" className="size-14 bg-slate-900 text-white rounded-2xl text-xl font-bold group-hover:bg-indigo-600 transition-colors shrink-0 shadow-lg shadow-slate-200">
                                                 <Train className="w-7 h-7" />
                                             </ItemMedia>
                                             <ItemContent className="gap-0">
                                                 <div className="flex items-center gap-3 mb-1">
                                                     <ItemTitle className="text-lg text-slate-900 font-bold tracking-tight">
-                                                        {s.locomotive.series} {s.locomotive.number}
+                                                        {cl.locomotive.series} {cl.locomotive.number}
                                                     </ItemTitle>
-                                                    <Badge className={`${progress === 100 ? 'bg-emerald-500' : 'bg-indigo-500'} text-white border-none text-[10px] font-black uppercase py-0 px-2 h-5 tracking-wider`}>
-                                                        В ремонте
+                                                    <Badge className={`${progress === 100 ? 'bg-emerald-500' : 'bg-amber-500'} text-white border-none text-[10px] font-black uppercase py-0 px-2 h-5 tracking-wider`}>
+                                                        {cl.status === 'in_progress' ? 'В работе' : cl.status}
                                                     </Badge>
                                                 </div>
                                                 <ItemDescription className="text-slate-500 font-bold text-xs uppercase tracking-wide mb-3">
-                                                    Ремонтная позиция
+                                                    {cl.template.name}
                                                 </ItemDescription>
 
                                                 <div className="space-y-1.5">
                                                     <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider">
-                                                        <span className="text-slate-400">Прогресс устранения</span>
-                                                        <span className="text-indigo-600">{s.completed_remarks} / {s.total_remarks} ({Math.round(progress)}%)</span>
+                                                        <span className="text-slate-400">Прогресс выполнения</span>
+                                                        <span className="text-indigo-600">{cl.completed_items} / {cl.total_items} ({Math.round(progress)}%)</span>
                                                     </div>
                                                     <Progress value={progress} className="h-2 bg-slate-100" indicatorClassName={progress === 100 ? "bg-emerald-500" : "bg-indigo-600"} />
                                                 </div>

@@ -1,8 +1,6 @@
 require('dotenv').config();
-
-// Bypass unauthorized SSL certs in local development
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
+const helmet = require('helmet');
+const cors = require('cors');
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
@@ -11,12 +9,25 @@ const multer = require('multer');
 const supabase = require('./db');
 const compression = require('compression');
 
+// Conditional TLS bypass for local development ONLY
+if (process.env.NODE_ENV === 'development') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    console.warn('WARNING: SSL validation is DISABLED in development mode.');
+}
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 const PORT = 3000;
 
-// Middleware
+// Security Middleware
+app.use(helmet({
+    contentSecurityPolicy: false, // Disable default CSP to avoid issues with inline scripts/styles if any, or tune if needed
+    crossOriginEmbedderPolicy: false
+}));
+app.use(cors());
+
+// Logging
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
@@ -25,10 +36,15 @@ app.use(compression());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(session({
-    secret: 'yamazumi-depot-secret-key-2024',
+    secret: process.env.SESSION_SECRET || 'yamazumi-default-secret-change-me',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 24 * 60 * 60 * 1000 }
+    cookie: {
+        maxAge: 24 * 60 * 60 * 1000,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax'
+    }
 }));
 
 // Static files
@@ -42,13 +58,14 @@ const authRoutes = require('./src/routes/auth');
 const userRoutes = require('./src/routes/users');
 const remarksRoutes = require('./src/routes/remarks');
 const locationsRoutes = require('./src/routes/locations');
+const checklistRoutes = require('./src/routes/checklists');
 
-// Mount API Routes
-app.use('/api', authRoutes); // /api/me mounts here
-app.use('/api/users', userRoutes); // User management + public users
+// API Routes
+app.use('/api', authRoutes); // Login, Logout, Me, Public Users, etc.
+app.use('/api/users', userRoutes);
 app.use('/api/remarks', remarksRoutes);
 app.use('/api/locations', locationsRoutes);
-
+app.use('/api/checklists', checklistRoutes);
 
 // ===================== AUDIT LOGS ROUTES =====================
 
@@ -82,7 +99,8 @@ app.get('/api/audit-logs', requireAdmin, async (req, res) => {
 app.get('/api/catalog', requireAuth, async (req, res) => {
     const { data, error } = await supabase
         .from('locomotive_catalog')
-        .select('id, number')
+        .select('id, series, number')
+        .order('series', { ascending: true })
         .order('number', { ascending: true });
 
     if (error) return res.status(500).json({ error: error.message });
@@ -90,12 +108,15 @@ app.get('/api/catalog', requireAuth, async (req, res) => {
 });
 
 app.post('/api/catalog/manual', requireAdmin, async (req, res) => {
-    const { number } = req.body;
+    const { number, series } = req.body;
     if (!number || !number.trim()) return res.status(400).json({ error: 'Номер локомотива обязателен' });
+
+    const cleanSeries = (series || '').trim();
+    const cleanNumber = number.trim();
 
     const { data, error } = await supabase
         .from('locomotive_catalog')
-        .insert([{ number: number.trim() }])
+        .insert([{ series: cleanSeries, number: cleanNumber }])
         .select()
         .maybeSingle();
 
@@ -108,7 +129,7 @@ app.post('/api/catalog/manual', requireAdmin, async (req, res) => {
     await supabase.from('audit_logs').insert({
         user_id: req.session.user.id,
         action: 'Добавлен локомотив вручную',
-        target: number.trim(),
+        target: `${cleanSeries} ${cleanNumber}`.trim(),
         details: `Каталог`
     });
 
@@ -117,15 +138,18 @@ app.post('/api/catalog/manual', requireAdmin, async (req, res) => {
 
 app.put('/api/catalog/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
-    const { number } = req.body;
+    const { number, series } = req.body;
     if (!number || !number.trim()) return res.status(400).json({ error: 'Номер локомотива обязателен' });
 
+    const cleanSeries = (series || '').trim();
+    const cleanNumber = number.trim();
+
     // Ensure it exists in catalog first to log old name
-    const { data: oldData } = await supabase.from('locomotive_catalog').select('number').eq('id', id).maybeSingle();
+    const { data: oldData } = await supabase.from('locomotive_catalog').select('series, number').eq('id', id).maybeSingle();
 
     const { data, error } = await supabase
         .from('locomotive_catalog')
-        .update({ number: number.trim() })
+        .update({ series: cleanSeries, number: cleanNumber })
         .eq('id', id)
         .select()
         .maybeSingle();
@@ -136,8 +160,8 @@ app.put('/api/catalog/:id', requireAdmin, async (req, res) => {
     await supabase.from('audit_logs').insert({
         user_id: req.session.user.id,
         action: 'Изменен локомотив в каталоге',
-        target: number.trim(),
-        details: `Было: ${oldData ? oldData.number : 'неизвестно'}`
+        target: `${cleanSeries} ${cleanNumber}`.trim(),
+        details: `Было: ${oldData ? (oldData.series + ' ' + oldData.number).trim() : 'неизвестно'}`
     });
 
     res.json(data);
@@ -170,9 +194,19 @@ app.post('/api/catalog/bulk', requireAdmin, async (req, res) => {
         return res.status(400).json({ error: 'Требуется массив номеров' });
     }
 
-    const toInsert = numbers.map(n => ({
-        number: typeof n === 'object' ? String(n.number || n['Номер'] || '').trim() : String(n).trim()
-    })).filter(n => n.number);
+    const toInsert = numbers.map(n => {
+        const fullString = typeof n === 'object' ? String(n.number || n['Номер'] || '').trim() : String(n).trim();
+        const parts = fullString.split(/\s+/);
+        let series = '';
+        let number = fullString;
+        if (parts.length > 1) {
+            series = parts[0];
+            number = parts.slice(1).join(' ');
+        } else if (typeof n === 'object' && n.series) {
+            series = String(n.series).trim();
+        }
+        return { series: series || '', number: number.trim() };
+    }).filter(n => n.number);
 
     if (toInsert.length === 0) {
         return res.status(400).json({ error: 'Пустой список' });
@@ -180,7 +214,7 @@ app.post('/api/catalog/bulk', requireAdmin, async (req, res) => {
 
     const { data, error } = await supabase
         .from('locomotive_catalog')
-        .upsert(toInsert, { onConflict: 'number', ignoreDuplicates: true })
+        .upsert(toInsert, { onConflict: 'series,number', ignoreDuplicates: true })
         .select();
 
     if (error) return res.status(500).json({ error: error.message });
@@ -530,7 +564,7 @@ app.delete('/api/roles/:id', requireAdmin, async (req, res) => {
 app.get('/api/locomotives', requireAuth, async (req, res) => {
     let query = supabase
         .from('locomotives')
-        .select('id, number, status, track, position, created_at, repair_type, planned_release, acceptance_time');
+        .select('id, series, number, status, track, position, created_at, repair_type, planned_release, acceptance_time');
 
     if (req.session.user.active_location_id) {
         query = query.eq('location_id', req.session.user.active_location_id);
@@ -540,40 +574,152 @@ app.get('/api/locomotives', requireAuth, async (req, res) => {
         .order('track')
         .order('position');
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+        if (supabase.checkBlock(error)) {
+            return res.status(503).json({ error: 'База данных недоступна (сетевой блок). Проверьте доступ к *.supabase.co' });
+        }
+        return res.status(500).json({ error: error.message });
+    }
     res.json(data);
 });
 
-app.get('/api/locomotives/:id', requireAuth, async (req, res) => {
-    const { id } = req.params;
+// Helper to resolve locomotive identifier (ID or Number) to internal ID
+async function resolveLocoId(id) {
+    if (!id) return null;
+    const decodedId = decodeURIComponent(id).trim();
     const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
 
-    let query = supabase.from('locomotives').select('*');
     if (isIdNumeric) {
-        query = query.eq('id', id);
-    } else {
-        query = query.eq('number', decodeURIComponent(id));
+        // Try internal ID first
+        const { data: byId } = await supabase.from('locomotives').select('id').eq('id', id).maybeSingle();
+        if (byId) return byId.id;
     }
 
-    const { data, error } = await query.maybeSingle();
+    // Handle series + number (e.g., "ТЭ33А 0002" or just "0002")
+    const parts = decodedId.split(/\s+/);
+    let series = '';
+    let number = decodedId;
 
+    if (parts.length > 1) {
+        series = parts[0];
+        number = parts.slice(1).join(' ');
+    }
+
+    // Fallback to Series + Number lookup
+    const { data: byNum } = await supabase
+        .from('locomotives')
+        .select('id')
+        .eq('series', series)
+        .eq('number', number)
+        .maybeSingle();
+
+    return byNum ? byNum.id : null;
+}
+
+// Helper to find or create checklist for a locomotive
+async function ensureChecklistForLocomotive(locoId, series, repairTypeInput) {
+    if (!repairTypeInput || repairTypeInput === 'none') return;
+
+    try {
+        // 1. Resolve repair_type_id if it's a name
+        let repairTypeId = parseInt(repairTypeInput);
+        if (isNaN(repairTypeId)) {
+            const { data: rt } = await supabase
+                .from('repair_types')
+                .select('id')
+                .eq('name', repairTypeInput)
+                .maybeSingle();
+            if (rt) repairTypeId = rt.id;
+            else return; // Could not resolve
+        }
+
+        // 2. Check if an active checklist instance already exists
+        const { data: existingInstance } = await supabase
+            .from('checklist_instances')
+            .select('id')
+            .eq('locomotive_id', locoId)
+            .neq('status', 'completed')
+            .maybeSingle();
+
+        if (existingInstance) return;
+
+        // 3. Find matching template
+        const { data: template } = await supabase
+            .from('checklist_templates')
+            .select('id')
+            .eq('series', series)
+            .eq('repair_type_id', repairTypeId)
+            .maybeSingle();
+
+        if (!template) return;
+
+        // 4. Create instance
+        const { data: instance, error: instanceError } = await supabase
+            .from('checklist_instances')
+            .insert([{
+                locomotive_id: locoId,
+                template_id: template.id,
+                status: 'in_progress'
+            }])
+            .select()
+            .single();
+
+        if (instanceError || !instance) throw instanceError || new Error("Failed to create checklist instance");
+
+        // 5. Copy items from template
+        const { data: templateItems } = await supabase
+            .from('checklist_template_items')
+            .select('*')
+            .eq('template_id', template.id)
+            .order('sort_order', { ascending: true });
+
+        if (templateItems && templateItems.length > 0) {
+            const instanceItems = templateItems.map(ti => ({
+                instance_id: instance.id,
+                template_item_id: ti.id,
+                sort_order: ti.sort_order,
+                group_name: ti.group_name,
+                short_description: ti.short_description,
+                full_description: ti.full_description,
+                executor_role: ti.executor_role,
+                controller_role: ti.controller_role,
+                is_completed: false
+            }));
+
+            await supabase.from('checklist_instance_items').insert(instanceItems);
+        }
+        console.log(`Auto-created checklist for loco ${locoId} using template ${template.id}`);
+    } catch (err) {
+        console.error("Error in ensureChecklistForLocomotive:", err);
+    }
+}
+
+app.get('/api/locomotives/:id', requireAuth, async (req, res) => {
+    const { id } = req.params;
+    const locoId = await resolveLocoId(id);
+    if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
+
+    const { data, error } = await supabase.from('locomotives').select('*').eq('id', locoId).maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(404).json({ error: 'Локомотив не найден' });
     res.json(data);
 });
 
 app.post('/api/locomotives', requirePermission('can_edit_catalog'), async (req, res) => {
-    const { number, status, track, position, repair_type, planned_release, acceptance_time } = req.body;
+    const { number, series, status, track, position, repair_type, planned_release, acceptance_time } = req.body;
 
     if (!number) {
         return res.status(400).json({ error: 'Номер локомотива обязателен' });
     }
 
-    // Check if number already exists (only active locomotives in the same location)
+    const cleanSeries = (series || '').trim();
+    const cleanNumber = String(number).trim();
+
+    // Check if number + series already exists (only active locomotives in the same location)
     const { data: existing } = await supabase
         .from('locomotives')
         .select('id')
-        .eq('number', number)
+        .eq('number', cleanNumber)
+        .eq('series', cleanSeries)
         .eq('location_id', req.session.user.active_location_id || 1)
         .neq('status', 'completed')
         .maybeSingle();
@@ -600,26 +746,33 @@ app.post('/api/locomotives', requirePermission('can_edit_catalog'), async (req, 
     try {
         const { data: loco, error } = await supabase
             .from('locomotives')
-            .insert({
-                number,
-                status: status || 'active',
-                track: track || null,
-                position: position || null,
-                repair_type: repair_type || null,
-                planned_release: planned_release || null,
+            .insert([{
+                number: cleanNumber,
+                series: cleanSeries,
+                status: status || 'waiting',
+                track,
+                position,
+                repair_type,
+                planned_release,
                 acceptance_time: acceptance_time || new Date().toISOString(),
                 location_id: req.session.user.active_location_id || 1
-            })
+            }])
             .select()
             .maybeSingle();
 
         if (error) throw error;
 
+        // Auto-create checklist
+        if (repair_type && (status === 'repair' || !status)) {
+            await ensureChecklistForLocomotive(loco.id, cleanSeries, repair_type);
+        }
+
         // Log movement
         if (track && position) {
             await supabase.from('movements').insert({
                 locomotive_id: loco.id,
-                locomotive_number: number,
+                locomotive_series: cleanSeries,
+                locomotive_number: cleanNumber,
                 from_track: null,
                 from_position: null,
                 to_track: track,
@@ -637,12 +790,13 @@ app.post('/api/locomotives', requirePermission('can_edit_catalog'), async (req, 
 });
 
 app.delete('/api/locomotives/:id', requirePermission('can_edit_catalog'), async (req, res) => {
-    const id = parseInt(req.params.id);
+    const locoId = await resolveLocoId(req.params.id);
+    if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
 
     const { data: loco } = await supabase
         .from('locomotives')
         .select('*')
-        .eq('id', id)
+        .eq('id', locoId)
         .maybeSingle();
 
     if (!loco) {
@@ -665,7 +819,7 @@ app.delete('/api/locomotives/:id', requirePermission('can_edit_catalog'), async 
     const { error } = await supabase
         .from('locomotives')
         .delete()
-        .eq('id', id);
+        .eq('id', locoId);
 
     if (error) return res.status(500).json({ error: error.message });
     res.json({ success: true });
@@ -731,20 +885,23 @@ app.put('/api/locomotives/:id/move', requirePermission('can_move_locomotives'), 
 });
 
 app.put('/api/locomotives/:id', requirePermission('can_edit_catalog'), async (req, res) => {
-    const id = parseInt(req.params.id);
+    const locoId = await resolveLocoId(req.params.id);
+    if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
+
     const { status, number } = req.body;
 
     // Get current locomotive data
     const { data: loco } = await supabase
         .from('locomotives')
         .select('*')
-        .eq('id', id)
+        .eq('id', locoId)
         .maybeSingle();
 
     if (!loco) return res.status(404).json({ error: 'Локомотив не найден' });
 
     const updates = {};
-    if (number !== undefined) updates.number = number;
+    if (req.body.number !== undefined) updates.number = req.body.number;
+    if (req.body.series !== undefined) updates.series = req.body.series;
     if (status !== undefined) updates.status = status;
     if (req.body.repair_type !== undefined) updates.repair_type = req.body.repair_type;
     if (req.body.planned_release !== undefined) updates.planned_release = req.body.planned_release;
@@ -766,10 +923,19 @@ app.put('/api/locomotives/:id', requirePermission('can_edit_catalog'), async (re
         });
     }
 
+    // Auto-create checklist if status changed to repair or repair_type updated
+    if ((status === 'repair' || (updates.repair_type && (status === 'repair' || loco.status === 'repair')))) {
+        const finalSeries = updates.series || loco.series;
+        const finalRepairType = updates.repair_type || loco.repair_type;
+        if (finalRepairType) {
+            await ensureChecklistForLocomotive(loco.id, finalSeries, finalRepairType);
+        }
+    }
+
     const { data: updated, error } = await supabase
         .from('locomotives')
         .update(updates)
-        .eq('id', id)
+        .eq('id', locoId)
         .select()
         .maybeSingle();
 
@@ -785,7 +951,7 @@ app.get('/api/movements', requireAuth, async (req, res) => {
     const offset = parseInt(req.query.offset) || 0;
     const { startDate, endDate, user, loco, action } = req.query;
 
-    let query = supabase.from('movements').select('*', { count: 'exact' });
+    let query = supabase.from('movements').select('*, locomotive_series, locomotive_number', { count: 'exact' });
 
     if (startDate) {
         query = query.gte('moved_at', `${startDate}T00:00:00.000Z`);
@@ -876,7 +1042,59 @@ app.get('/api/movements/users', requireAuth, async (req, res) => {
     res.json(uniqueUsers);
 });
 
-// ===================== LOCOMOTIVE HISTORY =====================
+// --- LOCOMOTIVE HISTORY ---
+
+app.get('/api/movements/locomotives', requireAuth, async (req, res) => {
+    try {
+        // Fetch all unique locomotives from movements table for the current location
+        let query = supabase
+            .from('movements')
+            .select('locomotive_id, locomotive_number, locomotive_series')
+            .not('locomotive_number', 'is', null);
+
+        if (req.session.user.active_location_id) {
+            query = query.eq('location_id', req.session.user.active_location_id);
+        }
+
+        const { data: movements, error } = await query;
+        if (error) throw error;
+
+        // Deduplicate and get latest movement for each
+        const locoMap = new Map();
+        (movements || []).forEach(m => {
+            if (!locoMap.has(m.locomotive_number)) {
+                locoMap.set(m.locomotive_number, {
+                    number: m.locomotive_number,
+                    series: m.locomotive_series,
+                    id: m.locomotive_id
+                });
+            }
+        });
+
+        // We also want current status from locomotives table
+        const { data: currentLocos, error: cError } = await supabase
+            .from('locomotives')
+            .select('id, number, series, status, track, position');
+
+        if (!cError && currentLocos) {
+            currentLocos.forEach(cl => {
+                if (locoMap.has(cl.number)) {
+                    const existing = locoMap.get(cl.number);
+                    locoMap.set(cl.number, { ...existing, ...cl, is_on_map: true });
+                } else {
+                    // Even if no movement yet, if it's on map, include it?
+                    // Usually movements table starts tracking from 'add'
+                    locoMap.set(cl.number, { ...cl, is_on_map: true });
+                }
+            });
+        }
+
+        const results = Array.from(locoMap.values()).sort((a, b) => a.number.localeCompare(b.number));
+        res.json(results);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 app.get('/api/movements/by-locomotive/:number', requireAuth, async (req, res) => {
     const locoNumber = decodeURIComponent(req.params.number);
@@ -894,17 +1112,8 @@ app.get('/api/movements/by-locomotive/:number', requireAuth, async (req, res) =>
 // ===================== LOCOMOTIVE REMARKS =====================
 
 app.get('/api/locomotives/:id/remarks', requireAuth, async (req, res) => {
-    const { id } = req.params;
-    const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
-
-    let locoId;
-    if (isIdNumeric) {
-        locoId = parseInt(id);
-    } else {
-        const { data: locoData } = await supabase.from('locomotives').select('id').eq('number', decodeURIComponent(id)).maybeSingle();
-        if (!locoData) return res.status(404).json({ error: 'Локомотив не найден' });
-        locoId = locoData.id;
-    }
+    const locoId = await resolveLocoId(req.params.id);
+    if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
 
     const { data: remarks, error } = await supabase
         .from('locomotive_remarks')
@@ -930,17 +1139,8 @@ app.get('/api/locomotives/:id/remarks', requireAuth, async (req, res) => {
 
 
 app.post('/api/locomotives/:id/remarks', requirePermission('can_edit_catalog'), async (req, res) => {
-    const { id } = req.params;
-    const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
-
-    let locoId;
-    if (isIdNumeric) {
-        locoId = parseInt(id);
-    } else {
-        const { data: locoData } = await supabase.from('locomotives').select('id').eq('number', decodeURIComponent(id)).maybeSingle();
-        if (!locoData) return res.status(404).json({ error: 'Локомотив не найден' });
-        locoId = locoData.id;
-    }
+    const locoId = await resolveLocoId(req.params.id);
+    if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
 
     const { text, priority, category } = req.body;
     if (!text) return res.status(400).json({ error: 'Текст замечания обязателен' });
@@ -1049,17 +1249,8 @@ app.post('/api/locomotives/:id/remarks/template', requirePermission('can_edit_ca
 });
 
 app.post('/api/locomotives/:id/remarks/bulk', requirePermission('can_edit_catalog'), async (req, res) => {
-    const { id } = req.params;
-    const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
-
-    let locoId;
-    if (isIdNumeric) {
-        locoId = parseInt(id);
-    } else {
-        const { data: locoData } = await supabase.from('locomotives').select('id').eq('number', decodeURIComponent(id)).maybeSingle();
-        if (!locoData) return res.status(404).json({ error: 'Локомотив не найден' });
-        locoId = locoData.id;
-    }
+    const locoId = await resolveLocoId(req.params.id);
+    if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
 
     const { texts } = req.body;
 

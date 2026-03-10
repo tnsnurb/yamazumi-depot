@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Map as MapIcon, ClipboardList, BarChart3, Users, QrCode } from "lucide-react";
+import { Map as MapIcon, ClipboardList, BarChart3, Users, QrCode, History as JournalIcon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useState } from "react";
 import { QRScannerModal } from "./QRScanner";
@@ -11,6 +11,7 @@ export function MobileNav() {
 
     const navItems = [
         { path: '/map', label: 'Карта', icon: MapIcon, reqPerm: 'can_view_map' },
+        { path: '/journal', label: 'Журнал', icon: JournalIcon, reqPerm: 'can_view_journal' },
         { path: '/remarks', label: 'Замечания', icon: ClipboardList, reqPerm: 'can_view_journal' },
         { path: '/dashboard', label: 'Дашборд', icon: BarChart3, reqPerm: 'can_view_dashboard' },
     ];

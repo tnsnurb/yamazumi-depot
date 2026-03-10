@@ -20,6 +20,7 @@ import {
     BookOpen,
     Search,
     Loader2,
+    ClipboardCheck,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useAuth } from "@/hooks/useAuth"
@@ -42,6 +43,7 @@ import { Input } from "@/components/ui/input"
 import { FloatingInput } from "@/components/ui/FloatingInput"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     Select,
     SelectContent,
@@ -114,6 +116,7 @@ interface Remark {
 
 export default function LocomotiveRemarks() {
     const { id: locomotiveId } = useParams()
+    console.log("🛠️ LocomotiveRemarks Render - locomotiveId:", locomotiveId);
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const [locomotive, setLocomotive] = useState<any>(null)
@@ -143,7 +146,8 @@ export default function LocomotiveRemarks() {
 
     // Expanded state
     const [expandedRemarkId, setExpandedRemarkId] = useState<string | null>(null)
-    const [activeTab, setActiveTab] = useState<"comments" | "photos" | "history">("comments")
+    const [activeRemarkDetailTab, setActiveRemarkDetailTab] = useState<"comments" | "photos" | "history">("comments")
+    const [activeMainTab, setActiveMainTab] = useState("remarks") // New state for main tabs
 
     // Comments state
     const [comments, setComments] = useState<Record<string, RemarkComment[]>>({})
@@ -178,15 +182,22 @@ export default function LocomotiveRemarks() {
         }
     }, [locomotiveId])
 
-    const { data: remarks = [], isLoading: isRemarksLoading } = useQuery({
+    const { data: remarks = [], isLoading: isRemarksLoading, error: remarksError } = useQuery({
         queryKey: ['remarks', locomotiveId],
         queryFn: async () => {
+            console.log("🔄 Fetching remarks for ID:", locomotiveId);
             const res = await fetch(`/api/locomotives/${locomotiveId}/remarks`)
             if (!res.ok) throw new Error("Ошибка загрузки замечаний")
-            return res.json() as Promise<Remark[]>
+            const data = await res.json()
+            console.log("✅ Remarks received:", data?.length, "items");
+            return data as Remark[]
         },
         enabled: !!locomotiveId
     })
+
+    if (remarksError) {
+        console.error("❌ Remarks query error:", remarksError);
+    }
 
     const fetchUsers = async () => {
         try {
@@ -208,12 +219,17 @@ export default function LocomotiveRemarks() {
 
     const fetchLocomotive = async () => {
         try {
+            console.log("🔄 Fetching locomotive details for:", locomotiveId);
             const res = await fetch(`/api/locomotives/${locomotiveId}`)
             if (res.ok) {
-                setLocomotive(await res.json())
+                const data = await res.json();
+                console.log("✅ Locomotive data received:", data.number);
+                setLocomotive(data)
+            } else {
+                console.warn("⚠️ Locomotive fetch failed with status:", res.status);
             }
         } catch (e) {
-            console.error("Error fetching locomotive:", e)
+            console.error("❌ Error fetching locomotive:", e)
         }
     }
 
@@ -236,7 +252,7 @@ export default function LocomotiveRemarks() {
                 return old.map(r => r.id === updatedRemark.id ? { ...r, assigned_to: updatedRemark.assigned_to, assigned_user: updatedRemark.assigned_user } : r)
             })
             toast.success(variables.userId ? "Исполнитель назначен" : "Назначение снято")
-            if (expandedRemarkId === variables.remarkId && activeTab === 'history') {
+            if (expandedRemarkId === variables.remarkId && activeRemarkDetailTab === 'history') {
                 fetchHistory(variables.remarkId)
             }
         },
@@ -507,11 +523,11 @@ export default function LocomotiveRemarks() {
     }
 
     const toggleExpanded = (remarkId: string, tab: "comments" | "photos" | "history") => {
-        if (expandedRemarkId === remarkId && activeTab === tab) {
+        if (expandedRemarkId === remarkId && activeRemarkDetailTab === tab) {
             setExpandedRemarkId(null)
         } else {
             setExpandedRemarkId(remarkId)
-            setActiveTab(tab)
+            setActiveRemarkDetailTab(tab)
             setCommentText("")
 
             if (tab === "comments" && !comments[remarkId]) fetchComments(remarkId)
@@ -577,7 +593,7 @@ export default function LocomotiveRemarks() {
                 })
                 toast.success("Обновлено")
                 // Refetch history if expanded
-                if (expandedRemarkId === remarkId && activeTab === 'history') {
+                if (expandedRemarkId === remarkId && activeRemarkDetailTab === 'history') {
                     fetchHistory(remarkId)
                 }
             } else {
@@ -615,33 +631,59 @@ export default function LocomotiveRemarks() {
     }
 
     // Sort: incomplete first, completed last
-    const sortedRemarks = [...remarks].sort((a, b) => {
-        if (a.is_completed === b.is_completed) return 0
-        return a.is_completed ? 1 : -1
-    })
+    const sortedRemarks = Array.isArray(remarks)
+        ? [...remarks].sort((a, b) => {
+            if (a.is_completed === b.is_completed) return 0
+            return a.is_completed ? 1 : -1
+        })
+        : [];
 
     const downloadRemarks = async (filter: 'all' | 'completed' | 'incomplete') => {
-        const XLSX = await import("xlsx-js-style")
+        const ExcelJS = await import("exceljs")
         let data = sortedRemarks
         if (filter === 'completed') data = remarks.filter(r => r.is_completed)
         if (filter === 'incomplete') data = remarks.filter(r => !r.is_completed)
 
-        const rows = data.map((r, i) => ({
-            '№': i + 1,
-            'Замечание': r.text,
-            'Статус': r.is_completed ? 'Выполнено' : 'Не выполнено',
-            'Выполнил': r.is_completed && r.completed_by ? r.completed_by.full_name : '',
-            'Дата выполнения': r.completed_at ? new Date(r.completed_at).toLocaleString('ru-RU') : ''
-        }))
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Замечания');
 
-        const ws = XLSX.utils.json_to_sheet(rows)
-        const wb = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(wb, ws, 'Замечания')
+        worksheet.columns = [
+            { header: '№', key: 'index', width: 5 },
+            { header: 'Замечание', key: 'text', width: 50 },
+            { header: 'Статус', key: 'status', width: 15 },
+            { header: 'Выполнил', key: 'user', width: 20 },
+            { header: 'Дата выполнения', key: 'date', width: 25 }
+        ];
 
+        data.forEach((r, i) => {
+            worksheet.addRow({
+                index: i + 1,
+                text: r.text,
+                status: r.is_completed ? 'Выполнено' : 'Не выполнено',
+                user: r.is_completed && r.completed_by ? r.completed_by.full_name : '',
+                date: r.completed_at ? new Date(r.completed_at).toLocaleString('ru-RU') : ''
+            });
+        });
+
+        // Styling headers
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'F1F5F9' }
+        };
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
         const filterLabel = filter === 'all' ? '' : filter === 'completed' ? '_выполненные' : '_невыполненные'
         const fileName = `Замечания_${locomotive?.number || 'лок'}${filterLabel}.xlsx`
-        XLSX.writeFile(wb, fileName)
-        toast.success(`Скачано: ${rows.length} замечаний`)
+        a.download = fileName;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        toast.success(`Скачано: ${data.length} замечаний`)
     }
 
     const downloadPDF = (filter: 'all' | 'completed' | 'incomplete') => {
@@ -744,13 +786,16 @@ export default function LocomotiveRemarks() {
                     <div className="flex flex-wrap gap-2 w-full md:w-auto">
                         {(user?.role === 'admin' || user?.permissions?.can_edit_catalog || user?.permissions?.can_complete_remarks) && (
                             <>
+                                <Button onClick={() => navigate(`/locomotive/${locomotiveId}/checklist`)} className="gap-2 bg-indigo-600 hover:bg-indigo-700 flex-1 md:flex-none h-9 text-sm text-white">
+                                    <ClipboardCheck className="w-4 h-4" /> Чек-лист
+                                </Button>
                                 <Button onClick={() => setIsAddManualOpen(true)} className="gap-2 bg-emerald-600 hover:bg-emerald-700 flex-1 md:flex-none h-9 text-sm">
                                     <Tag className="w-4 h-4" /> Добавить
                                 </Button>
                                 <Button onClick={() => setIsCatalogOpen(true)} className="gap-2 bg-amber-500 hover:bg-amber-600 flex-1 md:flex-none h-9 text-sm text-white">
                                     <BookOpen className="w-4 h-4" /> Каталог
                                 </Button>
-                                <Button onClick={() => setIsPasteOpen(true)} className="gap-2 bg-indigo-600 hover:bg-indigo-700 flex-1 md:flex-none h-9 text-sm">
+                                <Button onClick={() => setIsPasteOpen(true)} className="gap-2 bg-slate-600 hover:bg-slate-700 flex-1 md:flex-none h-9 text-sm">
                                     <ClipboardPaste className="w-4 h-4" /> <span className="hidden xs:inline">Из Excel</span><span className="xs:hidden">Excel</span>
                                 </Button>
                             </>
@@ -786,672 +831,687 @@ export default function LocomotiveRemarks() {
                     </div>
                 </div>
 
-                {/* Statistics */}
-                {!isRemarksLoading && remarks.length > 0 && (() => {
-                    const total = remarks.length
-                    const completed = remarks.filter(r => r.is_completed).length
-                    const remaining = total - completed
-                    const percent = Math.round((completed / total) * 100)
+                <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
+                    <TabsList className="mb-6 w-full sm:w-auto inline-flex justify-start overflow-x-auto">
+                        <TabsTrigger value="remarks" className="flex items-center gap-2"><Tag className="w-4 h-4" /> Замечания</TabsTrigger>
+                    </TabsList>
 
-                    // Who completed how many
-                    const completedBy: Record<string, number> = {}
-                    remarks.forEach(r => {
-                        if (r.is_completed && r.completed_by?.full_name) {
-                            completedBy[r.completed_by.full_name] = (completedBy[r.completed_by.full_name] || 0) + 1
-                        }
-                    })
+                    <TabsContent value="remarks" className="space-y-4 outline-none">
 
-                    return (
-                        <div className="bg-white border rounded-xl shadow-sm p-3 md:p-6 mb-4">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 mb-4">
-                                <div className="space-y-1">
-                                    <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Всего</span>
-                                    <div className="text-xl md:text-2xl font-black text-slate-900">{total}</div>
-                                </div>
-                                <div className="space-y-1">
-                                    <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Выполнено</span>
-                                    <div className="text-xl md:text-2xl font-black text-green-600">{completed}</div>
-                                </div>
-                                <div className="space-y-1">
-                                    <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Осталось</span>
-                                    <div className="text-xl md:text-2xl font-black text-amber-600">{remaining}</div>
-                                </div>
-                                <div className="space-y-1">
-                                    <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Прогресс</span>
-                                    <div className="text-xl md:text-2xl font-black text-indigo-600">{percent}%</div>
-                                </div>
-                            </div>
+                        {/* Statistics */}
+                        {!isRemarksLoading && Array.isArray(remarks) && remarks.length > 0 && (() => {
+                            console.log("📊 Rendering statistics for", remarks.length, "remarks");
+                            const total = remarks.length
+                            const completed = remarks.filter(r => r.is_completed).length
+                            const remaining = total - completed
+                            const percent = Math.round((completed / total) * 100)
 
-                            <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2 mb-4">
-                                <div
-                                    className="bg-green-500 h-1.5 md:h-2 rounded-full transition-all duration-700"
-                                    style={{ width: `${percent}%` }}
-                                />
-                            </div>
+                            // Who completed how many
+                            const completedBy: Record<string, number> = {}
+                            remarks.forEach(r => {
+                                if (r.is_completed && r.completed_by?.full_name) {
+                                    completedBy[r.completed_by.full_name] = (completedBy[r.completed_by.full_name] || 0) + 1
+                                }
+                            })
 
-                            {Object.keys(completedBy).length > 0 && (
-                                <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 md:gap-3">
-                                    <span className="text-[10px] md:text-xs text-slate-400 w-full md:w-auto mb-1 md:mb-0">Выполнили:</span>
-                                    {Object.entries(completedBy)
-                                        .sort((a, b) => b[1] - a[1])
-                                        .map(([name, count]) => (
-                                            <span key={name} className="inline-flex items-center gap-1.5 text-[10px] md:text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg">
-                                                <span className="font-semibold">{name}</span>
-                                                <span className="bg-white text-slate-900 rounded-md px-1.5 text-[9px] md:text-[10px] font-black border border-slate-200">{count}</span>
-                                            </span>
-                                        ))}
-                                </div>
-                            )}
-                        </div>
-                    )
-                })()}
-
-                <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
-                    {isRemarksLoading ? (
-                        <ItemGroup className="flex flex-col gap-3 p-3 md:p-0">
-                            {Array(4).fill(0).map((_, i) => (
-                                <Item key={i} variant="outline" className="bg-white border-slate-200 shadow-sm rounded-xl overflow-hidden p-3 md:p-4 min-h-0 flex-col md:flex-row items-stretch md:items-center">
-                                    <div className="flex items-start gap-4 flex-1">
-                                        <Skeleton className="w-6 md:w-8 h-4 mt-2 shrink-0 bg-slate-200" />
-                                        <div className="flex-1 space-y-3 mt-1">
-                                            <Skeleton className="h-5 w-3/4 bg-slate-200" />
-                                            <div className="flex flex-wrap items-center gap-2 mt-2">
-                                                <Skeleton className="h-4 w-24 bg-slate-100" />
-                                                <Skeleton className="h-6 w-32 rounded-full bg-indigo-50" />
-                                            </div>
+                            return (
+                                <div className="bg-white border rounded-xl shadow-sm p-3 md:p-6 mb-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 mb-4">
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Всего</span>
+                                            <div className="text-xl md:text-2xl font-black text-slate-900">{total}</div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Выполнено</span>
+                                            <div className="text-xl md:text-2xl font-black text-green-600">{completed}</div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Осталось</span>
+                                            <div className="text-xl md:text-2xl font-black text-amber-600">{remaining}</div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Прогресс</span>
+                                            <div className="text-xl md:text-2xl font-black text-indigo-600">{percent}%</div>
                                         </div>
                                     </div>
-                                    <div className="mt-3 md:mt-0 md:ml-4 flex items-center justify-end gap-2 shrink-0 border-t md:border-none pt-3 md:pt-0 border-slate-100">
-                                        <Skeleton className="h-8 w-24 rounded-md bg-slate-100" />
-                                        <Skeleton className="h-8 w-10 rounded-md bg-slate-100" />
-                                        <Skeleton className="h-8 w-10 rounded-md bg-slate-100" />
+
+                                    <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2 mb-4">
+                                        <div
+                                            className="bg-green-500 h-1.5 md:h-2 rounded-full transition-all duration-700"
+                                            style={{ width: `${percent}%` }}
+                                        />
                                     </div>
-                                </Item>
-                            ))}
-                        </ItemGroup>
-                    ) : remarks.length === 0 ? (
-                        <div className="p-12 text-center flex flex-col items-center">
-                            <ClipboardPaste className="w-12 h-12 text-slate-300 mb-4" />
-                            <h3 className="text-lg font-medium text-slate-900 mb-1">Нет замечаний</h3>
-                            <p className="text-slate-500 max-w-sm mb-6">
-                                Для этого локомотива пока не добавлено ни одного замечания. Вы можете вставить список из Excel или Word.
-                            </p>
-                            {(user?.role === 'admin' || user?.permissions?.can_edit_catalog || user?.permissions?.can_complete_remarks) && (
-                                <Button onClick={() => setIsPasteOpen(true)} variant="outline">
-                                    Добавить замечания
-                                </Button>
-                            )}
-                        </div>
-                    ) : (
-                        <ItemGroup className="flex flex-col gap-3 p-3 md:p-0">
-                            {sortedRemarks.map((remark) => (
-                                <div key={remark.id}>
-                                    <Item
-                                        variant="outline"
-                                        className={`bg-white border-slate-200 shadow-sm rounded-xl overflow-hidden p-3 md:p-4 min-h-0 flex-col md:flex-row items-stretch md:items-center ${remark.is_verified ? 'opacity-60' : remark.is_completed ? 'border-amber-200/50 shadow-sm' : ''}`}
-                                    >
-                                        <div className="flex items-start gap-3 flex-1">
-                                            <div className="flex-1 min-w-0">
-                                                <ItemTitle className={`text-base whitespace-normal leading-snug line-clamp-none ${remark.is_verified ? 'text-slate-400 line-through font-normal' : remark.is_completed ? 'text-slate-700 font-medium' : 'text-slate-900 font-semibold'}`}>
-                                                    {remark.text}
-                                                </ItemTitle>
 
-                                                <div className="flex flex-wrap items-center gap-2 mt-2">
-                                                    {remark.created_by && (
-                                                        <div className="text-[11px] md:text-xs text-slate-400 font-medium whitespace-nowrap">
-                                                            Добавил(а): {remark.created_by.full_name}
-                                                        </div>
-                                                    )}
-
-                                                    {/* Worker Assignment Dropdown */}
-                                                    <div className="flex items-center gap-1">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <button className={`inline-flex items-center gap-1.5 text-[11px] md:text-xs px-2.5 py-1 rounded-full border transition-all ${remark.assigned_user ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200 border-dashed hover:border-slate-300'}`}>
-                                                                    <div className={`w-2 h-2 rounded-full ${remark.assigned_user ? 'bg-indigo-500 animate-pulse' : 'bg-slate-300'}`} />
-                                                                    {remark.assigned_user ? (
-                                                                        <span className="font-semibold">{remark.assigned_user.full_name} {remark.assigned_user.specialization ? `(${remark.assigned_user.specialization})` : ''}</span>
-                                                                    ) : (
-                                                                        <span>Назначить</span>
-                                                                    )}
-                                                                    <ChevronDown className="w-3 h-3 opacity-50" />
-                                                                </button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="start" className="w-[180px] max-h-[300px] overflow-y-auto">
-                                                                <DropdownMenuItem onClick={() => assignWorker(remark.id, null)} className="italic text-slate-400">
-                                                                    Без исполнителя
-                                                                </DropdownMenuItem>
-                                                                <div className="h-px bg-slate-100 my-1" />
-                                                                {allUsers.map((u: any) => (
-                                                                    <DropdownMenuItem key={u.id} onClick={() => assignWorker(remark.id, u.id)} className="flex flex-col items-start gap-0.5 py-2">
-                                                                        <span className="font-medium text-xs">{u.full_name}</span>
-                                                                        {u.specialization && (
-                                                                            <span className="text-[10px] text-slate-400">{u.specialization}</span>
-                                                                        )}
-                                                                    </DropdownMenuItem>
-                                                                ))}
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </div>
-
-                                                    {/* Priority & Category Interactive Badges */}
-                                                    <div className="flex gap-1.5">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <button className={`inline-flex items-center gap-1 text-[11px] md:text-xs px-2 py-1 rounded border transition-colors ${remark.priority === 'high' ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
-                                                                    remark.priority === 'low' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' :
-                                                                        'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                                                                    }`}>
-                                                                    <AlertCircle className="w-3.5 h-3.5" />
-                                                                    {remark.priority === 'high' ? 'Высокий' : remark.priority === 'low' ? 'Низкий' : 'Средний'}
-                                                                    <ChevronDown className="w-3 h-3 opacity-50" />
-                                                                </button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="start">
-                                                                <DropdownMenuItem onClick={() => updateRemark(remark.id, { priority: 'high' })}>Высокий</DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => updateRemark(remark.id, { priority: 'medium' })}>Средний</DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => updateRemark(remark.id, { priority: 'low' })}>Низкий</DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <button className="inline-flex items-center gap-1 text-[11px] md:text-xs px-2 py-1 rounded border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 transition-colors">
-                                                                    <Tag className="w-3.5 h-3.5" />
-                                                                    {remark.category || 'Без категории'}
-                                                                    <ChevronDown className="w-3 h-3 opacity-50" />
-                                                                </button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="start">
-                                                                <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Электрика' })}>Электрика</DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Ходовая' })}>Ходовая</DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Дизель' })}>Дизель</DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Тормоза' })}>Тормоза</DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Прочее' })}>Прочее</DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </div>
-                                                </div>
-
-                                                {remark.is_completed && remark.completed_by && (
-                                                    <div className="mt-2 flex flex-col gap-2">
-                                                        <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm text-slate-500 border px-2.5 py-1.5 inline-flex rounded-md shadow-sm w-fit ${remark.is_verified ? 'bg-green-50/50 border-green-100' : 'bg-amber-50/50 border-amber-200'}`}>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <CheckCircle2 className={`w-3.5 md:w-4 h-3.5 md:h-4 ${remark.is_verified ? 'text-green-600' : 'text-amber-600'}`} />
-                                                                <span className={`font-semibold ${remark.is_verified ? 'text-green-800' : 'text-amber-800'}`}>
-                                                                    {remark.completed_by.full_name}
-                                                                </span>
-                                                            </div>
-                                                            <span className={`hidden md:inline ${remark.is_verified ? 'text-green-300' : 'text-amber-300'}`}>•</span>
-                                                            <span className={`${remark.is_verified ? 'text-green-600' : 'text-amber-600'} font-medium`}>
-                                                                {new Date(remark.completed_at!).toLocaleString('ru-RU', {
-                                                                    day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                                })}
-                                                            </span>
-                                                            {remark.is_verified ? (
-                                                                <span className="ml-1 font-bold text-green-700 bg-green-200/50 px-1.5 rounded">✓ Принято</span>
-                                                            ) : (
-                                                                <span className="ml-1 font-bold text-amber-700 bg-amber-200/50 px-1.5 rounded">⏳ Ожидает проверки</span>
-                                                            )}
-                                                        </div>
-
-                                                        {user?.permissions?.can_verify_remarks && !remark.is_verified && (
-                                                            <div className="flex gap-2 w-full mt-2">
-                                                                <Button
-                                                                    size="default"
-                                                                    onClick={() => verifyRemarkMutation.mutate(remark.id)}
-                                                                    disabled={verifyRemarkMutation.isPending || rejectRemarkMutation.isPending}
-                                                                    className="bg-green-600 hover:bg-green-700 text-white h-10 px-2 text-[11px] sm:text-xs flex-1 rounded-lg"
-                                                                >
-                                                                    ✓ Принять работу
-                                                                </Button>
-                                                                <Button
-                                                                    size="default"
-                                                                    onClick={() => {
-                                                                        setRejectComment("");
-                                                                        setRejectRemarkId(remark.id);
-                                                                    }}
-                                                                    disabled={verifyRemarkMutation.isPending || rejectRemarkMutation.isPending}
-                                                                    variant="outline"
-                                                                    className="border-red-200 text-red-600 hover:bg-red-50 h-10 px-2 text-[11px] sm:text-xs flex-1 rounded-lg"
-                                                                >
-                                                                    Вернуть на доработку
-                                                                </Button>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-
-
-                                        </div>
-
-                                        <div className="mt-4 md:mt-0 flex flex-col md:flex-row justify-between md:items-center md:ml-4 gap-3 md:gap-0">
-                                            <div className="flex gap-2 flex-1 md:flex-none">
-                                                <button
-                                                    onClick={() => toggleExpanded(remark.id, 'comments')}
-                                                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 text-[13px] md:text-sm px-4 md:px-4 py-3 md:py-2 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeTab === 'comments'
-                                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                                                        : 'bg-white text-slate-600 border-slate-200 shadow-sm active:bg-slate-50'
-                                                        }`}
-                                                >
-                                                    <MessageSquare className="w-4 h-4" />
-                                                    <span className="font-bold">
-                                                        {comments[remark.id]?.length ? `Чат (${comments[remark.id].length})` : 'Чат'}
+                                    {Object.keys(completedBy).length > 0 && (
+                                        <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 md:gap-3">
+                                            <span className="text-[10px] md:text-xs text-slate-400 w-full md:w-auto mb-1 md:mb-0">Выполнили:</span>
+                                            {Object.entries(completedBy)
+                                                .sort((a, b) => b[1] - a[1])
+                                                .map(([name, count]) => (
+                                                    <span key={name} className="inline-flex items-center gap-1.5 text-[10px] md:text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg">
+                                                        <span className="font-semibold">{name}</span>
+                                                        <span className="bg-white text-slate-900 rounded-md px-1.5 text-[9px] md:text-[10px] font-black border border-slate-200">{count}</span>
                                                     </span>
-                                                </button>
-
-                                                <button
-                                                    onClick={() => toggleExpanded(remark.id, 'photos')}
-                                                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 text-[13px] md:text-sm px-4 md:px-4 py-3 md:py-2 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeTab === 'photos'
-                                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                                                        : 'bg-white text-slate-600 border-slate-200 shadow-sm active:bg-slate-50'
-                                                        }`}
-                                                >
-                                                    <Camera className="w-4.5 h-4.5" />
-                                                    <span className="font-bold">Фото {photos[remark.id]?.length ? `(${photos[remark.id].length})` : ''}</span>
-                                                </button>
-
-                                                <button
-                                                    onClick={() => toggleExpanded(remark.id, 'history')}
-                                                    className={`hidden md:inline-flex flex-none items-center justify-center w-11 h-11 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeTab === 'history'
-                                                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                                                        : 'bg-white text-slate-600 border-slate-200 shadow-sm active:bg-slate-50'
-                                                        }`}
-                                                    title="История"
-                                                >
-                                                    <History className="w-4.5 h-4.5" />
-                                                </button>
-                                            </div>
-
-                                            <button
-                                                onClick={() => toggleCompletion(remark)}
-                                                disabled={togglingRemarkId === remark.id}
-                                                className={`flex items-center justify-center gap-2 h-11 md:h-10 md:px-4 md:ml-3 rounded-xl border shadow-sm transition-all w-full md:w-auto flex-none ${!remark.is_completed
-                                                    ? 'bg-green-500 border-green-500 text-white hover:bg-green-600 shadow-green-200 shadow-md active:scale-95 cursor-pointer'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-400 opacity-70 cursor-pointer'
-                                                    }`}
-                                            >
-                                                {togglingRemarkId === remark.id ? (
-                                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                                ) : (
-                                                    <>
-                                                        <CheckCircle2 className="w-5 h-5 shrink-0" />
-                                                        <span className="font-medium text-[15px] md:text-sm">
-                                                            {remark.is_completed ? 'Выполнено' : 'Выполнить'}
-                                                        </span>
-                                                    </>
-                                                )}
-                                            </button>
-                                        </div>
-                                    </Item>
-
-                                    {/* Expanded Panel */}
-                                    {expandedRemarkId === remark.id && (
-                                        <div className="px-3 md:px-4 pb-4 ml-7 md:ml-14 mr-3 md:mr-4">
-                                            <div className="bg-slate-50 rounded-lg border p-2 md:p-3">
-
-                                                {/* Comments Tab */}
-                                                {activeTab === 'comments' && (
-                                                    <div className="space-y-3">
-                                                        {loadingComments === remark.id ? (
-                                                            <p className="text-[10px] md:text-xs text-slate-400 text-center py-2">Загрузка...</p>
-                                                        ) : comments[remark.id]?.length ? (
-                                                            <div className="space-y-2 max-h-48 overflow-y-auto pr-2 scrollbar-thin">
-                                                                {comments[remark.id].map(c => (
-                                                                    <div key={c.id} className="flex gap-2">
-                                                                        <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[9px] md:text-[10px] font-bold shrink-0 mt-0.5">
-                                                                            {(c.user_id?.full_name || '?')[0]}
-                                                                        </div>
-                                                                        <div className="flex-1 min-w-0">
-                                                                            <div className="flex items-baseline gap-2">
-                                                                                <span className="text-[10px] md:text-xs font-medium text-slate-700 truncate">{c.user_id?.full_name || 'Пользователь'}</span>
-                                                                                <span className="text-[9px] md:text-[10px] text-slate-400 shrink-0">
-                                                                                    {new Date(c.created_at).toLocaleString('ru-RU', {
-                                                                                        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                                                    })}
-                                                                                </span>
-                                                                            </div>
-                                                                            <p className="text-[10px] md:text-xs text-slate-600 mt-0.5 break-words">{c.text}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <p className="text-[10px] md:text-xs text-slate-400 text-center py-1">Нет комментариев</p>
-                                                        )}
-
-                                                        {/* Add comment input */}
-                                                        <div className="flex gap-2 pt-1 border-t border-slate-200">
-                                                            <input
-                                                                type="text"
-                                                                value={commentText}
-                                                                onChange={e => setCommentText(e.target.value)}
-                                                                onKeyDown={e => { if (e.key === 'Enter' && commentText.trim()) submitComment(remark.id) }}
-                                                                placeholder="Написать..."
-                                                                className="flex-1 text-[10px] md:text-xs bg-white border rounded-md px-2 md:px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                                            />
-                                                            <button
-                                                                onClick={() => submitComment(remark.id)}
-                                                                disabled={!commentText.trim()}
-                                                                className="p-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                                            >
-                                                                <Send className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Photos Tab */}
-                                                {activeTab === 'photos' && (
-                                                    <div className="space-y-3 md:space-y-4">
-                                                        <div className="flex justify-between items-center gap-2">
-                                                            <span className="text-[10px] md:text-xs font-medium text-slate-700">Фото</span>
-                                                            <div className="relative">
-                                                                <input
-                                                                    type="file"
-                                                                    accept="image/*"
-                                                                    id={`photo-upload-${remark.id}`}
-                                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                                    onChange={(e) => handlePhotoUpload(remark.id, e)}
-                                                                    disabled={uploadingPhoto}
-                                                                />
-                                                                <Button size="sm" variant="outline" className="h-7 md:h-8 text-[10px] md:text-xs" disabled={uploadingPhoto}>
-                                                                    <Camera className="w-3 md:w-3.5 h-3 md:h-3.5 mr-1.5" />
-                                                                    {uploadingPhoto ? '...' : 'Добавить'}
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-
-                                                        {loadingPhotos === remark.id ? (
-                                                            <p className="text-[10px] md:text-xs text-slate-400 text-center py-4">Загрузка...</p>
-                                                        ) : photos[remark.id]?.length ? (
-                                                            <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 md:gap-3">
-                                                                {photos[remark.id].map(photo => (
-                                                                    <a
-                                                                        key={photo.id}
-                                                                        href={photo.photo_url}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="group relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all"
-                                                                    >
-                                                                        <img
-                                                                            src={photo.photo_url}
-                                                                            alt="Remark"
-                                                                            className="w-full h-full object-cover"
-                                                                        />
-                                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                                            <Download className="w-4 h-4 text-white" />
-                                                                        </div>
-                                                                    </a>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <p className="text-[10px] md:text-xs text-slate-400 text-center py-2">Нет фото</p>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                                {/* History Tab */}
-                                                {activeTab === 'history' && (
-                                                    <div className="space-y-2">
-                                                        {loadingHistory === remark.id ? (
-                                                            <p className="text-[10px] md:text-xs text-slate-400 text-center py-2">Загрузка...</p>
-                                                        ) : history[remark.id]?.length ? (
-                                                            <div className="space-y-2 max-h-48 overflow-y-auto pr-2 scrollbar-thin">
-                                                                {history[remark.id].map(h => (
-                                                                    <div key={h.id} className="text-[10px] md:text-xs flex gap-2 items-start py-1 border-b border-slate-100 last:border-0">
-                                                                        <span className="text-slate-400 tabular-nums shrink-0 mt-0.5">
-                                                                            {new Date(h.created_at).toLocaleString('ru-RU', {
-                                                                                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                                                                            })}
-                                                                        </span>
-                                                                        <div className="min-w-0">
-                                                                            <span className="font-medium text-slate-700">{h.user_id?.full_name || 'Система'}: </span>
-                                                                            <span className="text-slate-600">{h.details}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <p className="text-[10px] md:text-xs text-slate-400 text-center py-1">Нет истории</p>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                            </div>
+                                                ))}
                                         </div>
                                     )}
                                 </div>
-                            ))}
-                        </ItemGroup>
-                    )}
-                </div>
+                            )
+                        })()}
 
-                {/* Confirm Completion Dialog */}
-                <Dialog open={!!confirmRemark} onOpenChange={(open) => !open && setConfirmRemark(null)}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>Завершение работы</DialogTitle>
-                            <DialogDescription>
-                                Вы действительно выполнили это замечание? Оно будет отмечено в системе вашим именем.
-                            </DialogDescription>
-                        </DialogHeader>
-                        {confirmRemark && (
-                            <div className="py-4 px-1">
-                                <p className="text-sm font-medium text-slate-900 bg-slate-50 p-3 rounded-lg border">
-                                    {confirmRemark.text}
-                                </p>
-                            </div>
-                        )}
-                        <DialogFooter className="gap-2 sm:gap-0">
-                            <Button variant="outline" onClick={() => setConfirmRemark(null)} className="flex-1 sm:flex-none">
-                                Отмена
-                            </Button>
-                            <Button
-                                onClick={() => confirmRemark && executeCompletion(confirmRemark, true)}
-                                disabled={togglingRemarkId === confirmRemark?.id}
-                                className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none transition-all duration-300"
-                            >
-                                {togglingRemarkId === confirmRemark?.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                                {togglingRemarkId === confirmRemark?.id ? "Завершение..." : "Выполнено"}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-
-                {/* Bulk Paste Dialog */}
-                <Dialog open={isPasteOpen} onOpenChange={setIsPasteOpen}>
-                    <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
-                        <div className="p-6">
-                            <DialogHeader>
-                                <DialogTitle>Вставка из Excel</DialogTitle>
-                                <DialogDescription>
-                                    Скопируйте строки из Excel или Word и вставьте их сюда. Каждая строка станет отдельным замечанием.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <div className="mt-4">
-                                <Textarea
-                                    value={pasteText}
-                                    onChange={(e) => setPasteText(e.target.value)}
-                                    placeholder="Вставьте текст здесь...&#10;Пример:&#10;1. Проверить уровень масла&#10;2. Заменить лампу в кабине&#10;3. Подтянуть болты ТЭД"
-                                    className="min-h-[250px] font-mono text-sm resize-none"
-                                />
-                                <p className="text-[10px] md:text-xs text-slate-400 mt-2">
-                                    Система автоматически удалит порядковые номера при вставке.
-                                </p>
-                            </div>
-                        </div>
-                        <div className="p-4 bg-slate-50 border-t flex flex-wrap gap-3 justify-end">
-                            <Button variant="outline" onClick={() => setIsPasteOpen(false)} className="flex-1 sm:flex-none">
-                                Отмена
-                            </Button>
-                            <Button
-                                onClick={handlePasteSubmit}
-                                disabled={!pasteText.trim()}
-                                className="bg-indigo-600 hover:bg-indigo-700 flex-1 sm:flex-none"
-                            >
-                                <ClipboardPaste className="w-4 h-4 mr-2" /> Добавить {pasteText.split('\n').filter(l => l.trim()).length || ''} строк
-                            </Button>
-                        </div>
-                    </DialogContent>
-                </Dialog>
-
-                {/* Add Catalog Remark Dialog */}
-                <Dialog open={isCatalogOpen} onOpenChange={(open) => {
-                    setIsCatalogOpen(open)
-                    if (!open) {
-                        setAddedTemplateIds([])
-                        setSelectedTemplateIds([])
-                    }
-                }}>
-                    <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col p-6">
-                        <DialogHeader>
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <DialogTitle>Каталог типовых замечаний</DialogTitle>
-                                    <DialogDescription>Выберите замечания для быстрого добавления</DialogDescription>
-                                </div>
-                                {selectedTemplateIds.length > 0 && (
-                                    <Button
-                                        onClick={handleAddSelectedTemplates}
-                                        disabled={isSubmittingTemplate}
-                                        className="bg-green-600 hover:bg-green-700 animate-in fade-in zoom-in duration-200"
-                                    >
-                                        {isSubmittingTemplate ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                                        Добавить ({selectedTemplateIds.length})
-                                    </Button>
-                                )}
-                            </div>
-                        </DialogHeader>
-                        <div className="relative group">
-                            <Search className={cn(
-                                "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
-                                catalogSearch ? "text-indigo-500" : "text-slate-400 group-hover:text-slate-500"
-                            )} />
-                            <FloatingInput
-                                label="Поиск в каталоге..."
-                                value={catalogSearch}
-                                onChange={(e) => setCatalogSearch(e.target.value)}
-                                className="pl-9 h-10"
-                                labelClassName="left-9"
-                            />
-                        </div>
-                        <div className="flex-1 overflow-y-auto pr-2 space-y-2 py-2 scrollbar-thin">
-                            {catalogTemplates
-                                .filter(t => t.text.toLowerCase().includes(catalogSearch.toLowerCase()) || (t.specialization || "").toLowerCase().includes(catalogSearch.toLowerCase()))
-                                .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))
-                                .map(t => (
-                                    <button
-                                        key={t.id}
-                                        disabled={isSubmittingTemplate}
-                                        onClick={() => toggleTemplateSelection(t.id)}
-                                        className={`w-full text-left p-3 rounded-lg border transition-all group flex flex-col gap-1 ${selectedTemplateIds.includes(t.id)
-                                            ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-100 ring-offset-0'
-                                            : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50'
-                                            } ${isSubmittingTemplate ? 'opacity-80 cursor-wait' : ''}`}
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex items-center gap-2">
-                                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedTemplateIds.includes(t.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
-                                                    }`}>
-                                                    {selectedTemplateIds.includes(t.id) && <CheckCircle2 className="w-3 h-3 text-white" />}
+                        <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+                            {isRemarksLoading ? (
+                                <ItemGroup className="flex flex-col gap-3 p-3 md:p-0">
+                                    {Array(4).fill(0).map((_, i) => (
+                                        <Item key={i} variant="outline" className="bg-white border-slate-200 shadow-sm rounded-xl overflow-hidden p-3 md:p-4 min-h-0 flex-col md:flex-row items-stretch md:items-center">
+                                            <div className="flex items-start gap-4 flex-1">
+                                                <Skeleton className="w-6 md:w-8 h-4 mt-2 shrink-0 bg-slate-200" />
+                                                <div className="flex-1 space-y-3 mt-1">
+                                                    <Skeleton className="h-5 w-3/4 bg-slate-200" />
+                                                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                        <Skeleton className="h-4 w-24 bg-slate-100" />
+                                                        <Skeleton className="h-6 w-32 rounded-full bg-indigo-50" />
+                                                    </div>
                                                 </div>
-                                                <span className={`font-medium ${selectedTemplateIds.includes(t.id) ? 'text-indigo-700' : 'text-slate-900'} group-hover:text-indigo-700`}>{t.text}</span>
-                                                {addedTemplateIds.includes(t.id) && (
-                                                    <span className="flex items-center text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold ml-2">
-                                                        <CheckCircle2 className="w-3 h-3 mr-1" /> Добавлено
-                                                    </span>
-                                                )}
                                             </div>
-                                            {t.priority === 'high' && <span className="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">High</span>}
+                                            <div className="mt-3 md:mt-0 md:ml-4 flex items-center justify-end gap-2 shrink-0 border-t md:border-none pt-3 md:pt-0 border-slate-100">
+                                                <Skeleton className="h-8 w-24 rounded-md bg-slate-100" />
+                                                <Skeleton className="h-8 w-10 rounded-md bg-slate-100" />
+                                                <Skeleton className="h-8 w-10 rounded-md bg-slate-100" />
+                                            </div>
+                                        </Item>
+                                    ))}
+                                </ItemGroup>
+                            ) : remarks.length === 0 ? (
+                                <div className="p-12 text-center flex flex-col items-center">
+                                    <ClipboardPaste className="w-12 h-12 text-slate-300 mb-4" />
+                                    <h3 className="text-lg font-medium text-slate-900 mb-1">Нет замечаний</h3>
+                                    <p className="text-slate-500 max-w-sm mb-6">
+                                        Для этого локомотива пока не добавлено ни одного замечания. Вы можете вставить список из Excel или Word.
+                                    </p>
+                                    {(user?.role === 'admin' || user?.permissions?.can_edit_catalog || user?.permissions?.can_complete_remarks) && (
+                                        <Button onClick={() => setIsPasteOpen(true)} variant="outline">
+                                            Добавить замечания
+                                        </Button>
+                                    )}
+                                </div>
+                            ) : (
+                                <ItemGroup className="flex flex-col gap-3 p-3 md:p-0">
+                                    {sortedRemarks.map((remark) => (
+                                        <div key={remark.id}>
+                                            <Item
+                                                variant="outline"
+                                                className={`bg-white border-slate-200 shadow-sm rounded-xl overflow-hidden p-3 md:p-4 min-h-0 flex-col md:flex-row items-stretch md:items-center ${remark.is_verified ? 'opacity-60' : remark.is_completed ? 'border-amber-200/50 shadow-sm' : ''}`}
+                                            >
+                                                <div className="flex items-start gap-3 flex-1">
+                                                    <div className="flex-1 min-w-0">
+                                                        <ItemTitle className={`text-base whitespace-normal leading-snug line-clamp-none ${remark.is_verified ? 'text-slate-400 line-through font-normal' : remark.is_completed ? 'text-slate-700 font-medium' : 'text-slate-900 font-semibold'}`}>
+                                                            {remark.text}
+                                                        </ItemTitle>
+
+                                                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                            {remark.created_by && (
+                                                                <div className="text-[11px] md:text-xs text-slate-400 font-medium whitespace-nowrap">
+                                                                    Добавил(а): {remark.created_by.full_name}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Worker Assignment Dropdown */}
+                                                            <div className="flex items-center gap-1">
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <button className={`inline-flex items-center gap-1.5 text-[11px] md:text-xs px-2.5 py-1 rounded-full border transition-all ${remark.assigned_user ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200 border-dashed hover:border-slate-300'}`}>
+                                                                            <div className={`w-2 h-2 rounded-full ${remark.assigned_user ? 'bg-indigo-500 animate-pulse' : 'bg-slate-300'}`} />
+                                                                            {remark.assigned_user ? (
+                                                                                <span className="font-semibold">{remark.assigned_user.full_name} {remark.assigned_user.specialization ? `(${remark.assigned_user.specialization})` : ''}</span>
+                                                                            ) : (
+                                                                                <span>Назначить</span>
+                                                                            )}
+                                                                            <ChevronDown className="w-3 h-3 opacity-50" />
+                                                                        </button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="start" className="w-[180px] max-h-[300px] overflow-y-auto">
+                                                                        <DropdownMenuItem onClick={() => assignWorker(remark.id, null)} className="italic text-slate-400">
+                                                                            Без исполнителя
+                                                                        </DropdownMenuItem>
+                                                                        <div className="h-px bg-slate-100 my-1" />
+                                                                        {allUsers.map((u: any) => (
+                                                                            <DropdownMenuItem key={u.id} onClick={() => assignWorker(remark.id, u.id)} className="flex flex-col items-start gap-0.5 py-2">
+                                                                                <span className="font-medium text-xs">{u.full_name}</span>
+                                                                                {u.specialization && (
+                                                                                    <span className="text-[10px] text-slate-400">{u.specialization}</span>
+                                                                                )}
+                                                                            </DropdownMenuItem>
+                                                                        ))}
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </div>
+
+                                                            {/* Priority & Category Interactive Badges */}
+                                                            <div className="flex gap-1.5">
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <button className={`inline-flex items-center gap-1 text-[11px] md:text-xs px-2 py-1 rounded border transition-colors ${remark.priority === 'high' ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
+                                                                            remark.priority === 'low' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' :
+                                                                                'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                                                            }`}>
+                                                                            <AlertCircle className="w-3.5 h-3.5" />
+                                                                            {remark.priority === 'high' ? 'Высокий' : remark.priority === 'low' ? 'Низкий' : 'Средний'}
+                                                                            <ChevronDown className="w-3 h-3 opacity-50" />
+                                                                        </button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="start">
+                                                                        <DropdownMenuItem onClick={() => updateRemark(remark.id, { priority: 'high' })}>Высокий</DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => updateRemark(remark.id, { priority: 'medium' })}>Средний</DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => updateRemark(remark.id, { priority: 'low' })}>Низкий</DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <button className="inline-flex items-center gap-1 text-[11px] md:text-xs px-2 py-1 rounded border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 transition-colors">
+                                                                            <Tag className="w-3.5 h-3.5" />
+                                                                            {remark.category || 'Без категории'}
+                                                                            <ChevronDown className="w-3 h-3 opacity-50" />
+                                                                        </button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="start">
+                                                                        <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Электрика' })}>Электрика</DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Ходовая' })}>Ходовая</DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Дизель' })}>Дизель</DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Тормоза' })}>Тормоза</DropdownMenuItem>
+                                                                        <DropdownMenuItem onClick={() => updateRemark(remark.id, { category: 'Прочее' })}>Прочее</DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </div>
+                                                        </div>
+
+                                                        {remark.is_completed && remark.completed_by && (
+                                                            <div className="mt-2 flex flex-col gap-2">
+                                                                <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:text-sm text-slate-500 border px-2.5 py-1.5 inline-flex rounded-md shadow-sm w-fit ${remark.is_verified ? 'bg-green-50/50 border-green-100' : 'bg-amber-50/50 border-amber-200'}`}>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <CheckCircle2 className={`w-3.5 md:w-4 h-3.5 md:h-4 ${remark.is_verified ? 'text-green-600' : 'text-amber-600'}`} />
+                                                                        <span className={`font-semibold ${remark.is_verified ? 'text-green-800' : 'text-amber-800'}`}>
+                                                                            {remark.completed_by.full_name}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className={`hidden md:inline ${remark.is_verified ? 'text-green-300' : 'text-amber-300'}`}>•</span>
+                                                                    <span className={`${remark.is_verified ? 'text-green-600' : 'text-amber-600'} font-medium`}>
+                                                                        {new Date(remark.completed_at!).toLocaleString('ru-RU', {
+                                                                            day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                                        })}
+                                                                    </span>
+                                                                    {remark.is_verified ? (
+                                                                        <span className="ml-1 font-bold text-green-700 bg-green-200/50 px-1.5 rounded">✓ Принято</span>
+                                                                    ) : (
+                                                                        <span className="ml-1 font-bold text-amber-700 bg-amber-200/50 px-1.5 rounded">⏳ Ожидает проверки</span>
+                                                                    )}
+                                                                </div>
+
+                                                                {user?.permissions?.can_verify_remarks && !remark.is_verified && (
+                                                                    <div className="flex gap-2 w-full mt-2">
+                                                                        <Button
+                                                                            size="default"
+                                                                            onClick={() => verifyRemarkMutation.mutate(remark.id)}
+                                                                            disabled={verifyRemarkMutation.isPending || rejectRemarkMutation.isPending}
+                                                                            className="bg-green-600 hover:bg-green-700 text-white h-10 px-2 text-[11px] sm:text-xs flex-1 rounded-lg"
+                                                                        >
+                                                                            ✓ Принять работу
+                                                                        </Button>
+                                                                        <Button
+                                                                            size="default"
+                                                                            onClick={() => {
+                                                                                setRejectComment("");
+                                                                                setRejectRemarkId(remark.id);
+                                                                            }}
+                                                                            disabled={verifyRemarkMutation.isPending || rejectRemarkMutation.isPending}
+                                                                            variant="outline"
+                                                                            className="border-red-200 text-red-600 hover:bg-red-50 h-10 px-2 text-[11px] sm:text-xs flex-1 rounded-lg"
+                                                                        >
+                                                                            Вернуть на доработку
+                                                                        </Button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+
+                                                </div>
+
+                                                <div className="mt-4 md:mt-0 flex flex-col md:flex-row justify-between md:items-center md:ml-4 gap-3 md:gap-0">
+                                                    <div className="flex gap-2 flex-1 md:flex-none">
+                                                        <button
+                                                            onClick={() => toggleExpanded(remark.id, 'comments')}
+                                                            className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 text-[13px] md:text-sm px-4 md:px-4 py-3 md:py-2 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeRemarkDetailTab === 'comments'
+                                                                ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                                                : 'bg-white text-slate-600 border-slate-200 shadow-sm active:bg-slate-50'
+                                                                }`}
+                                                        >
+                                                            <MessageSquare className="w-4 h-4" />
+                                                            <span className="font-bold">
+                                                                {comments[remark.id]?.length ? `Чат (${comments[remark.id].length})` : 'Чат'}
+                                                            </span>
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => toggleExpanded(remark.id, 'photos')}
+                                                            className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 text-[13px] md:text-sm px-4 md:px-4 py-3 md:py-2 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeRemarkDetailTab === 'photos'
+                                                                ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                                                : 'bg-white text-slate-600 border-slate-200 shadow-sm active:bg-slate-50'
+                                                                }`}
+                                                        >
+                                                            <Camera className="w-4.5 h-4.5" />
+                                                            <span className="font-bold">Фото {photos[remark.id]?.length ? `(${photos[remark.id].length})` : ''}</span>
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => toggleExpanded(remark.id, 'history')}
+                                                            className={`hidden md:inline-flex flex-none items-center justify-center w-11 h-11 rounded-xl transition-all border ${expandedRemarkId === remark.id && activeRemarkDetailTab === 'history'
+                                                                ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                                                : 'bg-white text-slate-600 border-slate-200 shadow-sm active:bg-slate-50'
+                                                                }`}
+                                                            title="История"
+                                                        >
+                                                            <History className="w-4.5 h-4.5" />
+                                                        </button>
+                                                    </div>
+
+                                                    <button
+                                                        onClick={() => toggleCompletion(remark)}
+                                                        disabled={togglingRemarkId === remark.id}
+                                                        className={`flex items-center justify-center gap-2 h-11 md:h-10 md:px-4 md:ml-3 rounded-xl border shadow-sm transition-all w-full md:w-auto flex-none ${!remark.is_completed
+                                                            ? 'bg-green-500 border-green-500 text-white hover:bg-green-600 shadow-green-200 shadow-md active:scale-95 cursor-pointer'
+                                                            : 'bg-slate-50 border-slate-200 text-slate-400 opacity-70 cursor-pointer'
+                                                            }`}
+                                                    >
+                                                        {togglingRemarkId === remark.id ? (
+                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                        ) : (
+                                                            <>
+                                                                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                                                                <span className="font-medium text-[15px] md:text-sm">
+                                                                    {remark.is_completed ? 'Выполнено' : 'Выполнить'}
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </Item>
+
+                                            {/* Expanded Panel */}
+                                            {expandedRemarkId === remark.id && (
+                                                <div className="px-3 md:px-4 pb-4 ml-7 md:ml-14 mr-3 md:mr-4">
+                                                    <div className="bg-slate-50 rounded-lg border p-2 md:p-3">
+
+                                                        {/* Comments Tab */}
+                                                        {activeRemarkDetailTab === 'comments' && (
+                                                            <div className="space-y-3">
+                                                                {loadingComments === remark.id ? (
+                                                                    <p className="text-[10px] md:text-xs text-slate-400 text-center py-2">Загрузка...</p>
+                                                                ) : comments[remark.id]?.length ? (
+                                                                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 scrollbar-thin">
+                                                                        {comments[remark.id].map(c => (
+                                                                            <div key={c.id} className="flex gap-2">
+                                                                                <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[9px] md:text-[10px] font-bold shrink-0 mt-0.5">
+                                                                                    {(c.user_id?.full_name || '?')[0]}
+                                                                                </div>
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <div className="flex items-baseline gap-2">
+                                                                                        <span className="text-[10px] md:text-xs font-medium text-slate-700 truncate">{c.user_id?.full_name || 'Пользователь'}</span>
+                                                                                        <span className="text-[9px] md:text-[10px] text-slate-400 shrink-0">
+                                                                                            {new Date(c.created_at).toLocaleString('ru-RU', {
+                                                                                                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                                                            })}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <p className="text-[10px] md:text-xs text-slate-600 mt-0.5 break-words">{c.text}</p>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-[10px] md:text-xs text-slate-400 text-center py-1">Нет комментариев</p>
+                                                                )}
+
+                                                                {/* Add comment input */}
+                                                                <div className="flex gap-2 pt-1 border-t border-slate-200">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={commentText}
+                                                                        onChange={e => setCommentText(e.target.value)}
+                                                                        onKeyDown={e => { if (e.key === 'Enter' && commentText.trim()) submitComment(remark.id) }}
+                                                                        placeholder="Написать..."
+                                                                        className="flex-1 text-[10px] md:text-xs bg-white border rounded-md px-2 md:px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                                                    />
+                                                                    <button
+                                                                        onClick={() => submitComment(remark.id)}
+                                                                        disabled={!commentText.trim()}
+                                                                        className="p-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                                                    >
+                                                                        <Send className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Photos Tab */}
+                                                        {activeRemarkDetailTab === 'photos' && (
+                                                            <div className="space-y-3 md:space-y-4">
+                                                                <div className="flex justify-between items-center gap-2">
+                                                                    <span className="text-[10px] md:text-xs font-medium text-slate-700">Фото</span>
+                                                                    <div className="relative">
+                                                                        <input
+                                                                            type="file"
+                                                                            accept="image/*"
+                                                                            id={`photo-upload-${remark.id}`}
+                                                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                                            onChange={(e) => handlePhotoUpload(remark.id, e)}
+                                                                            disabled={uploadingPhoto}
+                                                                        />
+                                                                        <Button size="sm" variant="outline" className="h-7 md:h-8 text-[10px] md:text-xs" disabled={uploadingPhoto}>
+                                                                            <Camera className="w-3 md:w-3.5 h-3 md:h-3.5 mr-1.5" />
+                                                                            {uploadingPhoto ? '...' : 'Добавить'}
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+
+                                                                {loadingPhotos === remark.id ? (
+                                                                    <p className="text-[10px] md:text-xs text-slate-400 text-center py-4">Загрузка...</p>
+                                                                ) : photos[remark.id]?.length ? (
+                                                                    <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 md:gap-3">
+                                                                        {photos[remark.id].map(photo => (
+                                                                            <a
+                                                                                key={photo.id}
+                                                                                href={photo.photo_url}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="group relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all"
+                                                                            >
+                                                                                <img
+                                                                                    src={photo.photo_url}
+                                                                                    alt="Remark"
+                                                                                    className="w-full h-full object-cover"
+                                                                                />
+                                                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                                                    <Download className="w-4 h-4 text-white" />
+                                                                                </div>
+                                                                            </a>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-[10px] md:text-xs text-slate-400 text-center py-2">Нет фото</p>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        {/* History Tab */}
+                                                        {activeRemarkDetailTab === 'history' && (
+                                                            <div className="space-y-2">
+                                                                {loadingHistory === remark.id ? (
+                                                                    <p className="text-[10px] md:text-xs text-slate-400 text-center py-2">Загрузка...</p>
+                                                                ) : history[remark.id]?.length ? (
+                                                                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 scrollbar-thin">
+                                                                        {history[remark.id].map(h => (
+                                                                            <div key={h.id} className="text-[10px] md:text-xs flex gap-2 items-start py-1 border-b border-slate-100 last:border-0">
+                                                                                <span className="text-slate-400 tabular-nums shrink-0 mt-0.5">
+                                                                                    {new Date(h.created_at).toLocaleString('ru-RU', {
+                                                                                        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                                                    })}
+                                                                                </span>
+                                                                                <div className="min-w-0">
+                                                                                    <span className="font-medium text-slate-700">{h.user_id?.full_name || 'Система'}: </span>
+                                                                                    <span className="text-slate-600">{h.details}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-[10px] md:text-xs text-slate-400 text-center py-1">Нет истории</p>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="flex items-center gap-2 ml-6">
-                                            {t.specialization && <span className="text-[10px] text-indigo-600 font-semibold">{t.specialization}</span>}
-                                            {t.category && <span className="text-[10px] text-slate-400">/ {t.category}</span>}
-                                            <span className="text-[9px] text-slate-300 ml-auto leading-none">Использовано: {t.usage_count || 0}</span>
-                                        </div>
-                                    </button>
-                                ))
+                                    ))}
+                                </ItemGroup>
+                            )}
+                        </div>
+
+                        {/* Confirm Completion Dialog */}
+                        <Dialog open={!!confirmRemark} onOpenChange={(open) => !open && setConfirmRemark(null)}>
+                            <DialogContent className="sm:max-w-[425px]">
+                                <DialogHeader>
+                                    <DialogTitle>Подтверждение выполнения</DialogTitle>
+                                    <DialogDescription>
+                                        Вы подтверждаете, что данное замечание устранено в полном объеме?
+                                    </DialogDescription>
+                                </DialogHeader>
+                                {confirmRemark && (
+                                    <div className="py-4 px-1">
+                                        <p className="text-sm font-medium text-slate-900 bg-slate-50 p-3 rounded-lg border">
+                                            {confirmRemark.text}
+                                        </p>
+                                    </div>
+                                )}
+                                <DialogFooter className="gap-2 sm:gap-0">
+                                    <Button variant="outline" onClick={() => setConfirmRemark(null)} className="flex-1 sm:flex-none">
+                                        Отмена
+                                    </Button>
+                                    <Button
+                                        onClick={() => confirmRemark && executeCompletion(confirmRemark, true)}
+                                        disabled={togglingRemarkId === confirmRemark?.id}
+                                        className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none transition-all duration-300"
+                                    >
+                                        {togglingRemarkId === confirmRemark?.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                                        {togglingRemarkId === confirmRemark?.id ? "Завершение..." : "Выполнено"}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+
+                        {/* Bulk Paste Dialog */}
+                        <Dialog open={isPasteOpen} onOpenChange={setIsPasteOpen}>
+                            <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
+                                <div className="p-6">
+                                    <DialogHeader>
+                                        <DialogTitle>Вставка из буфера</DialogTitle>
+                                        <DialogDescription>
+                                            Вставьте список замечаний из Excel или текстового файла. Каждое замечание с новой строки.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="mt-4">
+                                        <Textarea
+                                            value={pasteText}
+                                            onChange={(e) => setPasteText(e.target.value)}
+                                            placeholder="Вставьте текст здесь...&#10;Пример:&#10;1. Проверить уровень масла&#10;2. Заменить лампу в кабине&#10;3. Подтянуть болты ТЭД"
+                                            className="min-h-[250px] font-mono text-sm resize-none"
+                                        />
+                                        <p className="text-[10px] md:text-xs text-slate-400 mt-2">
+                                            Система автоматически удалит порядковые номера при вставке.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="p-4 bg-slate-50 border-t flex flex-wrap gap-3 justify-end">
+                                    <Button variant="outline" onClick={() => setIsPasteOpen(false)} className="flex-1 sm:flex-none">
+                                        Отмена
+                                    </Button>
+                                    <Button
+                                        onClick={handlePasteSubmit}
+                                        disabled={!pasteText.trim()}
+                                        className="bg-indigo-600 hover:bg-indigo-700 flex-1 sm:flex-none"
+                                    >
+                                        <ClipboardPaste className="w-4 h-4 mr-2" /> Добавить {pasteText.split('\n').filter(l => l.trim()).length || ''} строк
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+
+                        {/* Add Catalog Remark Dialog */}
+                        <Dialog open={isCatalogOpen} onOpenChange={(open) => {
+                            setIsCatalogOpen(open)
+                            if (!open) {
+                                setAddedTemplateIds([])
+                                setSelectedTemplateIds([])
                             }
-                            {catalogTemplates.length === 0 && <div className="p-8 text-center text-slate-500">Загрузка каталога или каталог пуст...</div>}
-                        </div>
-                    </DialogContent>
-                </Dialog>
-
-                {/* Add Manual Remark Dialog */}
-                <Dialog open={isAddManualOpen} onOpenChange={setIsAddManualOpen}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>Добавить замечание</DialogTitle>
-                        </DialogHeader>
-                        <form onSubmit={handleManualSubmit} className="space-y-4 pt-2">
-                            <div className="space-y-4 pt-4">
-                                <FloatingInput
-                                    label="Текст замечания"
-                                    value={manualRemark}
-                                    onChange={(e) => setManualRemark(e.target.value)}
-                                    placeholder="Опишите неисправность..."
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Приоритет</Label>
-                                    <Select value={manualPriority} onValueChange={setManualPriority}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="low">Низкий</SelectItem>
-                                            <SelectItem value="medium">Средний</SelectItem>
-                                            <SelectItem value="high">Высокий</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                        }}>
+                            <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col p-6">
+                                <DialogHeader>
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <DialogTitle>Каталог типовых замечаний</DialogTitle>
+                                            <DialogDescription>
+                                                Выберите одно или несколько замечаний из каталога для добавления к локомотиву.
+                                            </DialogDescription>
+                                        </div>
+                                        {selectedTemplateIds.length > 0 && (
+                                            <Button
+                                                onClick={handleAddSelectedTemplates}
+                                                disabled={isSubmittingTemplate}
+                                                className="bg-green-600 hover:bg-green-700 animate-in fade-in zoom-in duration-200"
+                                            >
+                                                {isSubmittingTemplate ? <Loader2 className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                                                Добавить ({selectedTemplateIds.length})
+                                            </Button>
+                                        )}
+                                    </div>
+                                </DialogHeader>
+                                <div className="relative group">
+                                    <Search className={cn(
+                                        "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
+                                        catalogSearch ? "text-indigo-500" : "text-slate-400 group-hover:text-slate-500"
+                                    )} />
+                                    <FloatingInput
+                                        label="Поиск в каталоге..."
+                                        value={catalogSearch}
+                                        onChange={(e) => setCatalogSearch(e.target.value)}
+                                        className="pl-9 h-10"
+                                        labelClassName="left-9"
+                                    />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Категория</Label>
-                                    <Input value={manualCategory} onChange={e => setManualCategory(e.target.value)} placeholder="Дизель, Электрика..." />
-                                </div>
-                            </div>
-                            <DialogFooter className="pt-4">
-                                <Button type="button" variant="outline" onClick={() => setIsAddManualOpen(false)}>Отмена</Button>
-                                <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">Добавить</Button>
-                            </DialogFooter>
-                        </form>
-                    </DialogContent>
-                </Dialog>
-
-                {/* Reject Remark Dialog */}
-                <Dialog open={!!rejectRemarkId} onOpenChange={(open) => !open && setRejectRemarkId(null)}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>Вернуть на доработку</DialogTitle>
-                            <DialogDescription>
-                                Укажите причину возврата, чтобы специалист понимал, что нужно исправить.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-2">
-                            <Textarea
-                                placeholder="Комментарий к возврату..."
-                                value={rejectComment}
-                                onChange={(e) => setRejectComment(e.target.value)}
-                                className="min-h-[100px]"
-                            />
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setRejectRemarkId(null)}>Отмена</Button>
-                            <Button
-                                variant="destructive"
-                                onClick={() => {
-                                    if (rejectRemarkId) {
-                                        rejectRemarkMutation.mutate({ id: rejectRemarkId, comment: rejectComment });
+                                <div className="flex-1 overflow-y-auto pr-2 space-y-2 py-2 scrollbar-thin">
+                                    {catalogTemplates
+                                        .filter(t => t.text.toLowerCase().includes(catalogSearch.toLowerCase()) || (t.specialization || "").toLowerCase().includes(catalogSearch.toLowerCase()))
+                                        .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))
+                                        .map(t => (
+                                            <button
+                                                key={t.id}
+                                                disabled={isSubmittingTemplate}
+                                                onClick={() => toggleTemplateSelection(t.id)}
+                                                className={`w-full text-left p-3 rounded-lg border transition-all group flex flex-col gap-1 ${selectedTemplateIds.includes(t.id)
+                                                    ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-100 ring-offset-0'
+                                                    : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50'
+                                                    } ${isSubmittingTemplate ? 'opacity-80 cursor-wait' : ''}`}
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedTemplateIds.includes(t.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                                                            }`}>
+                                                            {selectedTemplateIds.includes(t.id) && <CheckCircle2 className="w-3 h-3 text-white" />}
+                                                        </div>
+                                                        <span className={`font-medium ${selectedTemplateIds.includes(t.id) ? 'text-indigo-700' : 'text-slate-900'} group-hover:text-indigo-700`}>{t.text}</span>
+                                                        {addedTemplateIds.includes(t.id) && (
+                                                            <span className="flex items-center text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold ml-2">
+                                                                <CheckCircle2 className="w-3 h-3 mr-1" /> Добавлено
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {t.priority === 'high' && <span className="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">High</span>}
+                                                </div>
+                                                <div className="flex items-center gap-2 ml-6">
+                                                    {t.specialization && <span className="text-[10px] text-indigo-600 font-semibold">{t.specialization}</span>}
+                                                    {t.category && <span className="text-[10px] text-slate-400">/ {t.category}</span>}
+                                                    <span className="text-[9px] text-slate-300 ml-auto leading-none">Использовано: {t.usage_count || 0}</span>
+                                                </div>
+                                            </button>
+                                        ))
                                     }
-                                }}
-                                disabled={!rejectComment.trim()}
-                            >
-                                Вернуть работу
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                                    {catalogTemplates.length === 0 && <div className="p-8 text-center text-slate-500">Загрузка каталога или каталог пуст...</div>}
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+
+                        {/* Add Manual Remark Dialog */}
+                        <Dialog open={isAddManualOpen} onOpenChange={setIsAddManualOpen}>
+                            <DialogContent className="sm:max-w-[425px]">
+                                <DialogHeader>
+                                    <DialogTitle>Добавить замечание</DialogTitle>
+                                    <DialogDescription>
+                                        Введите детальное описание неисправности и выберите приоритет.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <form onSubmit={handleManualSubmit} className="space-y-4 pt-2">
+                                    <div className="space-y-4 pt-4">
+                                        <FloatingInput
+                                            label="Текст замечания"
+                                            value={manualRemark}
+                                            onChange={(e) => setManualRemark(e.target.value)}
+                                            placeholder="Опишите неисправность..."
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Приоритет</Label>
+                                            <Select value={manualPriority} onValueChange={setManualPriority}>
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="low">Низкий</SelectItem>
+                                                    <SelectItem value="medium">Средний</SelectItem>
+                                                    <SelectItem value="high">Высокий</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Категория</Label>
+                                            <Input value={manualCategory} onChange={e => setManualCategory(e.target.value)} placeholder="Дизель, Электрика..." />
+                                        </div>
+                                    </div>
+                                    <DialogFooter className="pt-4">
+                                        <Button type="button" variant="outline" onClick={() => setIsAddManualOpen(false)}>Отмена</Button>
+                                        <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700">Добавить</Button>
+                                    </DialogFooter>
+                                </form>
+                            </DialogContent>
+                        </Dialog>
+
+                        {/* Reject Remark Dialog */}
+                        <Dialog open={!!rejectRemarkId} onOpenChange={(open) => !open && setRejectRemarkId(null)}>
+                            <DialogContent className="sm:max-w-[425px]">
+                                <DialogHeader>
+                                    <DialogTitle>Вернуть на доработку</DialogTitle>
+                                    <DialogDescription>
+                                        Укажите причину возврата, чтобы специалист понимал, что нужно исправить.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="py-2">
+                                    <Textarea
+                                        placeholder="Комментарий к возврату..."
+                                        value={rejectComment}
+                                        onChange={(e) => setRejectComment(e.target.value)}
+                                        className="min-h-[100px]"
+                                    />
+                                </div>
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setRejectRemarkId(null)}>Отмена</Button>
+                                    <Button
+                                        variant="destructive"
+                                        onClick={() => {
+                                            if (rejectRemarkId) {
+                                                rejectRemarkMutation.mutate({ id: rejectRemarkId, comment: rejectComment });
+                                            }
+                                        }}
+                                        disabled={!rejectComment.trim()}
+                                    >
+                                        Вернуть работу
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    </TabsContent>
+                </Tabs>
             </main>
         </div>
     )

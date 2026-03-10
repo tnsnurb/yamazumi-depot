@@ -272,6 +272,9 @@ router.get('/public/users', async (req, res) => {
         res.json(data);
     } catch (err) {
         console.error("Error fetching public users:", err);
+        if (supabase.checkBlock(err)) {
+            return res.status(503).json({ error: 'База данных заблокирована сетевым фильтром (Cisco Umbrella/Firewall). Пожалуйста, добавьте *.supabase.co в белый список.' });
+        }
         res.status(500).json({ error: err.message });
     }
 });

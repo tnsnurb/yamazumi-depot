@@ -32,6 +32,7 @@ export interface Location {
 
 export interface Locomotive {
     id: number;
+    series: string | null;
     number: string;
     status: LocoStatus;
     track: number | null;
@@ -95,8 +96,9 @@ const LocoCard = React.memo(({ loco, isHighlighted, canMove, onDragStart, onClic
                         <div className="flex-1 h-full bg-gradient-to-r from-red-700 to-red-500 relative flex items-center justify-center overflow-hidden group-hover/loco:brightness-110 transition-all">
                             <div className="absolute top-[20%] w-full h-[2px] bg-yellow-400 opacity-90" />
                             <div className="absolute bottom-[20%] w-full h-[2px] bg-yellow-400 opacity-90" />
-                            <div className="bg-slate-900 px-2 py-0.5 rounded-sm text-white font-mono font-bold text-xs z-10 shadow-inner border border-slate-700/80 drop-shadow-md">
-                                {loco.number}
+                            <div className="bg-slate-900 px-2 py-0.5 rounded-sm text-white font-mono font-bold text-[10px] leading-tight z-10 shadow-inner border border-slate-700/80 drop-shadow-md flex flex-col items-center">
+                                {loco.series && <span className="text-[7px] text-slate-400 -mb-0.5">{loco.series}</span>}
+                                <span>{loco.number}</span>
                             </div>
                         </div>
                         <div className="w-[6px] h-full bg-slate-800 rounded-r-sm flex flex-col justify-between py-1 border-l border-slate-900/50">
@@ -127,7 +129,7 @@ export default function MapPage() {
     const [draggedId, setDraggedId] = useState<string | null>(null)
     const [isRemoveReasonOpen, setIsRemoveReasonOpen] = useState(false)
     const [removeReason, setRemoveReason] = useState("")
-    const [pendingMove, setPendingMove] = useState<{ locoId: string; locoNumber: string; fromTrack: number | null; fromPos: number | null; toTrack: number; toPos: number } | null>(null)
+    const [pendingMove, setPendingMove] = useState<{ locoId: string; locoSeries: string; locoNumber: string; fromTrack: number | null; fromPos: number | null; toTrack: number; toPos: number } | null>(null)
 
     // Search and filters
     const [searchQuery, setSearchQuery] = useState("")
@@ -151,6 +153,7 @@ export default function MapPage() {
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [isInfoOpen, setIsInfoOpen] = useState(false)
     const [selectedLoco, setSelectedLoco] = useState<Locomotive | null>(null)
+    const [addSeries, setAddSeries] = useState("")
     const [addNumber, setAddNumber] = useState("")
     const [addStatus, setAddStatus] = useState<string>("active")
     const [addTrack, setAddTrack] = useState<string>("")
@@ -258,7 +261,7 @@ export default function MapPage() {
             return data
         }),
         onSuccess: (data) => {
-            toast.success(`Локомотив ${data.number} добавлен`)
+            toast.success(`Локомотив ${data.series || ''} ${data.number} добавлен`)
             setIsAddOpen(false)
             setAddNumber("")
             setAddTrack("")
@@ -284,7 +287,7 @@ export default function MapPage() {
             }),
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['locomotives'] })
-            toast.success(`Локомотив #${data.number} перемещён`)
+            toast.success(`Локомотив ${data.series || ''} ${data.number} перемещён`)
         },
         onError: (err: Error) => toast.error(err.message)
     })
@@ -304,14 +307,15 @@ export default function MapPage() {
         onError: (err: Error) => toast.error(err.message)
     })
 
-    const handlePrefetchRemarks = (id: number) => {
+    const handlePrefetchRemarks = (number: string) => {
+        const encodedNum = encodeURIComponent(number);
         queryClient.prefetchQuery({
-            queryKey: ['locomotive', id.toString()],
-            queryFn: () => fetch(`/api/locomotives/${id}`).then(res => res.json())
+            queryKey: ['locomotive', number],
+            queryFn: () => fetch(`/api/locomotives/${encodedNum}`).then(res => res.json())
         })
         queryClient.prefetchQuery({
-            queryKey: ['locomotive-remarks', id.toString()],
-            queryFn: () => fetch(`/api/remarks/locomotive/${id}`).then(res => res.json())
+            queryKey: ['remarks', number],
+            queryFn: () => fetch(`/api/locomotives/${encodedNum}/remarks`).then(res => res.json())
         })
     }
 
@@ -326,6 +330,7 @@ export default function MapPage() {
         e.preventDefault()
         if (!addNumber) return
         addMutation.mutate({
+            series: addSeries,
             number: addNumber,
             status: addStatus,
             track: addTrack ? parseInt(addTrack) : null,
@@ -362,7 +367,8 @@ export default function MapPage() {
     }
 
     const filteredLocos = useMemo(() => {
-        return (locomotives || []).filter((l: Locomotive) => {
+        const list = Array.isArray(locomotives) ? locomotives : []
+        return list.filter((l: Locomotive) => {
             const matchSearch = l.number.toLowerCase().includes(debouncedSearch.toLowerCase())
             const matchStatus = statusFilter === "all" || l.status === statusFilter
             return matchSearch && matchStatus
@@ -379,15 +385,16 @@ export default function MapPage() {
     const handleDrop = (e: React.DragEvent<HTMLDivElement>, track: number, pos: number) => {
         e.preventDefault()
         if (!draggedId) return
+        const locoList = Array.isArray(locomotives) ? locomotives : []
 
-        const existing = (locomotives as Locomotive[]).find((l: Locomotive) => l.track === track && l.position === pos)
+        const existing = locoList.find((l: Locomotive) => l.track === track && l.position === pos)
         if (existing && existing.id.toString() !== draggedId) {
             toast.error("Позиция уже занята")
             setDraggedId(null)
             return
         }
 
-        const loco = locomotives.find((l: Locomotive) => l.id.toString() === draggedId)
+        const loco = locoList.find((l: Locomotive) => l.id.toString() === draggedId)
         if (!loco) { setDraggedId(null); return }
 
         if (loco.track === track && loco.position === pos) {
@@ -397,6 +404,7 @@ export default function MapPage() {
 
         setPendingMove({
             locoId: draggedId,
+            locoSeries: loco.series || "",
             locoNumber: loco.number,
             fromTrack: loco.track,
             fromPos: loco.position,
@@ -490,7 +498,8 @@ export default function MapPage() {
                                 Все
                             </button>
                             {Object.entries(statusLabels).map(([k, v]) => {
-                                const count = (locomotives as Locomotive[] || []).filter((loco: Locomotive) => loco.status === k && loco.track !== null).length
+                                const locoList = Array.isArray(locomotives) ? locomotives : []
+                                const count = locoList.filter((loco: Locomotive) => loco.status === k && loco.track !== null).length
                                 return (
                                     <button
                                         key={k}
@@ -630,57 +639,60 @@ export default function MapPage() {
                     </DialogHeader>
 
                     <form onSubmit={handleAddSubmit} className="space-y-4 pt-4">
-                        <div className="space-y-2 flex flex-col pt-2">
-                            <FloatingInput
-                                label="Номер локомотива *"
-                                required
-                                value={addNumber}
-                                onChange={e => setAddNumber(e.target.value)}
-                                placeholder="Например: 0001"
-                            />
-                            <Popover open={isNumberOpen} onOpenChange={setIsNumberOpen}>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        role="combobox"
-                                        aria-expanded={isNumberOpen}
-                                        className="w-full justify-between"
-                                    >
-                                        {addNumber
-                                            ? catalog.find((item: { number: string }) => item.number === addNumber)?.number || addNumber
-                                            : "Выберите номер из справочника..."}
-                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[400px] p-0" align="start">
-                                    <Command>
-                                        <CommandInput placeholder="Поиск номера..." />
-                                        <CommandList>
-                                            <CommandEmpty>Номер не найден в справочнике.</CommandEmpty>
-                                            <CommandGroup>
-                                                {catalog.map((item: { number: string }) => (
-                                                    <CommandItem
-                                                        key={item.number}
-                                                        value={item.number}
-                                                        onSelect={(currentValue: string) => {
-                                                            setAddNumber(currentValue === addNumber ? "" : currentValue)
-                                                            setIsNumberOpen(false)
-                                                        }}
-                                                    >
-                                                        <Check
-                                                            className={cn(
-                                                                "mr-2 h-4 w-4",
-                                                                addNumber === item.number ? "opacity-100" : "opacity-0"
-                                                            )}
-                                                        />
-                                                        {item.number}
-                                                    </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                        </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                            </Popover>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-1 space-y-2">
+                                <Label>Серия</Label>
+                                <Input
+                                    value={addSeries}
+                                    onChange={e => setAddSeries(e.target.value)}
+                                    placeholder="ТЭ33А"
+                                />
+                            </div>
+                            <div className="col-span-2 space-y-2">
+                                <Label>Номер</Label>
+                                <Popover open={isNumberOpen} onOpenChange={setIsNumberOpen}>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            role="combobox"
+                                            aria-expanded={isNumberOpen}
+                                            className="w-full justify-between"
+                                        >
+                                            {addNumber || "Выберите..."}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[400px] p-0" align="start">
+                                        <Command>
+                                            <CommandInput placeholder="Поиск в справочнике..." />
+                                            <CommandList>
+                                                <CommandEmpty>Ничего не найдено.</CommandEmpty>
+                                                <CommandGroup>
+                                                    {catalog.map((item: any) => (
+                                                        <CommandItem
+                                                            key={item.id}
+                                                            value={`${item.series} ${item.number}`}
+                                                            onSelect={() => {
+                                                                setAddSeries(item.series || "")
+                                                                setAddNumber(item.number)
+                                                                setIsNumberOpen(false)
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={cn(
+                                                                    "mr-2 h-4 w-4",
+                                                                    addNumber === item.number && addSeries === item.series ? "opacity-100" : "opacity-0"
+                                                                )}
+                                                            />
+                                                            {item.series} {item.number}
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
                         </div>
 
                         <div className="space-y-2">
@@ -752,175 +764,184 @@ export default function MapPage() {
             </Dialog >
 
             {/* Info Dialog */}
-            < Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen} >
+            <Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Локомотив #{selectedLoco?.number}</DialogTitle>
+                        <DialogTitle>Локомотив {selectedLoco?.series} {selectedLoco?.number}</DialogTitle>
                     </DialogHeader>
-                    {selectedLoco && (() => {
-                        const daysOnTrack = selectedLoco.track
-                            ? Math.floor((currentTime.getTime() - new Date(selectedLoco.created_at).getTime()) / (1000 * 60 * 60 * 24))
-                            : null
-                        return (
-                            <div className="space-y-4 py-4">
-                                <div className="grid grid-cols-2 gap-y-3 text-sm">
-                                    <div className="text-slate-500">Номер:</div>
-                                    <div className="font-medium">{selectedLoco.number}</div>
+                    {selectedLoco ? (
+                        (() => {
+                            const daysOnTrack = selectedLoco.track
+                                ? Math.floor((currentTime.getTime() - new Date(selectedLoco.created_at).getTime()) / (1000 * 60 * 60 * 24))
+                                : null
+                            return (
+                                <div className="space-y-4 py-4">
+                                    <div className="grid grid-cols-2 gap-y-3 text-sm">
+                                        <div className="text-slate-500">Серия:</div>
+                                        <div className="font-medium text-slate-700">{selectedLoco.series || '—'}</div>
 
-                                    <div className="text-slate-500">Статус:</div>
-                                    <div>
-                                        <Select
-                                            disabled={!(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
-                                            value={selectedLoco.status}
-                                            onValueChange={async (val) => {
-                                                try {
-                                                    const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
-                                                        method: "PUT",
-                                                        headers: { "Content-Type": "application/json" },
-                                                        body: JSON.stringify({ status: val })
-                                                    })
-                                                    if (res.ok) {
-                                                        toast.success(`Статус изменён на: ${statusLabels[val as LocoStatus]}`)
-                                                        setSelectedLoco({ ...selectedLoco, status: val as LocoStatus })
-                                                        queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+                                        <div className="text-slate-500">Номер:</div>
+                                        <div className="font-bold text-slate-900">{selectedLoco.number}</div>
 
-                                                        // Automatically open removal dialog if status is completed and loco is on track
-                                                        if (val === 'completed' && selectedLoco.track) {
-                                                            setRemoveReason("Выпуск из ремонта")
-                                                            setIsRemoveReasonOpen(true)
+                                        <div className="text-slate-500">Статус:</div>
+                                        <div>
+                                            <Select
+                                                disabled={!(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
+                                                value={selectedLoco.status}
+                                                onValueChange={async (val) => {
+                                                    if (!selectedLoco) return
+                                                    try {
+                                                        const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
+                                                            method: "PUT",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ status: val })
+                                                        })
+                                                        if (res.ok) {
+                                                            toast.success(`Статус изменён на: ${statusLabels[val as LocoStatus]}`)
+                                                            setSelectedLoco({ ...selectedLoco, status: val as LocoStatus })
+                                                            queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+
+                                                            // Automatically open removal dialog if status is completed and loco is on track
+                                                            if (val === 'completed' && selectedLoco.track) {
+                                                                setRemoveReason("Выпуск из ремонта")
+                                                                setIsRemoveReasonOpen(true)
+                                                            }
                                                         }
-                                                    }
-                                                } catch (e) { toast.error("Ошибка сети") }
-                                            }}
-                                        >
-                                            <SelectTrigger className="h-8 w-40">
-                                                <div className="flex items-center gap-2">
-                                                    <div className={`w-2 h-2 rounded-full ${statusColors[selectedLoco.status]}`} />
-                                                    <SelectValue />
+                                                    } catch (e) { toast.error("Ошибка сети") }
+                                                }}
+                                            >
+                                                <SelectTrigger className="h-8 w-40">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`w-2 h-2 rounded-full ${statusColors[selectedLoco.status]}`} />
+                                                        <SelectValue />
+                                                    </div>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {Object.entries(statusLabels).map(([k, v]) => (
+                                                        <SelectItem key={k} value={k}>
+                                                            <span className="flex items-center gap-2">
+                                                                <span className={`w-2 h-2 rounded-full ${statusColors[k as LocoStatus]}`} />
+                                                                {v}
+                                                            </span>
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="text-slate-500">Позиция:</div>
+                                        <div>{selectedLoco.track ? `Путь ${selectedLoco.track}, Слот ${selectedLoco.position}` : '—'}</div>
+
+                                        {daysOnTrack !== null && (
+                                            <>
+                                                <div className="text-slate-500">На пути:</div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                                    <span className={daysOnTrack > 7 ? 'text-red-600 font-semibold' : ''}>
+                                                        {daysOnTrack === 0 ? 'Сегодня' : `${daysOnTrack} дн.`}
+                                                    </span>
+                                                    {daysOnTrack > 7 && <span className="text-xs text-red-500">⚠️</span>}
                                                 </div>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {Object.entries(statusLabels).map(([k, v]) => (
-                                                    <SelectItem key={k} value={k}>
-                                                        <span className="flex items-center gap-2">
-                                                            <span className={`w-2 h-2 rounded-full ${statusColors[k as LocoStatus]}`} />
-                                                            {v}
-                                                        </span>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    <div className="text-slate-500">Позиция:</div>
-                                    <div>{selectedLoco.track ? `Путь ${selectedLoco.track}, Слот ${selectedLoco.position}` : '—'}</div>
-
-                                    {daysOnTrack !== null && (
-                                        <>
-                                            <div className="text-slate-500">На пути:</div>
-                                            <div className="flex items-center gap-1.5">
-                                                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                                                <span className={daysOnTrack > 7 ? 'text-red-600 font-semibold' : ''}>
-                                                    {daysOnTrack === 0 ? 'Сегодня' : `${daysOnTrack} дн.`}
-                                                </span>
-                                                {daysOnTrack > 7 && <span className="text-xs text-red-500">⚠️</span>}
-                                            </div>
-                                        </>
-                                    )}
-
-                                    <div className="text-slate-500">Добавлен в депо:</div>
-                                    <div>{new Date(selectedLoco.created_at).toLocaleString()}</div>
-
-                                    <div className="text-slate-500 font-semibold text-indigo-700">Время приемки:</div>
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            disabled={!!selectedLoco.acceptance_time || !(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
-                                            type="datetime-local"
-                                            className={cn(
-                                                "h-8 w-48 text-sm",
-                                                selectedLoco.acceptance_time ? "bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed" : "border-indigo-200"
-                                            )}
-                                            value={formatToDateTimeLocal(selectedLoco.acceptance_time)}
-                                            onChange={async (e) => {
-                                                const val = e.target.value || null;
-                                                try {
-                                                    const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
-                                                        method: "PUT",
-                                                        headers: { "Content-Type": "application/json" },
-                                                        body: JSON.stringify({ acceptance_time: val ? new Date(val).toISOString() : null })
-                                                    })
-                                                    if (res.ok) {
-                                                        const updatedLoco = await res.json();
-                                                        toast.success(`Время приемки обновлено`)
-                                                        setSelectedLoco(updatedLoco)
-                                                        queryClient.invalidateQueries({ queryKey: ['locomotives'] })
-                                                    }
-                                                } catch (err) { toast.error("Ошибка сети") }
-                                            }}
-                                        />
-                                        {selectedLoco.acceptance_time && (
-                                            <div className="h-7 bg-slate-900 text-indigo-300 border border-slate-700 shadow-inner rounded flex items-center gap-2 px-2.5 animate-pulse-subtle shrink-0">
-                                                <div className="relative flex h-1.5 w-1.5">
-                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
-                                                </div>
-                                                <span className="font-mono font-bold tracking-tight text-[10px] whitespace-nowrap uppercase">
-                                                    {getHoursSince(selectedLoco.acceptance_time)} ч
-                                                </span>
-                                            </div>
+                                            </>
                                         )}
-                                    </div>
 
-                                    <div className="text-slate-500">Тип ремонта:</div>
-                                    <div>
-                                        <Select
-                                            disabled={!(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
-                                            value={selectedLoco.repair_type || "none"}
-                                            onValueChange={async (val) => {
-                                                const finalVal = val === "none" ? null : val;
-                                                try {
-                                                    const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
-                                                        method: "PUT",
-                                                        headers: { "Content-Type": "application/json" },
-                                                        body: JSON.stringify({ repair_type: finalVal })
-                                                    })
-                                                    if (res.ok) {
-                                                        toast.success(`Тип ремонта обновлен`)
-                                                        setSelectedLoco({ ...selectedLoco, repair_type: finalVal })
-                                                        queryClient.invalidateQueries({ queryKey: ['locomotives'] })
-                                                    }
-                                                } catch (e) { toast.error("Ошибка сети") }
-                                            }}
-                                        >
-                                            <SelectTrigger className="h-8 w-40">
-                                                <SelectValue placeholder="—" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="none">—</SelectItem>
-                                                {repairTypes.map((rt: string) => <SelectItem key={rt} value={rt}>{rt}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                        <div className="text-slate-500">Добавлен в депо:</div>
+                                        <div>{new Date(selectedLoco.created_at).toLocaleString()}</div>
 
-                                    <div className="text-slate-500">План. выпуск:</div>
-                                    <div className="space-y-1">
+                                        <div className="text-slate-500 font-semibold text-indigo-700">Время приемки:</div>
                                         <div className="flex items-center gap-2">
                                             <Input
-                                                disabled={!(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
-                                                type="date"
-                                                className="h-8 w-40 text-sm"
-                                                value={selectedLoco.planned_release ? selectedLoco.planned_release.split('T')[0] : ""}
+                                                disabled={!!selectedLoco.acceptance_time || !(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
+                                                type="datetime-local"
+                                                className={cn(
+                                                    "h-8 w-48 text-sm border-slate-200",
+                                                    selectedLoco.acceptance_time ? "bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed" : "border-indigo-200"
+                                                )}
+                                                value={formatToDateTimeLocal(selectedLoco.acceptance_time)}
                                                 onChange={async (e) => {
+                                                    if (!selectedLoco) return
                                                     const val = e.target.value || null;
                                                     try {
                                                         const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
                                                             method: "PUT",
                                                             headers: { "Content-Type": "application/json" },
-                                                            body: JSON.stringify({ planned_release: val })
+                                                            body: JSON.stringify({ acceptance_time: val ? new Date(val).toISOString() : null })
                                                         })
                                                         if (res.ok) {
-                                                            toast.success(`Дата выпуска обновлена`)
-                                                            setSelectedLoco({ ...selectedLoco, planned_release: val })
+                                                            const updatedLoco = await res.json();
+                                                            toast.success(`Время приемки обновлено`)
+                                                            setSelectedLoco(updatedLoco)
+                                                            queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+                                                        }
+                                                    } catch (err) { toast.error("Ошибка сети") }
+                                                }}
+                                            />
+                                            {selectedLoco.acceptance_time && (
+                                                <div className="h-7 bg-slate-900 text-indigo-300 border border-slate-700 shadow-inner rounded flex items-center gap-2 px-2.5 animate-pulse-subtle shrink-0">
+                                                    <div className="relative flex h-1.5 w-1.5">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
+                                                    </div>
+                                                    <span className="font-mono font-bold tracking-tight text-[10px] whitespace-nowrap uppercase">
+                                                        {getHoursSince(selectedLoco.acceptance_time)} ч
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="text-slate-500">Тип ремонта:</div>
+                                        <div>
+                                            <Select
+                                                disabled={!(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
+                                                value={selectedLoco.repair_type || "none"}
+                                                onValueChange={async (val) => {
+                                                    if (!selectedLoco) return
+                                                    const finalVal = val === "none" ? null : val;
+                                                    try {
+                                                        const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
+                                                            method: "PUT",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ repair_type: finalVal })
+                                                        })
+                                                        if (res.ok) {
+                                                            const updatedLoco = await res.json()
+                                                            toast.success(`Тип ремонта обновлен`)
+                                                            setSelectedLoco(updatedLoco)
+                                                            queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+                                                        }
+                                                    } catch (e) { toast.error("Ошибка сети") }
+                                                }}
+                                            >
+                                                <SelectTrigger className="h-8 w-40 border-slate-200">
+                                                    <SelectValue placeholder="—" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">—</SelectItem>
+                                                    {repairTypes.map((rt: string) => <SelectItem key={rt} value={rt}>{rt}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="text-slate-500">План. выпуск:</div>
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                disabled={!(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
+                                                type="date"
+                                                className="h-8 w-40 text-sm border-slate-200"
+                                                value={selectedLoco.planned_release?.split('T')[0] || ""}
+                                                onChange={async (e) => {
+                                                    if (!selectedLoco) return
+                                                    const val = e.target.value || null
+                                                    try {
+                                                        const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
+                                                            method: "PUT",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ planned_release: val ? new Date(val).toISOString() : null })
+                                                        })
+                                                        if (res.ok) {
+                                                            const updatedLoco = await res.json()
+                                                            toast.success(`План. выпуск обновлен`)
+                                                            setSelectedLoco(updatedLoco)
                                                             queryClient.invalidateQueries({ queryKey: ['locomotives'] })
                                                         }
                                                     } catch (err) { toast.error("Ошибка сети") }
@@ -940,60 +961,68 @@ export default function MapPage() {
                                             })()}
                                         </div>
                                     </div>
-                                </div>
 
-                                <div className="flex flex-wrap gap-2 pt-4">
-                                    {user?.role === 'admin' && (
-                                        <Button variant="destructive" onClick={handleDelete} className="gap-2">
-                                            <Trash2 className="w-4 h-4" /> Удалить
+                                    <div className="flex flex-wrap gap-2 pt-4">
+                                        {user?.role === 'admin' && (
+                                            <Button variant="destructive" onClick={handleDelete} className="gap-2">
+                                                <Trash2 className="w-4 h-4" /> Удалить
+                                            </Button>
+                                        )}
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => { setIsInfoOpen(false); navigate(`/locomotive/${encodeURIComponent((selectedLoco.series + ' ' + selectedLoco.number).trim())}/remarks`) }}
+                                            onMouseEnter={() => handlePrefetchRemarks((selectedLoco.series + ' ' + selectedLoco.number).trim())}
+                                            className="gap-2"
+                                        >
+                                            <ListTodo className="w-4 h-4" /> Замечания
                                         </Button>
-                                    )}
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => { setIsInfoOpen(false); navigate(`/locomotive/${selectedLoco.id}/remarks`) }}
-                                        onMouseEnter={() => handlePrefetchRemarks(selectedLoco.id)}
-                                        className="gap-2"
-                                    >
-                                        <ListTodo className="w-4 h-4" /> Замечания
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => { setIsInfoOpen(false); navigate(`/history/${encodeURIComponent(selectedLoco.number)}`) }}
-                                        onMouseEnter={() => handlePrefetchHistory(selectedLoco.number)}
-                                        className="gap-2"
-                                    >
-                                        <History className="w-4 h-4" /> История
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => setQrLoco(selectedLoco)}
-                                        className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-                                    >
-                                        <QrCode className="w-4 h-4" /> QR код
-                                    </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => { setIsInfoOpen(false); navigate(`/history/${encodeURIComponent((selectedLoco.series + ' ' + selectedLoco.number).trim())}`) }}
+                                            onMouseEnter={() => handlePrefetchHistory((selectedLoco.series + ' ' + selectedLoco.number).trim())}
+                                            className="gap-2"
+                                        >
+                                            <History className="w-4 h-4" /> История
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setQrLoco(selectedLoco)}
+                                            className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                        >
+                                            <QrCode className="w-4 h-4" /> QR код
+                                        </Button>
 
+                                    </div>
                                 </div>
-                            </div>
-                        )
-                    })()}
+                            )
+                        })()
+                    ) : null}
                 </DialogContent>
-            </Dialog >
+            </Dialog>
 
             {/* QR Modal */}
             <Dialog open={!!qrLoco} onOpenChange={(open) => !open && setQrLoco(null)}>
                 <DialogContent className="sm:max-w-xs text-center border-slate-200 shadow-xl print-area">
-                    <DialogHeader><DialogTitle className="text-center">Тепловоз {qrLoco?.number}</DialogTitle></DialogHeader>
+                    <DialogHeader>
+                        <DialogTitle className="text-center">
+                            Тепловоз {qrLoco?.series} {qrLoco?.number}
+                        </DialogTitle>
+                    </DialogHeader>
                     <div className="flex flex-col items-center justify-center p-6 bg-white rounded-xl">
                         {qrLoco && (
-                            <QRCodeSVG
-                                value={`loco:${qrLoco.id}`}
-                                size={220}
-                                level="H"
-                                includeMargin={true}
-                                className="qr-code-svg-element"
-                            />
+                            <>
+                                <QRCodeSVG
+                                    value={`${window.location.origin}/locomotive/${encodeURIComponent((qrLoco.series + ' ' + qrLoco.number).trim())}/remarks`}
+                                    size={220}
+                                    level="H"
+                                    includeMargin={true}
+                                    className="qr-code-svg-element"
+                                />
+                                <p className="mt-4 font-black text-3xl tracking-tight text-slate-900 border-2 border-slate-900 rounded-lg px-6 py-2 uppercase">
+                                    {(qrLoco.series + ' ' + qrLoco.number).trim()}
+                                </p>
+                            </>
                         )}
-                        <p className="mt-4 font-black text-3xl tracking-tight text-slate-900 border-2 border-slate-900 rounded-lg px-6 py-2 uppercase">{qrLoco?.number}</p>
                     </div>
                     <p className="text-xs text-slate-500 mb-2">Распечатайте и наклейте в кабине</p>
                     <DialogFooter className="sm:justify-center">
@@ -1005,7 +1034,7 @@ export default function MapPage() {
             </Dialog>
 
             {/* Move Confirmation Dialog */}
-            < Dialog open={!!pendingMove} onOpenChange={(open) => { if (!open) setPendingMove(null) }}>
+            <Dialog open={!!pendingMove} onOpenChange={(open) => { if (!open) setPendingMove(null) }}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Подтвердите перемещение</DialogTitle>
@@ -1013,7 +1042,7 @@ export default function MapPage() {
                     {pendingMove && (
                         <div className="space-y-4 py-2">
                             <p className="text-sm text-slate-600">
-                                Вы хотите переместить локомотив <span className="font-bold text-slate-900">#{pendingMove.locoNumber}</span>:
+                                Вы хотите переместить локомотив <span className="font-bold text-slate-900">{pendingMove.locoSeries} {pendingMove.locoNumber}</span>:
                             </p>
                             <div className="flex items-center gap-3 text-sm">
                                 <div className="bg-slate-100 rounded-lg px-4 py-3 flex-1 text-center">
@@ -1033,17 +1062,17 @@ export default function MapPage() {
                         <Button onClick={confirmMove}>Подтвердить</Button>
                     </DialogFooter>
                 </DialogContent>
-            </Dialog >
+            </Dialog>
 
             {/* Remove Reason Dialog */}
-            < Dialog open={isRemoveReasonOpen} onOpenChange={setIsRemoveReasonOpen} >
+            <Dialog open={isRemoveReasonOpen} onOpenChange={setIsRemoveReasonOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Причина снятия с пути</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-3 pt-2">
                         <p className="text-sm text-slate-500">
-                            Локомотив <span className="font-semibold text-slate-900">#{selectedLoco?.number}</span> — выберите причину:
+                            Локомотив <span className="font-semibold text-slate-900">{selectedLoco?.series} {selectedLoco?.number}</span> — выберите причину:
                         </p>
                         <div className="grid gap-2">
                             {[
@@ -1077,7 +1106,7 @@ export default function MapPage() {
                         <Button onClick={confirmRemoveFromTrack} disabled={!removeReason}>Подтвердить</Button>
                     </DialogFooter>
                 </DialogContent>
-            </Dialog >
+            </Dialog>
 
 
         </div >
