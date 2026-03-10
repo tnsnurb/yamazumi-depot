@@ -1045,55 +1045,62 @@ app.get('/api/movements/users', requireAuth, async (req, res) => {
 // --- LOCOMOTIVE HISTORY ---
 
 app.get('/api/movements/locomotives', requireAuth, async (req, res) => {
-    try {
-        // Fetch all unique locomotives from movements table for the current location
-        let query = supabase
-            .from('movements')
-            .select('locomotive_id, locomotive_number, locomotive_series')
-            .not('locomotive_number', 'is', null);
+    const showAllLocations = req.query.all_locations === 'true' && req.session.user.is_global_admin;
 
-        if (req.session.user.active_location_id) {
-            query = query.eq('location_id', req.session.user.active_location_id);
-        }
+    // Fetch all unique locomotives from movements table for the current location
+    let query = supabase
+        .from('movements')
+        .select('locomotive_id, locomotive_number, locomotive_series')
+        .not('locomotive_number', 'is', null);
 
-        const { data: movements, error } = await query;
-        if (error) throw error;
+    if (!showAllLocations && req.session.user.active_location_id) {
+        query = query.eq('location_id', req.session.user.active_location_id);
+    }
 
-        // Deduplicate and get latest movement for each
-        const locoMap = new Map();
-        (movements || []).forEach(m => {
-            if (!locoMap.has(m.locomotive_number)) {
-                locoMap.set(m.locomotive_number, {
-                    number: m.locomotive_number,
-                    series: m.locomotive_series,
-                    id: m.locomotive_id
-                });
-            }
-        });
+    const { data: movements, error } = await query;
+    if (error) throw error;
 
-        // We also want current status from locomotives table
-        const { data: currentLocos, error: cError } = await supabase
-            .from('locomotives')
-            .select('id, number, series, status, track, position');
-
-        if (!cError && currentLocos) {
-            currentLocos.forEach(cl => {
-                if (locoMap.has(cl.number)) {
-                    const existing = locoMap.get(cl.number);
-                    locoMap.set(cl.number, { ...existing, ...cl, is_on_map: true });
-                } else {
-                    // Even if no movement yet, if it's on map, include it?
-                    // Usually movements table starts tracking from 'add'
-                    locoMap.set(cl.number, { ...cl, is_on_map: true });
-                }
+    // Deduplicate and get latest movement for each
+    const locoMap = new Map();
+    (movements || []).forEach(m => {
+        if (!locoMap.has(m.locomotive_number)) {
+            locoMap.set(m.locomotive_number, {
+                number: m.locomotive_number,
+                series: m.locomotive_series,
+                id: m.locomotive_id
             });
         }
+    });
 
-        const results = Array.from(locoMap.values()).sort((a, b) => a.number.localeCompare(b.number));
-        res.json(results);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    // We also want current status from locomotives table
+    let locoQuery = supabase
+        .from('locomotives')
+        .select('id, number, series, status, track, position');
+
+    if (!showAllLocations && req.session.user.active_location_id) {
+        locoQuery = locoQuery.eq('location_id', req.session.user.active_location_id);
     }
+
+    const { data: currentLocos, error: cError } = await locoQuery;
+
+    if (!cError && currentLocos) {
+        currentLocos.forEach(cl => {
+            if (locoMap.has(cl.number)) {
+                const existing = locoMap.get(cl.number);
+                locoMap.set(cl.number, { ...existing, ...cl, is_on_map: true });
+            } else {
+                // Even if no movement yet, if it's on map, include it?
+                // Usually movements table starts tracking from 'add'
+                locoMap.set(cl.number, { ...cl, is_on_map: true });
+            }
+        });
+    }
+
+    const results = Array.from(locoMap.values()).sort((a, b) => a.number.localeCompare(b.number));
+    res.json(results);
+} catch (err) {
+    res.status(500).json({ error: err.message });
+}
 });
 
 app.get('/api/movements/by-locomotive/:number', requireAuth, async (req, res) => {
