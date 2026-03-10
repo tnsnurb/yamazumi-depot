@@ -22,21 +22,15 @@ ALTER TABLE "public"."movements" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."users" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."audit_logs" ENABLE ROW LEVEL SECURITY;
 
--- 2. Drop existing policies to avoid conflicts
+-- 2. Drop all existing policies in public schema to avoid conflicts
 DO $$ 
 DECLARE 
-    tbl RECORD;
+    pol RECORD;
 BEGIN 
-    FOR tbl IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') 
+    FOR pol IN (SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public') 
     LOOP 
-        EXECUTE 'DROP POLICY IF EXISTS "Allow All" ON "public"."' || tbl.tablename || '"';
-        EXECUTE 'DROP POLICY IF EXISTS "Allow public read" ON "public"."' || tbl.tablename || '"';
-        EXECUTE 'DROP POLICY IF EXISTS "Admins full access" ON "public"."' || tbl.tablename || '"';
-        EXECUTE 'DROP POLICY IF EXISTS "Auth users read" ON "public"."' || tbl.tablename || '"';
-        EXECUTE 'DROP POLICY IF EXISTS "Auth users insert" ON "public"."' || tbl.tablename || '"';
-        EXECUTE 'DROP POLICY IF EXISTS "Auth users update" ON "public"."' || tbl.tablename || '"';
-        EXECUTE 'DROP POLICY IF EXISTS "Admins delete" ON "public"."' || tbl.tablename || '"';
-    END LOOP;
+        EXECUTE format('DROP POLICY IF EXISTS %I ON "public".%I', pol.policyname, pol.tablename);
+    END LOOP; 
 END $$;
 
 -- ==========================================
