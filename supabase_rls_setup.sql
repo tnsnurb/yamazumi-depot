@@ -76,8 +76,8 @@ END $$;
 -- --- SENSITIVE TABLES (Admin only access) ---
 -- Tables: users, audit_logs
 
--- Users table: Authenticated users can read (to see names), but only admins can manage
-CREATE POLICY "Auth users read users" ON "public"."users" FOR SELECT TO authenticated USING (true);
+-- Users table: Anyone can read (to see names on login page), but only admins can manage
+CREATE POLICY "Public users read users" ON "public"."users" FOR SELECT USING (true);
 CREATE POLICY "Admins manage users" ON "public"."users" FOR ALL TO authenticated USING (auth.jwt() ->> 'role' = 'admin');
 
 -- Audit logs: Admins can see everything, system can write
