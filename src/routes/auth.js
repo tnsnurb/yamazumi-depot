@@ -29,8 +29,8 @@ router.get('/me', (req, res) => {
     if (req.session.user) {
         // Double check sanitization for existing sessions
         const sanitizedUser = { ...req.session.user };
-        delete sanitizedUser.password;
-        delete sanitizedUser.pin_code;
+        const fieldsToRemove = ['password', 'pin_code', 'uuid', 'barcode', 'created_at', 'is_active', 'email'];
+        fieldsToRemove.forEach(field => delete sanitizedUser[field]);
 
         res.json({ authenticated: true, user: sanitizedUser });
     } else {
@@ -75,9 +75,9 @@ router.post('/login/terminal', async (req, res) => {
 
         user.permissions = roleData || {};
 
-        // Sanitize sensitive data
-        delete user.password;
-        delete user.pin_code;
+        // Sanitize sensitive & technical data
+        const fieldsToRemove = ['password', 'pin_code', 'uuid', 'barcode', 'created_at', 'is_active', 'email'];
+        fieldsToRemove.forEach(field => delete user[field]);
 
         req.session.user = user;
         req.session.login_type = 'terminal';
@@ -135,10 +135,10 @@ router.post('/login', async (req, res) => {
             req.session.user = dbUser;
         }
 
-        // Sanitize sensitive data before sending to client or storing in cookie-session
+        // Sanitize sensitive & technical data before sending to client or storing in cookie-session
         if (req.session.user) {
-            delete req.session.user.password;
-            delete req.session.user.pin_code;
+            const fieldsToRemove = ['password', 'pin_code', 'uuid', 'barcode', 'created_at', 'is_active', 'email'];
+            fieldsToRemove.forEach(field => delete req.session.user[field]);
         }
 
         req.session.access_token = token;

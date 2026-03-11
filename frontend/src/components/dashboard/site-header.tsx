@@ -19,7 +19,6 @@ export function SiteHeader() {
 
     useEffect(() => {
         if (authUser) {
-            console.log("[DEBUG] SiteHeader authUser:", authUser);
             setUser(authUser)
             if (authUser.active_location_id) {
                 setActiveLocation(String(authUser.active_location_id))
