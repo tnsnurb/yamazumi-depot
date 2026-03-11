@@ -54,6 +54,7 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
     const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({})
     const [selectedGroup, setSelectedGroup] = useState<string>("all")
+    const [statusFilter, setStatusFilter] = useState<string>("all")
 
     // Details states
     const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
@@ -379,8 +380,15 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
         }
     })
 
-    // Group items
-    const groupedItems = items.reduce((acc: Record<string, ChecklistItem[]>, item: ChecklistItem) => {
+    // Group items (apply status filters here)
+    const itemsToDisplay = items.filter(item => {
+        if (statusFilter === "all") return true;
+        if (statusFilter === "not_completed") return !item.is_completed;
+        if (statusFilter === "for_review") return item.is_completed && !item.verified_at;
+        return true;
+    });
+
+    const groupedItems = itemsToDisplay.reduce((acc: Record<string, ChecklistItem[]>, item: ChecklistItem) => {
         const key = item.template_item?.group_name || 'Без группы'
         if (!acc[key]) acc[key] = []
         acc[key].push(item)
@@ -462,21 +470,21 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
                 )}
             </div>
 
-            {/* Group Filter */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+            {/* Group and Status Filter */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1.5 rounded-md shadow-sm border border-slate-200">
                         <LayoutGrid className="w-4 h-4 text-slate-500" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-bold text-slate-700">Фильтр по группе</h3>
-                        <p className="text-[10px] text-slate-400 font-medium">Выберите раздел для быстрого доступа</p>
+                        <h3 className="text-sm font-bold text-slate-700">Фильтры задач</h3>
+                        <p className="text-[10px] text-slate-400 font-medium">Выберите раздел или статус</p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
                     <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-                        <SelectTrigger className="w-full sm:w-[280px] h-9 bg-white border-slate-200 text-xs font-semibold">
+                        <SelectTrigger className="w-full sm:w-[220px] h-9 bg-white border-slate-200 text-xs font-semibold">
                             <SelectValue placeholder="Выберите группу" />
                         </SelectTrigger>
                         <SelectContent>
@@ -487,12 +495,27 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
                         </SelectContent>
                     </Select>
 
-                    {selectedGroup !== "all" && (
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-full sm:w-[220px] h-9 bg-white border-slate-200 text-xs font-semibold">
+                            <SelectValue placeholder="Статус выполнения" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all" className="text-xs font-semibold">Все пункты</SelectItem>
+                            <SelectItem value="not_completed" className="text-xs font-semibold text-amber-600">Не выполнено (Слесарю)</SelectItem>
+                            <SelectItem value="for_review" className="text-xs font-semibold text-indigo-600">На проверку (Мастеру)</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    {(selectedGroup !== "all" || statusFilter !== "all") && (
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setSelectedGroup("all")}
-                            className="h-9 px-3 text-slate-400 hover:text-indigo-600 transition-colors"
+                            onClick={() => {
+                                setSelectedGroup("all")
+                                setStatusFilter("all")
+                            }}
+                            className="h-9 px-3 text-slate-400 hover:text-red-500 transition-colors shrink-0"
+                            title="Сбросить фильтры"
                         >
                             <FilterX className="w-4 h-4" />
                         </Button>

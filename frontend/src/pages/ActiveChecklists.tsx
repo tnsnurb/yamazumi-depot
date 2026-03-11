@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Search, ClipboardCheck, ChevronRight, Train } from "lucide-react"
+import { Search, ClipboardCheck, ChevronRight, Train, FilterX } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -14,6 +14,8 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 
 interface ActiveChecklist {
     id: string;
@@ -35,6 +37,8 @@ export default function ActiveChecklists() {
     const [checklists, setChecklists] = useState<ActiveChecklist[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
+    const [selectedSeries, setSelectedSeries] = useState("all")
+    const [selectedTemplate, setSelectedTemplate] = useState("all")
 
     useEffect(() => {
         fetchActiveChecklists()
@@ -55,11 +59,19 @@ export default function ActiveChecklists() {
         }
     }
 
-    const filtered = checklists.filter(cl =>
-        cl.locomotive.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cl.locomotive.series.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cl.template.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const uniqueSeries = Array.from(new Set(checklists.map(c => c.locomotive.series))).sort()
+    const uniqueTemplates = Array.from(new Set(checklists.map(c => c.template.name))).sort()
+
+    const filtered = checklists.filter(cl => {
+        const matchesSearch = cl.locomotive.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            cl.locomotive.series.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            cl.template.name.toLowerCase().includes(searchQuery.toLowerCase())
+
+        const matchesSeries = selectedSeries === "all" || cl.locomotive.series === selectedSeries;
+        const matchesTemplate = selectedTemplate === "all" || cl.template.name === selectedTemplate;
+
+        return matchesSearch && matchesSeries && matchesTemplate;
+    })
 
     return (
         <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
@@ -73,14 +85,55 @@ export default function ActiveChecklists() {
                             <p className="text-slate-500 text-[11px] md:text-sm mt-1 font-medium">Прогресс выполнения технического обслуживания</p>
                         </div>
 
-                        <div className="relative w-full md:max-w-md">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-slate-400" />
-                            <input
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Поиск по тепловозу или шаблону..."
-                                className="w-full pl-11 pr-4 h-12 md:h-11 bg-white rounded-xl border border-slate-200 shadow-sm text-sm md:text-base focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all focus:shadow-md"
-                            />
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                <Select value={selectedSeries} onValueChange={setSelectedSeries}>
+                                    <SelectTrigger className="w-full sm:w-[140px] h-11 bg-white border-slate-200">
+                                        <SelectValue placeholder="Серия" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Все серии</SelectItem>
+                                        {uniqueSeries.map(s => (
+                                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+
+                                <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                                    <SelectTrigger className="w-full sm:w-[160px] h-11 bg-white border-slate-200">
+                                        <SelectValue placeholder="Вид ремонта" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Все виды</SelectItem>
+                                        {uniqueTemplates.map(t => (
+                                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+
+                                {(selectedSeries !== "all" || selectedTemplate !== "all") && (
+                                    <Button
+                                        variant="outline"
+                                        className="h-11 px-3 text-slate-400 border-slate-200 hover:text-red-500 hover:bg-red-50 shrink-0"
+                                        onClick={() => {
+                                            setSelectedSeries("all");
+                                            setSelectedTemplate("all");
+                                        }}
+                                    >
+                                        <FilterX className="w-4 h-4" />
+                                    </Button>
+                                )}
+                            </div>
+
+                            <div className="relative w-full sm:w-[250px]">
+                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-slate-400" />
+                                <input
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Поиск по номеру..."
+                                    className="w-full pl-11 pr-4 h-11 bg-white rounded-xl border border-slate-200 shadow-sm text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all focus:shadow-md"
+                                />
+                            </div>
                         </div>
                     </div>
 
