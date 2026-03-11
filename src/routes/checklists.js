@@ -241,7 +241,7 @@ router.get('/active', requireAuth, async (req, res) => {
     try {
         const locationId = req.session.user.active_location_id;
 
-        // 1. Get all active instances for the current location
+        // 1. Get all active instances for the current location with pre-calculated progress
         let query = supabase
             .from('checklist_instances')
             .select(`
@@ -249,53 +249,27 @@ router.get('/active', requireAuth, async (req, res) => {
                 status, 
                 created_at,
                 locomotive:locomotive_id (id, number, series, location_id),
-                template:template_id (name)
+                template:template_id (name),
+                progress:view_active_checklist_progress!instance_id (total_items, completed_items)
             `)
             .neq('status', 'completed');
-
-        if (locationId) {
-            // Filter by location if not global admin / or based on user's location
-            // Since we join locomotive, we can filter by its location_id
-            // However, regular .eq on joined table might need special syntax or just filter in JS for simplicity if volume is low,
-            // but let's try to filter in DB if possible.
-        }
 
         const { data: instances, error } = await query.order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // Filter by location in JS to be safe with Supabase join filtering if it's tricky
-        const filteredInstances = locationId
-            ? instances.filter(i => i.locomotive?.location_id === locationId)
-            : instances;
-
-        if (filteredInstances.length === 0) {
-            return res.json([]);
-        }
-
-        // 2. For each instance, get item counts
-        const instanceIds = filteredInstances.map(i => i.id);
-        const { data: itemCounts, error: countsError } = await supabase
-            .from('checklist_instance_items')
-            .select('instance_id, is_completed')
-            .in('instance_id', instanceIds);
-
-        if (countsError) throw countsError;
-
-        // Group counts by instance
-        const countsMap = itemCounts.reduce((acc, item) => {
-            if (!acc[item.instance_id]) acc[item.instance_id] = { total: 0, completed: 0 };
-            acc[item.instance_id].total++;
-            if (item.is_completed) acc[item.instance_id].completed++;
-            return acc;
-        }, {});
-
-        // Combine
-        const result = filteredInstances.map(i => ({
-            ...i,
-            total_items: countsMap[i.id]?.total || 0,
-            completed_items: countsMap[i.id]?.completed || 0
-        }));
+        // 2. Filter by location and flatten progress data
+        const result = instances
+            .filter(i => !locationId || i.locomotive?.location_id === locationId)
+            .map(i => ({
+                id: i.id,
+                status: i.status,
+                created_at: i.created_at,
+                locomotive: i.locomotive,
+                template: i.template,
+                total_items: i.progress?.total_items || 0,
+                completed_items: i.progress?.completed_items || 0
+            }));
 
         res.json(result);
     } catch (err) {
