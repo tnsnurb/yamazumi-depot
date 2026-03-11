@@ -241,7 +241,7 @@ router.get('/active', requireAuth, async (req, res) => {
     try {
         const locationId = req.session.user.active_location_id;
 
-        // 1. Get all active instances
+        // 1. Get all active instances linked to an active repair session
         const { data: instances, error: instancesError } = await supabase
             .from('checklist_instances')
             .select(`
@@ -249,9 +249,11 @@ router.get('/active', requireAuth, async (req, res) => {
                 status, 
                 created_at,
                 locomotive:locomotive_id (id, number, series, location_id),
-                template:template_id (name)
+                template:template_id (name),
+                repair_sessions!inner(status)
             `)
             .neq('status', 'completed')
+            .eq('repair_sessions.status', 'active')
             .order('created_at', { ascending: false });
 
         if (instancesError) throw instancesError;
@@ -299,12 +301,13 @@ router.get('/locomotive/:locomotiveId', requireAuth, async (req, res) => {
     try {
         const locomotiveId = req.params.locomotiveId;
 
-        // Find the active instance for this locomotive
+        // Find the active instance for this locomotive in the current active session
         const { data: instance, error: instanceError } = await supabase
             .from('checklist_instances')
-            .select('*, template:template_id(name)')
+            .select('*, template:template_id(name), repair_sessions!inner(status)')
             .eq('locomotive_id', locomotiveId)
-            // Just get the most recent one if multiple exist for some reason
+            .eq('repair_sessions.status', 'active')
+            // Just get the most recent one if multiple exist
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();

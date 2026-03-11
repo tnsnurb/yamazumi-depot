@@ -616,8 +616,38 @@ async function resolveLocoId(id) {
     return byNum ? byNum.id : null;
 }
 
+// Helper to get or create active repair session
+async function getOrCreateActiveSession(locoId, userId, acceptanceTime) {
+    let { data: session } = await supabase
+        .from('repair_sessions')
+        .select('id')
+        .eq('locomotive_id', locoId)
+        .eq('status', 'active')
+        .maybeSingle();
+
+    if (session) return session.id;
+
+    try {
+        const { data: newSession, error } = await supabase
+            .from('repair_sessions')
+            .insert([{
+                locomotive_id: locoId,
+                start_date: acceptanceTime || new Date().toISOString(),
+                status: 'active',
+                created_by: userId
+            }])
+            .select()
+            .single();
+        if (error) throw error;
+        return newSession.id;
+    } catch (err) {
+        console.error("Failed to create repair session:", err);
+        return null;
+    }
+}
+
 // Helper to find or create checklist for a locomotive
-async function ensureChecklistForLocomotive(locoId, series, repairTypeInput) {
+async function ensureChecklistForLocomotive(locoId, series, repairTypeInput, sessionId) {
     if (!repairTypeInput || repairTypeInput === 'none') return;
 
     try {
@@ -659,7 +689,8 @@ async function ensureChecklistForLocomotive(locoId, series, repairTypeInput) {
             .insert([{
                 locomotive_id: locoId,
                 template_id: template.id,
-                status: 'in_progress'
+                status: 'in_progress',
+                session_id: sessionId
             }])
             .select()
             .single();
@@ -762,9 +793,15 @@ app.post('/api/locomotives', requirePermission('can_edit_catalog'), async (req, 
 
         if (error) throw error;
 
+        // Auto-create/get repair session
+        let sessionId = null;
+        if (status !== 'completed') {
+            sessionId = await getOrCreateActiveSession(loco.id, req.session.user.id, loco.acceptance_time);
+        }
+
         // Auto-create checklist
         if (repair_type && (status === 'repair' || !status)) {
-            await ensureChecklistForLocomotive(loco.id, cleanSeries, repair_type);
+            await ensureChecklistForLocomotive(loco.id, cleanSeries, repair_type, sessionId);
         }
 
         // Log movement
@@ -921,6 +958,15 @@ app.put('/api/locomotives/:id', requirePermission('can_edit_catalog'), async (re
             moved_by: req.session.user.full_name || req.session.user.username,
             location_id: req.session.user.active_location_id || 1
         });
+
+        // Close active session if changing to completed
+        if (status === 'completed') {
+            await supabase
+                .from('repair_sessions')
+                .update({ status: 'completed', end_date: new Date().toISOString() })
+                .eq('locomotive_id', loco.id)
+                .eq('status', 'active');
+        }
     }
 
     // Auto-create checklist if status changed to repair or repair_type updated
@@ -928,7 +974,8 @@ app.put('/api/locomotives/:id', requirePermission('can_edit_catalog'), async (re
         const finalSeries = updates.series || loco.series;
         const finalRepairType = updates.repair_type || loco.repair_type;
         if (finalRepairType) {
-            await ensureChecklistForLocomotive(loco.id, finalSeries, finalRepairType);
+            const sessionId = await getOrCreateActiveSession(loco.id, req.session.user.id, loco.acceptance_time);
+            await ensureChecklistForLocomotive(loco.id, finalSeries, finalRepairType, sessionId);
         }
     }
 
@@ -1123,7 +1170,15 @@ app.get('/api/locomotives/:id/remarks', requireAuth, async (req, res) => {
     const locoId = await resolveLocoId(req.params.id);
     if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
 
-    const { data: remarks, error } = await supabase
+    // Find active session
+    let { data: session } = await supabase
+        .from('repair_sessions')
+        .select('id')
+        .eq('locomotive_id', locoId)
+        .eq('status', 'active')
+        .maybeSingle();
+
+    let query = supabase
         .from('locomotive_remarks')
         .select(`
             *,
@@ -1136,7 +1191,15 @@ app.get('/api/locomotives/:id/remarks', requireAuth, async (req, res) => {
                 username
             )
         `)
-        .eq('locomotive_id', locoId)
+        .eq('locomotive_id', locoId);
+
+    if (session) {
+        query = query.eq('session_id', session.id);
+    } else {
+        query = query.is('session_id', null); // Hide old remarks if no active session
+    }
+
+    const { data: remarks, error } = await query
         .order('is_completed', { ascending: true })
         .order('created_at', { ascending: false });
 
@@ -1155,10 +1218,13 @@ app.post('/api/locomotives/:id/remarks', requirePermission('can_edit_catalog'), 
 
     const { data: loco } = await supabase.from('locomotives').select('number').eq('id', locoId).maybeSingle();
 
+    const sessionId = await getOrCreateActiveSession(locoId, req.session.user.id, null);
+
     const { data, error } = await supabase
         .from('locomotive_remarks')
         .insert({
             locomotive_id: locoId,
+            session_id: sessionId,
             text,
             priority: priority || 'medium',
             category: category || null,
@@ -1218,11 +1284,14 @@ app.post('/api/locomotives/:id/remarks/template', requirePermission('can_edit_ca
         const loco = locoRes.data;
         if (!isIdNumeric) locoId = loco.id;
 
+        const sessionId = await getOrCreateActiveSession(locoId, req.session.user.id, null);
+
         // Insert remark and get returned data
         const { data, error } = await supabase
             .from('locomotive_remarks')
             .insert({
                 locomotive_id: locoId,
+                session_id: sessionId,
                 text: template.text,
                 priority: template.priority || 'medium',
                 category: template.category || null,
@@ -1269,8 +1338,11 @@ app.post('/api/locomotives/:id/remarks/bulk', requirePermission('can_edit_catalo
     // Fetch loco number for logging
     const { data: loco } = await supabase.from('locomotives').select('number').eq('id', locoId).maybeSingle();
 
+    const sessionId = await getOrCreateActiveSession(locoId, req.session.user.id, null);
+
     const payload = texts.map(t => ({
         locomotive_id: locoId,
+        session_id: sessionId,
         text: t,
         created_by: req.session.user.id
     }));
