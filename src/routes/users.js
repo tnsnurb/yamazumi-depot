@@ -112,12 +112,14 @@ router.post('/', requireAdmin, async (req, res) => {
         });
 
         // 3. Update UUID in public.users to link effectively
-        await supabase
+        const { data: finalUser } = await supabase
             .from('users')
             .update({ uuid: authUser.user.id })
-            .eq('id', newUser.id);
+            .eq('id', newUser.id)
+            .select('id, username, full_name, role, created_at, barcode, is_active, location_id, specialization, total_points')
+            .single();
 
-        res.json({ ...newUser, uuid: authUser.user.id });
+        res.json(finalUser);
     } catch (err) {
         console.error("❌ Critical error in user creation:", err);
         res.status(500).json({ error: err.message });

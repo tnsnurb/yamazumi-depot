@@ -69,6 +69,11 @@ router.post('/login/terminal', async (req, res) => {
             .maybeSingle();
 
         user.permissions = roleData || {};
+
+        // Sanitize sensitive data
+        delete user.password;
+        delete user.pin_code;
+
         req.session.user = user;
         req.session.login_type = 'terminal';
 
@@ -123,6 +128,12 @@ router.post('/login', async (req, res) => {
             }
             dbUser.permissions = roleData || {};
             req.session.user = dbUser;
+        }
+
+        // Sanitize sensitive data before sending to client or storing in cookie-session
+        if (req.session.user) {
+            delete req.session.user.password;
+            delete req.session.user.pin_code;
         }
 
         req.session.access_token = token;
