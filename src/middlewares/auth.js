@@ -24,7 +24,7 @@ async function requireAuth(req, res, next) {
                 // Fetch full user profile from public.users
                 const { data: user, error: userError } = await supabase
                     .from('users')
-                    .select('id, username, full_name, role, avatar_url, pin_code, location_id, is_global_admin, specialization, total_points')
+                    .select('id, username, full_name, role, avatar_url, location_id, is_global_admin, specialization, total_points')
                     .eq('uuid', authUser.id)
                     .maybeSingle();
 

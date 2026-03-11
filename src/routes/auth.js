@@ -27,7 +27,12 @@ const upload = multer({
 // GET /api/me
 router.get('/me', (req, res) => {
     if (req.session.user) {
-        res.json({ authenticated: true, user: req.session.user });
+        // Double check sanitization for existing sessions
+        const sanitizedUser = { ...req.session.user };
+        delete sanitizedUser.password;
+        delete sanitizedUser.pin_code;
+
+        res.json({ authenticated: true, user: sanitizedUser });
     } else {
         res.json({ authenticated: false, user: null });
     }
@@ -248,10 +253,16 @@ router.put('/profile', requireAuth, async (req, res) => {
 
         if (error) return res.status(500).json({ error: error.message });
 
-        // Update session
-        if (pin_code !== undefined) {
-            req.session.user.pin_code = pin_code || null;
+        // Remove pin_code from response
+        if (data) delete data.pin_code;
+
+        // Update session (SENSITIVE: Never store raw PIN in session)
+        if (req.session.user) {
+            // We don't store pin_code in session anymore
+            delete req.session.user.password;
+            delete req.session.user.pin_code;
         }
+
         res.json({ success: true, user: data });
     } catch (err) {
         res.status(500).json({ error: 'Ошибка сервера' });
@@ -305,6 +316,9 @@ router.post('/login/barcode', async (req, res) => {
         if (error) throw error;
 
         if (user) {
+            // Sanitize
+            delete user.password;
+            delete user.pin_code;
             res.json({ found: true, user });
         } else {
             res.json({ found: false, error: 'Пользователь не найден' });
