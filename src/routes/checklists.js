@@ -241,35 +241,51 @@ router.get('/active', requireAuth, async (req, res) => {
     try {
         const locationId = req.session.user.active_location_id;
 
-        // 1. Get all active instances for the current location with pre-calculated progress
-        let query = supabase
+        // 1. Get all active instances
+        const { data: instances, error: instancesError } = await supabase
             .from('checklist_instances')
             .select(`
                 id, 
                 status, 
                 created_at,
                 locomotive:locomotive_id (id, number, series, location_id),
-                template:template_id (name),
-                progress:view_active_checklist_progress!instance_id (total_items, completed_items)
+                template:template_id (name)
             `)
-            .neq('status', 'completed');
+            .neq('status', 'completed')
+            .order('created_at', { ascending: false });
 
-        const { data: instances, error } = await query.order('created_at', { ascending: false });
+        if (instancesError) throw instancesError;
 
-        if (error) throw error;
+        if (!instances || instances.length === 0) return res.json([]);
 
-        // 2. Filter by location and flatten progress data
-        const result = instances
-            .filter(i => !locationId || i.locomotive?.location_id === locationId)
-            .map(i => ({
-                id: i.id,
-                status: i.status,
-                created_at: i.created_at,
-                locomotive: i.locomotive,
-                template: i.template,
-                total_items: i.progress?.total_items || 0,
-                completed_items: i.progress?.completed_items || 0
-            }));
+        // 2. Filter by location in Node.js
+        const filteredInstances = instances.filter(i => !locationId || i.locomotive?.location_id === locationId);
+
+        if (filteredInstances.length === 0) return res.json([]);
+
+        // 3. Fetch pre-calculated progress from view for ONLY the filtered IDs
+        const instanceIds = filteredInstances.map(i => i.id);
+        const { data: progressData, error: progressError } = await supabase
+            .from('view_active_checklist_progress')
+            .select('*')
+            .in('instance_id', instanceIds);
+
+        // If view doesn't exist yet or has error, handle gracefully
+        const progressMap = (progressData || []).reduce((acc, p) => {
+            acc[p.instance_id] = p;
+            return acc;
+        }, {});
+
+        // 4. Combine results
+        const result = filteredInstances.map(i => ({
+            id: i.id,
+            status: i.status,
+            created_at: i.created_at,
+            locomotive: i.locomotive,
+            template: i.template,
+            total_items: parseInt(progressMap[i.id]?.total_items || 0),
+            completed_items: parseInt(progressMap[i.id]?.completed_items || 0)
+        }));
 
         res.json(result);
     } catch (err) {
