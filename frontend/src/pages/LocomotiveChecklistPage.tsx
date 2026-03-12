@@ -4,8 +4,11 @@ import { ChevronLeft, ClipboardCheck } from "lucide-react"
 import { LocomotiveChecklist } from "@/components/locomotive/LocomotiveChecklist"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { LocomotiveHistory } from "@/components/locomotive/LocomotiveHistory"
 
 interface Locomotive {
+    id: number
     number: string
     series: string
 }
@@ -62,11 +65,8 @@ export default function LocomotiveChecklistPage() {
                             </div>
                             <div>
                                 <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight leading-none">
-                                    Чек-лист ТО
+                                    Локомотив {loading ? "..." : `${locomotive?.series}-${locomotive?.number}`}
                                 </h1>
-                                <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
-                                    {loading ? "Загрузка..." : `${locomotive?.series}-${locomotive?.number}`}
-                                </p>
                             </div>
                         </div>
                     </div>
@@ -75,8 +75,25 @@ export default function LocomotiveChecklistPage() {
 
             {/* Content */}
             <main className="flex-1 overflow-auto p-4 md:p-8">
-                <div className="max-w-7xl mx-auto">
-                    <LocomotiveChecklist locomotiveId={parseInt(id)} />
+                <div className="max-w-7xl mx-auto h-full">
+                    {locomotive ? (
+                        <Tabs defaultValue="active" className="w-full h-full flex flex-col">
+                            <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+                                <TabsTrigger value="active">Текущий ремонт</TabsTrigger>
+                                <TabsTrigger value="history">История ремонтов</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="active" className="flex-1 mt-4">
+                                <LocomotiveChecklist locomotiveId={locomotive.id} />
+                            </TabsContent>
+                            <TabsContent value="history" className="flex-1 mt-4">
+                                <LocomotiveHistory locomotiveId={locomotive.id} />
+                            </TabsContent>
+                        </Tabs>
+                    ) : (
+                        <div className="flex h-40 items-center justify-center text-slate-500">
+                            {loading ? "Загрузка..." : "Локомотив не найден"}
+                        </div>
+                    )}
                 </div>
             </main>
         </div>

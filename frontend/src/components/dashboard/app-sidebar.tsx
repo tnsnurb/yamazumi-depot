@@ -53,6 +53,16 @@ const navMain = [
         url: "/checklists",
         icon: ClipboardCheck,
     },
+    {
+        title: "История ремонтов",
+        url: "/global-history",
+        icon: History,
+    },
+    {
+        title: "Активные ремонты",
+        url: "/active-locomotives",
+        icon: ListTodo,
+    },
 ]
 
 const navSecondary = [

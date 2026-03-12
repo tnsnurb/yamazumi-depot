@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { LogOut, Map as MapIcon, ClipboardList, Users, BarChart3, UserCircle, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 
 interface User {
@@ -20,6 +21,7 @@ export function Header() {
     const navigate = useNavigate();
     const location = useLocation();
     const { user: authUser } = useAuth();
+    const queryClient = useQueryClient();
     const [user, setUser] = useState<User | null>(null);
     const [locations, setLocations] = useState<{ id: number; name: string }[]>([]);
     const [activeLocation, setActiveLocation] = useState<string>("");
@@ -41,12 +43,18 @@ export function Header() {
 
     const handleLocationChange = async (val: string) => {
         setActiveLocation(val);
-        await fetch('/api/me/active-location', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ location_id: val === 'all' ? null : parseInt(val) })
-        });
-        window.location.reload();
+        try {
+            await fetch('/api/me/active-location', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ location_id: val === 'all' ? null : parseInt(val) })
+            });
+
+            // Reactive update: invalidate all queries to refresh data based on new location
+            await queryClient.invalidateQueries();
+        } catch (e) {
+            console.error("Error updating location:", e);
+        }
     };
 
     const handleLogout = async () => {

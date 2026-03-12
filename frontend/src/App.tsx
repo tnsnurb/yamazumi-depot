@@ -14,8 +14,12 @@ const LocomotiveRemarks = lazy(() => import("./pages/LocomotiveRemarks"))
 const LocomotiveChecklistPage = lazy(() => import("./pages/LocomotiveChecklistPage"))
 const ActiveChecklists = lazy(() => import("./pages/ActiveChecklists"))
 const History = lazy(() => import("./pages/History"))
+const GlobalHistory = lazy(() => import("./pages/GlobalHistory"))
+const HistorySessionChecklists = lazy(() => import("./pages/HistorySessionChecklists"))
+const HistorySessionRemarks = lazy(() => import("./pages/HistorySessionRemarks"))
 
 const ActiveRemarks = lazy(() => import("./pages/ActiveRemarks"))
+const ActiveLocosList = lazy(() => import("./pages/ActiveLocosList"))
 
 import { ProtectedRoute } from "./components/common/ProtectedRoute"
 import { MobileNav } from "./components/common/MobileNav"
@@ -60,7 +64,7 @@ function App() {
             queryClient.setQueryData(['authUser'], data.user);
             // If on login page (e.g. after Google OAuth redirect), navigate to map
             if (window.location.pathname === '/') {
-              navigate('/map');
+              navigate('/active-locomotives');
             }
           }
         } catch (err) {
@@ -135,8 +139,12 @@ function App() {
               <Route path="/remarks" element={<ActiveRemarks />} />
               <Route path="/checklists" element={<ActiveChecklists />} />
               <Route path="/locomotive/:id/remarks" element={<LocomotiveRemarks />} />
+              <Route path="/active-locomotives" element={<ActiveLocosList />} />
               <Route path="/locomotive/:id/checklist" element={<LocomotiveChecklistPage />} />
               <Route path="/history/:number" element={<History />} />
+              <Route path="/global-history" element={<GlobalHistory />} />
+              <Route path="/history/session/:id/checklists" element={<HistorySessionChecklists />} />
+              <Route path="/history/session/:id/remarks" element={<HistorySessionRemarks />} />
             </Route>
           </Route>
 

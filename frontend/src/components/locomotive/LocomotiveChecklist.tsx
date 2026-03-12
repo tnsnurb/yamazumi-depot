@@ -46,7 +46,7 @@ interface ChecklistItem {
     verified_by_user?: { full_name: string } | null
 }
 
-export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) {
+export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false, hideHeader = false }: { locomotiveId?: number, instanceId?: string, readOnly?: boolean, hideHeader?: boolean }) {
     const { user } = useAuth()
     const [instance, setInstance] = useState<ChecklistInstance | null>(null)
     const [items, setItems] = useState<ChecklistItem[]>([])
@@ -73,15 +73,24 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
 
     useEffect(() => {
         fetchChecklist()
-    }, [locomotiveId])
+    }, [locomotiveId, instanceId])
 
     const fetchChecklist = async () => {
         try {
             setLoading(true)
             const token = localStorage.getItem('access_token')
-            const res = await fetch(`/api/checklists/locomotive/${locomotiveId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
+            let res
+            if (instanceId) {
+                res = await fetch(`/api/checklists/instances/${instanceId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+            } else if (locomotiveId) {
+                res = await fetch(`/api/checklists/locomotive/${locomotiveId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+            } else {
+                return
+            }
             if (!res.ok) throw new Error('Failed to fetch checklist')
             const data = await res.json()
             setInstance(data.instance)
@@ -401,31 +410,33 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
     return (
         <div className="space-y-6">
             {/* Header info */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex items-center gap-3">
-                    <div className="bg-indigo-100 p-2 rounded-lg">
-                        <BookOpen className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <div>
-                        <h2 className="text-xl font-bold text-slate-900">{instance.template.name}</h2>
-                        <div className="flex gap-2 mt-1">
-                            <Badge variant={instance.status === 'completed' ? 'default' : 'secondary'} className={instance.status === 'completed' ? 'bg-green-100 text-green-700 hover:bg-green-200' : ''}>
-                                {instance.status === 'completed' ? 'Завершен' : 'В процессе'}
-                            </Badge>
-                            {instance.status === 'completed' && instance.completed_at && (
-                                <span className="text-xs text-slate-500 flex items-center">
-                                    <Clock className="w-3 h-3 mr-1" />
-                                    {new Date(instance.completed_at).toLocaleString('ru-RU')}
-                                </span>
-                            )}
+            {!hideHeader && (
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-indigo-100 p-2 rounded-lg">
+                            <BookOpen className="w-5 h-5 text-indigo-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-slate-900">{instance.template.name}</h2>
+                            <div className="flex gap-2 mt-1">
+                                <Badge variant={instance.status === 'completed' ? 'default' : 'secondary'} className={instance.status === 'completed' ? 'bg-green-100 text-green-700 hover:bg-green-200' : ''}>
+                                    {instance.status === 'completed' ? 'Завершен' : 'В процессе'}
+                                </Badge>
+                                {instance.status === 'completed' && instance.completed_at && (
+                                    <span className="text-xs text-slate-500 flex items-center">
+                                        <Clock className="w-3 h-3 mr-1" />
+                                        {new Date(instance.completed_at).toLocaleString('ru-RU')}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
+                    <Button variant="outline" size="sm" className="hidden sm:flex h-9 border-slate-200 hover:bg-slate-50" onClick={downloadPDF}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Скачать PDF
+                    </Button>
                 </div>
-                <Button variant="outline" size="sm" className="hidden sm:flex h-9 border-slate-200 hover:bg-slate-50" onClick={downloadPDF}>
-                    <Download className="w-4 h-4 mr-2" />
-                    Скачать PDF
-                </Button>
-            </div>
+            )}
 
             {/* Statistics Card */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 md:p-6">
@@ -647,7 +658,7 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
                                                                 )}
                                                             </div>
 
-                                                            {item.is_completed && !item.verified_at && (user?.role === 'admin' || user?.role === 'master' || user?.permissions?.can_verify_remarks) && (
+                                                            {item.is_completed && !item.verified_at && !readOnly && (user?.role === 'admin' || user?.role === 'master' || user?.permissions?.can_verify_remarks) && (
                                                                 <div className="flex gap-2 mt-3 w-full sm:w-auto">
                                                                     <Button
                                                                         size="sm"
@@ -712,23 +723,25 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
                                                             </div>
 
                                                             <div className="order-1 md:order-2">
-                                                                {!item.is_completed ? (
-                                                                    <Button
-                                                                        onClick={() => handleCompleteItem(item.id, true)}
-                                                                        className="gap-2 bg-emerald-600 hover:bg-emerald-700 h-9 px-4 text-sm font-bold shadow-sm w-full md:w-auto"
-                                                                    >
-                                                                        <CheckCircle2 className="w-4 h-4" /> Выполнить
-                                                                    </Button>
-                                                                ) : (
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        onClick={() => handleCompleteItem(item.id, false)}
-                                                                        className="h-9 gap-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg w-full md:w-auto"
-                                                                        title="Снять отметку"
-                                                                    >
-                                                                        <X className="w-4 h-4" />
-                                                                        Снять отметку
-                                                                    </Button>
+                                                                {!readOnly && (
+                                                                    !item.is_completed ? (
+                                                                        <Button
+                                                                            onClick={() => handleCompleteItem(item.id, true)}
+                                                                            className="gap-2 bg-emerald-600 hover:bg-emerald-700 h-9 px-4 text-sm font-bold shadow-sm w-full md:w-auto"
+                                                                        >
+                                                                            <CheckCircle2 className="w-4 h-4" /> Выполнить
+                                                                        </Button>
+                                                                    ) : (
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            onClick={() => handleCompleteItem(item.id, false)}
+                                                                            className="h-9 gap-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg w-full md:w-auto"
+                                                                            title="Снять отметку"
+                                                                        >
+                                                                            <X className="w-4 h-4" />
+                                                                            Снять отметку
+                                                                        </Button>
+                                                                    )
                                                                 )}
                                                             </div>
                                                         </div>
@@ -778,19 +791,21 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
                                                                     ) : (
                                                                         <p className="text-center py-2 text-xs text-slate-400">Нет комментариев</p>
                                                                     )}
-                                                                    <div className="flex gap-2 pt-2 border-t">
-                                                                        <input
-                                                                            type="text"
-                                                                            value={commentText}
-                                                                            onChange={e => setCommentText(e.target.value)}
-                                                                            placeholder="Добавить комментарий..."
-                                                                            className="flex-1 text-xs bg-white border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                                            onKeyDown={e => e.key === 'Enter' && submitComment(item.id)}
-                                                                        />
-                                                                        <Button size="sm" onClick={() => submitComment(item.id)} disabled={!commentText.trim()}>
-                                                                            <Send className="w-3.5 h-3.5" />
-                                                                        </Button>
-                                                                    </div>
+                                                                    {!readOnly && (
+                                                                        <div className="flex gap-2 pt-2 border-t">
+                                                                            <input
+                                                                                type="text"
+                                                                                value={commentText}
+                                                                                onChange={e => setCommentText(e.target.value)}
+                                                                                placeholder="Добавить комментарий..."
+                                                                                className="flex-1 text-xs bg-white border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                onKeyDown={e => e.key === 'Enter' && submitComment(item.id)}
+                                                                            />
+                                                                            <Button size="sm" onClick={() => submitComment(item.id)} disabled={!commentText.trim()}>
+                                                                                <Send className="w-3.5 h-3.5" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             )}
 
@@ -800,19 +815,21 @@ export function LocomotiveChecklist({ locomotiveId }: { locomotiveId: number }) 
                                                                         <div className="text-xs font-bold text-slate-400 uppercase tracking-tight flex items-center gap-2">
                                                                             <Camera className="w-3 h-3" /> Фотографии
                                                                         </div>
-                                                                        <div className="relative">
-                                                                            <input
-                                                                                type="file"
-                                                                                accept="image/*"
-                                                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                                                onChange={(e) => handlePhotoUpload(item.id, e)}
-                                                                                disabled={uploadingPhoto}
-                                                                            />
-                                                                            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={uploadingPhoto}>
-                                                                                {uploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Camera className="w-3 h-3 mr-1" />}
-                                                                                Загрузить
-                                                                            </Button>
-                                                                        </div>
+                                                                        {!readOnly && (
+                                                                            <div className="relative">
+                                                                                <input
+                                                                                    type="file"
+                                                                                    accept="image/*"
+                                                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                                                    onChange={(e) => handlePhotoUpload(item.id, e)}
+                                                                                    disabled={uploadingPhoto}
+                                                                                />
+                                                                                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={uploadingPhoto}>
+                                                                                    {uploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Camera className="w-3 h-3 mr-1" />}
+                                                                                    Загрузить
+                                                                                </Button>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                     {loadingDetails[item.id] ? (
                                                                         <p className="text-center py-4 text-xs text-slate-400">Загрузка...</p>

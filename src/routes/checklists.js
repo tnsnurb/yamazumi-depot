@@ -236,8 +236,43 @@ router.delete('/templates/:id', requireAuth, async (req, res) => {
 
 // --- INSTANCES (Workers / Masters) ---
 
+// Get specific checklist instance and its items by ID
+router.get('/instances/:id', requireAuth, async (req, res) => {
+    try {
+        const instanceId = req.params.id;
+
+        const { data: instance, error: instanceError } = await supabase
+            .from('checklist_instances')
+            .select('*, template:template_id(name)')
+            .eq('id', instanceId)
+            .single();
+
+        if (instanceError) throw instanceError;
+        if (!instance) return res.status(404).json({ error: 'Checklist instance not found' });
+
+        const { data: items, error: itemsError } = await supabase
+            .from('checklist_instance_items')
+            .select(`
+                *,
+                template_item:template_item_id(*),
+                completed_by_user:completed_by(full_name),
+                verified_by_user:verified_by(full_name)
+            `)
+            .eq('instance_id', instanceId)
+            .order('sort_order', { ascending: true });
+
+        if (itemsError) throw itemsError;
+
+        res.json({ instance, items });
+    } catch (err) {
+        console.error('Error fetching checklist instance:', err);
+        res.status(500).json({ error: 'Failed to fetch checklist instance' });
+    }
+});
+
 // Get all active checklist instances with item counts
 router.get('/active', requireAuth, async (req, res) => {
+    console.log(`[CHECKLISTS] Fetching active checklists for user ${req.session?.user?.username}`);
     try {
         const locationId = req.session.user.active_location_id;
 
@@ -339,6 +374,66 @@ router.get('/locomotive/:locomotiveId', requireAuth, async (req, res) => {
     }
 });
 
+// Bulk complete multiple checklist instances
+router.post('/instances/bulk-complete', requireAuth, async (req, res) => {
+    const { instanceIds } = req.body;
+    const userId = req.session.user.id;
+
+    if (!instanceIds || !Array.isArray(instanceIds) || instanceIds.length === 0) {
+        return res.status(400).json({ error: 'No instance IDs provided' });
+    }
+
+    try {
+        // 1. Get all incomplete items for these instances
+        const { data: items, error: fetchError } = await supabase
+            .from('checklist_instance_items')
+            .select('id, instance_id, template_item:template_item_id(points)')
+            .in('instance_id', instanceIds)
+            .eq('is_completed', false);
+
+        if (fetchError) throw fetchError;
+
+        if (items && items.length > 0) {
+            const itemIds = items.map(it => it.id);
+            const totalPoints = items.reduce((sum, it) => sum + (it.template_item?.points || 5), 0);
+
+            // 2. Update items
+            const { error: updateError } = await supabase
+                .from('checklist_instance_items')
+                .update({
+                    is_completed: true,
+                    completed_by: userId,
+                    completed_at: new Date().toISOString()
+                })
+                .in('id', itemIds);
+
+            if (updateError) throw updateError;
+
+            // 3. Award points
+            await supabase.rpc('increment_user_points', { user_id: userId, amount: totalPoints });
+
+            // 4. Log history (batch insert)
+            const historyToInsert = items.map(it => ({
+                item_id: it.id,
+                user_id: userId,
+                action: 'completed',
+                details: `Массовое выполнение (+${it.template_item?.points || 5} б.)`
+            }));
+            await supabase.from('checklist_item_history').insert(historyToInsert);
+        }
+
+        // 5. Update instance statuses
+        for (const instanceId of instanceIds) {
+            await checkInstanceCompletion(instanceId, userId);
+        }
+
+        res.json({ success: true, count: items?.length || 0 });
+    } catch (err) {
+        console.error('Error in bulk complete:', err);
+        res.status(500).json({ error: 'Failed to complete checklists' });
+    }
+});
+
 // Mark item completed/uncompleted
 router.patch('/items/:id/complete', requireAuth, async (req, res) => {
     try {
@@ -393,7 +488,7 @@ router.patch('/items/:id/complete', requireAuth, async (req, res) => {
         });
 
         // Auto-update instance status if all complete
-        await checkInstanceCompletion(data.instance_id);
+        await checkInstanceCompletion(data.instance_id, userId);
 
         res.json(data);
     } catch (err) {
@@ -624,7 +719,7 @@ router.post('/items/:id/photos', requireAuth, upload.single('photo'), async (req
 });
 
 // Helper function to check if all items are completed
-async function checkInstanceCompletion(instanceId) {
+async function checkInstanceCompletion(instanceId, userId) {
     try {
         // Find total items 
         const { count: total, error: tErr } = await supabase
@@ -642,10 +737,11 @@ async function checkInstanceCompletion(instanceId) {
         if (!tErr && !cErr && total > 0) {
             const status = total === completed ? 'completed' : 'in_progress';
             const completed_at = status === 'completed' ? new Date().toISOString() : null;
+            const completed_by = status === 'completed' ? userId : null;
 
             await supabase
                 .from('checklist_instances')
-                .update({ status, completed_at })
+                .update({ status, completed_at, completed_by })
                 .eq('id', instanceId);
         }
     } catch (e) {

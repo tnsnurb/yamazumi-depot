@@ -67,6 +67,43 @@ app.use('/api/remarks', remarksRoutes);
 app.use('/api/locations', locationsRoutes);
 app.use('/api/checklists', checklistRoutes);
 
+// GET /api/sessions/active - Fetch active/waiting repair sessions
+app.get('/api/sessions/active', requireAuth, async (req, res) => {
+    console.log(`[API] Fetching active sessions for user ${req.session.user.username}`);
+    try {
+        const showAllLocations = req.query.all_locations === 'true' && req.session.user.is_global_admin;
+
+        let query = supabase
+            .from('repair_sessions')
+            .select(`
+                *,
+                locomotive:locomotives(id, number, series, location_id, repair_type),
+                created_by_user:users!repair_sessions_created_by_fkey(full_name, username),
+                remarks:locomotive_remarks!locomotive_remarks_session_id_fkey(
+                    id, text, is_completed, is_verified
+                ),
+                checklists:checklist_instances!checklist_instances_session_id_fkey(
+                    id, status
+                )
+            `)
+            .neq('status', 'completed')
+            .order('start_date', { ascending: false });
+
+        if (!showAllLocations && req.session.user.active_location_id) {
+            query = query.eq('locomotive.location_id', req.session.user.active_location_id);
+        }
+
+        const { data: sessions, error } = await query;
+        if (error) throw error;
+
+        const filteredSessions = sessions.filter(s => s.locomotive);
+        res.json(filteredSessions);
+    } catch (err) {
+        console.error("Error fetching active sessions:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ===================== AUDIT LOGS ROUTES =====================
 
 app.get('/api/audit-logs', requireAdmin, async (req, res) => {
@@ -646,6 +683,36 @@ async function getOrCreateActiveSession(locoId, userId, acceptanceTime) {
     }
 }
 
+// Helper to check for open remarks and checklists before closing a session
+async function checkUncompletedTasks(locoId) {
+    const { data: session } = await supabase
+        .from('repair_sessions')
+        .select('id')
+        .eq('locomotive_id', locoId)
+        .eq('status', 'active')
+        .maybeSingle();
+
+    if (!session) return { openRemarks: 0, openChecklists: 0, hasUncompleted: false };
+
+    const { count: openRemarks } = await supabase
+        .from('locomotive_remarks')
+        .select('id', { count: 'exact', head: true })
+        .eq('session_id', session.id)
+        .eq('is_completed', false);
+
+    const { count: openChecklists } = await supabase
+        .from('checklist_instances')
+        .select('id', { count: 'exact', head: true })
+        .eq('session_id', session.id)
+        .neq('status', 'completed');
+
+    return {
+        openRemarks: openRemarks || 0,
+        openChecklists: openChecklists || 0,
+        hasUncompleted: (openRemarks > 0 || openChecklists > 0)
+    };
+}
+
 // Helper to find or create checklist for a locomotive
 async function ensureChecklistForLocomotive(locoId, series, repairTypeInput, sessionId) {
     if (!repairTypeInput || repairTypeInput === 'none') return;
@@ -745,37 +812,50 @@ app.post('/api/locomotives', requirePermission('can_edit_catalog'), async (req, 
     const cleanSeries = (series || '').trim();
     const cleanNumber = String(number).trim();
 
-    // Check if number + series already exists (only active locomotives in the same location)
-    const { data: existing } = await supabase
+    // Check if number + series already exists globally
+    const { data: existingGlobal, error: searchError } = await supabase
         .from('locomotives')
-        .select('id')
+        .select(`
+            id, 
+            status, 
+            location_id,
+            locations!left(name)
+        `)
         .eq('number', cleanNumber)
         .eq('series', cleanSeries)
-        .eq('location_id', req.session.user.active_location_id || 1)
-        .neq('status', 'completed')
         .maybeSingle();
 
-    if (existing) {
-        return res.status(400).json({ error: 'Локомотив с таким номером уже существует' });
-    }
+    if (searchError) return res.status(500).json({ error: searchError.message });
 
-    // Check if slot is occupied
-    if (track && position) {
-        const { data: occupied } = await supabase
+    let loco;
+    if (existingGlobal) {
+        if (existingGlobal.status !== 'completed') {
+            const currentLocName = existingGlobal.locations?.name || 'другом депо';
+            return res.status(400).json({ error: `Локомотив ${cleanSeries} ${cleanNumber} уже находится в ремонте в ${currentLocName}` });
+        }
+
+        // Reactivate completed locomotive
+        const { data: updated, error: updateError } = await supabase
             .from('locomotives')
-            .select('id')
-            .eq('track', track)
-            .eq('position', position)
-            .eq('location_id', req.session.user.active_location_id || 1)
+            .update({
+                status: status || 'waiting',
+                track,
+                position,
+                repair_type,
+                planned_release,
+                acceptance_time: acceptance_time || new Date().toISOString(),
+                location_id: req.session.user.active_location_id || 1,
+                created_at: new Date().toISOString() // Reset entry time
+            })
+            .eq('id', existingGlobal.id)
+            .select()
             .maybeSingle();
 
-        if (occupied) {
-            return res.status(400).json({ error: 'Эта позиция уже занята' });
-        }
-    }
-
-    try {
-        const { data: loco, error } = await supabase
+        if (updateError) return res.status(500).json({ error: updateError.message });
+        loco = updated;
+    } else {
+        // Insert new locomotive
+        const { data: inserted, error: insertError } = await supabase
             .from('locomotives')
             .insert([{
                 number: cleanNumber,
@@ -791,7 +871,12 @@ app.post('/api/locomotives', requirePermission('can_edit_catalog'), async (req, 
             .select()
             .maybeSingle();
 
-        if (error) throw error;
+        if (insertError) return res.status(500).json({ error: insertError.message });
+        loco = inserted;
+    }
+
+    try {
+        if (!loco) throw new Error("Не удалось создать или обновить запись локомотива");
 
         // Auto-create/get repair session
         let sessionId = null;
@@ -909,10 +994,30 @@ app.put('/api/locomotives/:id/move', requirePermission('can_move_locomotives'), 
         location_id: req.session.user.active_location_id || 1
     });
 
-    // Update position
+    const updates = { track, position };
+
+    // Auto-complete the session and status if reason is "Выпуск из ремонта" or "Отправка на линию"
+    if (isRemoveFromTrack && (reason === 'Выпуск из ремонта' || reason === 'Отправка на линию')) {
+        const { hasUncompleted, openRemarks, openChecklists } = await checkUncompletedTasks(loco.id);
+        if (hasUncompleted) {
+            return res.status(400).json({
+                error: `Невозможно выпустить локомотив: осталось открытых замечаний (${openRemarks}) или незавершенных чек-листов (${openChecklists}).`
+            });
+        }
+
+        updates.status = 'completed';
+
+        await supabase
+            .from('repair_sessions')
+            .update({ status: 'completed', end_date: new Date().toISOString() })
+            .eq('locomotive_id', loco.id)
+            .eq('status', 'active');
+    }
+
+    // Update position and possibly status
     const { data: updated, error } = await supabase
         .from('locomotives')
-        .update({ track, position })
+        .update(updates)
         .eq('id', id)
         .select()
         .maybeSingle();
@@ -961,6 +1066,13 @@ app.put('/api/locomotives/:id', requirePermission('can_edit_catalog'), async (re
 
         // Close active session if changing to completed
         if (status === 'completed') {
+            const { hasUncompleted, openRemarks, openChecklists } = await checkUncompletedTasks(loco.id);
+            if (hasUncompleted) {
+                return res.status(400).json({
+                    error: `Невозможно выпустить локомотив: осталось открытых замечаний (${openRemarks}) или незавершенных чек-листов (${openChecklists}).`
+                });
+            }
+
             await supabase
                 .from('repair_sessions')
                 .update({ status: 'completed', end_date: new Date().toISOString() })
@@ -1255,34 +1367,20 @@ app.post('/api/locomotives/:id/remarks/template', requirePermission('can_edit_ca
     const { template_id } = req.body;
     if (!template_id) return res.status(400).json({ error: 'ID шаблона обязателен' });
 
-    const isIdNumeric = !isNaN(parseInt(id)) && /^\d+$/.test(id);
-
     try {
-        let locoId;
-        let locoQuery;
+        const locoId = await resolveLocoId(req.params.id);
+        if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
 
-        if (isIdNumeric) {
-            locoId = parseInt(id);
-            locoQuery = supabase.from('locomotives').select('number').eq('id', locoId).maybeSingle();
-        } else {
-            locoQuery = supabase.from('locomotives').select('id, number').eq('number', decodeURIComponent(id)).maybeSingle();
-        }
-
-        // Parallelize fetching template and locomotive info
         const [templateRes, locoRes] = await Promise.all([
             supabase.from('remark_templates').select('*').eq('id', template_id).maybeSingle(),
-            locoQuery
+            supabase.from('locomotives').select('number').eq('id', locoId).maybeSingle()
         ]);
 
         if (templateRes.error) throw templateRes.error;
         if (!templateRes.data) return res.status(404).json({ error: 'Шаблон не найден' });
 
-        if (locoRes.error) throw locoRes.error;
-        if (!locoRes.data) return res.status(404).json({ error: 'Локомотив не найден' });
-
         const template = templateRes.data;
         const loco = locoRes.data;
-        if (!isIdNumeric) locoId = loco.id;
 
         const sessionId = await getOrCreateActiveSession(locoId, req.session.user.id, null);
 
@@ -1366,6 +1464,70 @@ app.post('/api/locomotives/:id/remarks/bulk', requirePermission('can_edit_catalo
 
     res.json(data);
 });
+
+// GET /api/locomotives/:id/sessions - Fetch repair session history
+app.get('/api/locomotives/:id/sessions', requireAuth, async (req, res) => {
+    const locoId = await resolveLocoId(req.params.id);
+    if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
+
+    try {
+        const { data: sessions, error } = await supabase
+            .from('repair_sessions')
+            .select(`
+                *,
+                created_by_user:users!repair_sessions_created_by_fkey(full_name, username),
+                remarks:locomotive_remarks!locomotive_remarks_session_id_fkey(
+                    *,
+                    created_by_user:users!locomotive_remarks_created_by_fkey(full_name, username),
+                    completed_by_user:users!locomotive_remarks_completed_by_fkey(full_name, username)
+                ),
+                checklists:checklist_instances!checklist_instances_session_id_fkey(
+                    *,
+                    template:checklist_templates(name, series)
+                )
+            `)
+            .eq('locomotive_id', locoId)
+            .order('start_date', { ascending: false });
+
+        if (error) throw error;
+        res.json(sessions);
+    } catch (err) {
+        console.error("Error fetching sessions history:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/sessions/history - Fetch global closed repair session history
+app.get('/api/sessions/history', requireAuth, async (req, res) => {
+    try {
+        const { data: sessions, error } = await supabase
+            .from('repair_sessions')
+            .select(`
+                *,
+                locomotive:locomotives(number, series, repair_type),
+                created_by_user:users!repair_sessions_created_by_fkey(full_name, username),
+                remarks:locomotive_remarks!locomotive_remarks_session_id_fkey(
+                    *,
+                    created_by_user:users!locomotive_remarks_created_by_fkey(full_name, username),
+                    completed_by_user:users!locomotive_remarks_completed_by_fkey(full_name, username)
+                ),
+                checklists:checklist_instances!checklist_instances_session_id_fkey(
+                    *,
+                    completed_by_user:users!checklist_instances_completed_by_fkey(full_name, username),
+                    template:checklist_templates(name, series)
+                )
+            `)
+            .eq('status', 'completed')
+            .order('end_date', { ascending: false });
+
+        if (error) throw error;
+        res.json(sessions);
+    } catch (err) {
+        console.error("Error fetching global sessions history:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 app.put('/api/remarks/:id/complete', requirePermission('can_complete_remarks'), async (req, res) => {
     const remarkId = req.params.id;
@@ -2005,6 +2167,76 @@ app.get('/api/movements/export', requireAuth, async (req, res) => {
         res.send(bom + header + rows);
     } catch (err) {
         console.error("❌ Export critical error:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ===================== WHEELSET MEASUREMENTS =====================
+
+app.get('/api/locomotives/:id/wheelset', requireAuth, async (req, res) => {
+    const locomotiveId = req.params.id;
+
+    try {
+        const { data, error } = await supabase
+            .from('wheelset_measurements')
+            .select('*')
+            .eq('locomotive_id', locomotiveId)
+            .order('axle_number', { ascending: true })
+            .order('side', { ascending: true });
+
+        if (error) throw error;
+        res.json(data || []);
+    } catch (err) {
+        console.error("Error fetching wheelset measurements:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/locomotives/:id/wheelset', requireAuth, async (req, res) => {
+    const locomotiveId = req.params.id;
+    const measurements = req.body; // Expecting an array of measurement objects
+
+    try {
+        // Find active session for this locomotive
+        const { data: session, error: sessErr } = await supabase
+            .from('repair_sessions')
+            .select('id')
+            .eq('locomotive_id', locomotiveId)
+            .eq('status', 'active')
+            .maybeSingle();
+
+        if (sessErr) throw sessErr;
+        if (!session) return res.status(400).json({ error: 'Нет активной ремонтной сессии для этого локомотива' });
+
+        const sessionId = session.id;
+
+        // Upsert measurements
+        const toInsert = measurements.map(m => ({
+            ...m,
+            locomotive_id: parseInt(locomotiveId),
+            session_id: sessionId,
+            measured_by: req.session.user.id,
+            measured_at: new Date().toISOString()
+        }));
+
+        const { data, error } = await supabase
+            .from('wheelset_measurements')
+            .upsert(toInsert, { onConflict: 'session_id, axle_number, side' })
+            .select();
+
+        if (error) throw error;
+
+        // Log the action
+        await supabase.from('movements').insert({
+            locomotive_id: locomotiveId,
+            action: 'wheelset_measured',
+            details: `Выполнены замеры колесных пар (${toInsert.length} оп.)`,
+            moved_by: req.session.user.full_name || req.session.user.username
+        });
+
+        res.json(data);
+    } catch (err) {
+        console.error("Error saving wheelset measurements:", err);
         res.status(500).json({ error: err.message });
     }
 });

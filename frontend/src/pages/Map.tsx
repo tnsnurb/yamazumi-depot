@@ -11,13 +11,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Plus, Search, RefreshCw, Trash2, Check, ChevronsUpDown, Printer, Clock, History, ListTodo, Loader2, QrCode } from "lucide-react"
+import { Plus, Search, RefreshCw, Trash2, Check, ChevronsUpDown, Printer, Clock, History, ListTodo, Loader2, QrCode, Scale } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import { QRCodeSVG } from 'qrcode.react'
+import { WheelsetMeasurements } from "@/components/locomotive/WheelsetMeasurements"
 
 export type LocoStatus = 'active' | 'repair' | 'waiting' | 'completed';
 
@@ -96,9 +97,14 @@ const LocoCard = React.memo(({ loco, isHighlighted, canMove, onDragStart, onClic
                         <div className="flex-1 h-full bg-gradient-to-r from-red-700 to-red-500 relative flex items-center justify-center overflow-hidden group-hover/loco:brightness-110 transition-all">
                             <div className="absolute top-[20%] w-full h-[2px] bg-yellow-400 opacity-90" />
                             <div className="absolute bottom-[20%] w-full h-[2px] bg-yellow-400 opacity-90" />
-                            <div className="bg-slate-900 px-2 py-0.5 rounded-sm text-white font-mono font-bold text-[10px] leading-tight z-10 shadow-inner border border-slate-700/80 drop-shadow-md flex flex-col items-center">
+                            <div className="bg-slate-900 px-2 py-0.5 rounded-sm text-white font-mono font-bold text-[10px] leading-tight z-10 shadow-inner border border-slate-700/80 drop-shadow-md flex flex-col items-center min-w-[32px]">
                                 {loco.series && <span className="text-[7px] text-slate-400 -mb-0.5">{loco.series}</span>}
                                 <span>{loco.number}</span>
+                                {loco.repair_type && (
+                                    <span className="text-[7px] text-amber-400 border-t border-slate-800 w-full text-center mt-0.5 pt-0.5 font-black uppercase tracking-tighter">
+                                        {loco.repair_type}
+                                    </span>
+                                )}
                             </div>
                         </div>
                         <div className="w-[6px] h-full bg-slate-800 rounded-r-sm flex flex-col justify-between py-1 border-l border-slate-900/50">
@@ -120,6 +126,226 @@ const LocoCard = React.memo(({ loco, isHighlighted, canMove, onDragStart, onClic
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>
+    )
+});
+
+const AddLocoDialog = React.memo(({
+    isOpen,
+    onOpenChange,
+    onSubmit,
+    catalog,
+    repairTypes,
+    trackCount,
+    slotCount,
+    isPending,
+    initialTrack,
+    initialPosition
+}: {
+    isOpen: boolean;
+    onOpenChange: (open: boolean) => void;
+    onSubmit: (data: any) => void;
+    catalog: any[];
+    repairTypes: string[];
+    trackCount: number;
+    slotCount: number;
+    isPending: boolean;
+    initialTrack?: string;
+    initialPosition?: string;
+}) => {
+    const [series, setSeries] = useState("")
+    const [number, setNumber] = useState("")
+    const [status, setStatus] = useState<string>("waiting")
+    const [track, setTrack] = useState<string>(initialTrack || "")
+    const [position, setPosition] = useState<string>(initialPosition || "")
+    const [repairType, setRepairType] = useState<string>("")
+    const [acceptanceTime, setAcceptanceTime] = useState<string>(formatToDateTimeLocal(new Date().toISOString()))
+    const [isNumberOpen, setIsNumberOpen] = useState(false)
+    const [search, setSearch] = useState("")
+
+    const filteredCatalog = useMemo(() => {
+        const s = search.toLowerCase()
+        return catalog
+            .filter(item =>
+                `${item.series || ''} ${item.number}`.toLowerCase().includes(s)
+            )
+            .slice(0, 100)
+    }, [catalog, search])
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!number) return
+        onSubmit({
+            series,
+            number,
+            status,
+            track: track && track !== 'none' ? parseInt(track) : null,
+            position: position && position !== 'none' ? parseInt(position) : null,
+            repair_type: repairType && repairType !== 'none' ? repairType : null,
+            planned_release: null,
+            acceptance_time: acceptanceTime || null
+        })
+    }
+
+    useEffect(() => {
+        if (isOpen) {
+            setSeries("")
+            setNumber("")
+            setStatus("waiting")
+            setTrack(initialTrack || "")
+            setPosition(initialPosition || "")
+            setRepairType("")
+            setAcceptanceTime(formatToDateTimeLocal(new Date().toISOString()))
+            setSearch("")
+        }
+    }, [isOpen, initialTrack, initialPosition])
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Добавить локомотив</DialogTitle>
+                </DialogHeader>
+
+                <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+                    <div className="grid grid-cols-3 gap-3">
+                        <div className="col-span-1 space-y-2">
+                            <Label>Серия</Label>
+                            <Input
+                                value={series}
+                                onChange={e => setSeries(e.target.value)}
+                                placeholder="ТЭ33А"
+                            />
+                        </div>
+                        <div className="col-span-2 space-y-2">
+                            <Label>Номер</Label>
+                            <Popover open={isNumberOpen} onOpenChange={setIsNumberOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={isNumberOpen}
+                                        className="w-full justify-between"
+                                    >
+                                        {number || "Выберите..."}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0" align="start">
+                                    <Command shouldFilter={false}>
+                                        <CommandInput
+                                            placeholder="Поиск в справочнике..."
+                                            value={search}
+                                            onValueChange={setSearch}
+                                        />
+                                        <CommandList>
+                                            <CommandEmpty>Ничего не найдено.</CommandEmpty>
+                                            <CommandGroup>
+                                                {filteredCatalog.map((item: any) => (
+                                                    <CommandItem
+                                                        key={item.id}
+                                                        value={`${item.series} ${item.number}`}
+                                                        onSelect={() => {
+                                                            setSeries(item.series || "")
+                                                            setNumber(item.number)
+                                                            setIsNumberOpen(false)
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                number === item.number && series === item.series ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        {item.series} {item.number}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Статус</Label>
+                        <Select value={status} onValueChange={setStatus}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="repair">Ремонт</SelectItem>
+                                <SelectItem value="waiting">Ожидание</SelectItem>
+                                <SelectItem value="completed">Завершён</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Путь</Label>
+                            <Select value={track} onValueChange={setTrack}>
+                                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">—</SelectItem>
+                                    {Array.from({ length: trackCount }).map((_, i) => (
+                                        <SelectItem key={i + 1} value={(i + 1).toString()}>
+                                            Путь {i + 1}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Позиция</Label>
+                            <Select value={position} onValueChange={setPosition}>
+                                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">—</SelectItem>
+                                    {Array.from({ length: slotCount }).map((_, i) => (
+                                        <SelectItem key={i + 1} value={(i + 1).toString()}>
+                                            Слот {i + 1}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    {(status === 'repair' || status === 'waiting') && (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <Label>Тип ремонта</Label>
+                            <Select value={repairType} onValueChange={setRepairType}>
+                                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">—</SelectItem>
+                                    {repairTypes.map((rt: string) => (
+                                        <SelectItem key={rt} value={rt}>{rt}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    <div className="space-y-2">
+                        <Label>Время приемки</Label>
+                        <Input
+                            type="datetime-local"
+                            value={acceptanceTime}
+                            onChange={e => setAcceptanceTime(e.target.value)}
+                        />
+                    </div>
+
+                    <DialogFooter className="pt-4 gap-2 sm:gap-0">
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                            Отмена
+                        </Button>
+                        <Button type="submit" disabled={isPending} className="flex items-center gap-2">
+                            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Добавить на карту
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
     )
 });
 
@@ -149,20 +375,11 @@ export default function MapPage() {
         return hours > 0 ? hours : 0
     }
 
-    // Add Form State
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [isInfoOpen, setIsInfoOpen] = useState(false)
     const [selectedLoco, setSelectedLoco] = useState<Locomotive | null>(null)
-    const [addSeries, setAddSeries] = useState("")
-    const [addNumber, setAddNumber] = useState("")
-    const [addStatus, setAddStatus] = useState<string>("active")
-    const [addTrack, setAddTrack] = useState<string>("")
-    const [addPosition, setAddPosition] = useState<string>("")
-    const [addRepairType, setAddRepairType] = useState<string>("")
-    const [addPlannedRelease, setAddPlannedRelease] = useState<string>("")
-    const [addAcceptanceTime, setAddAcceptanceTime] = useState<string>(formatToDateTimeLocal(new Date().toISOString()))
-    const [isNumberOpen, setIsNumberOpen] = useState(false)
-
+    const [isWheelsetOpen, setIsWheelsetOpen] = useState(false)
+    const [selectedSlot, setSelectedSlot] = useState<{ track: string; position: string } | null>(null)
 
     // QR State
     const [qrLoco, setQrLoco] = useState<Locomotive | null>(null)
@@ -263,12 +480,6 @@ export default function MapPage() {
         onSuccess: (data) => {
             toast.success(`Локомотив ${data.series || ''} ${data.number} добавлен`)
             setIsAddOpen(false)
-            setAddNumber("")
-            setAddTrack("")
-            setAddPosition("")
-            setAddRepairType("")
-            setAddPlannedRelease("")
-            setAddAcceptanceTime(formatToDateTimeLocal(new Date().toISOString()))
             queryClient.invalidateQueries({ queryKey: ['locomotives'] })
         },
         onError: (err: Error) => toast.error(err.message)
@@ -326,19 +537,8 @@ export default function MapPage() {
         })
     }
 
-    const handleAddSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!addNumber) return
-        addMutation.mutate({
-            series: addSeries,
-            number: addNumber,
-            status: addStatus,
-            track: addTrack ? parseInt(addTrack) : null,
-            position: addPosition ? parseInt(addPosition) : null,
-            repair_type: addRepairType || null,
-            planned_release: addPlannedRelease || null,
-            acceptance_time: addAcceptanceTime || null
-        })
+    const handleAddSubmit = (data: any) => {
+        addMutation.mutate(data)
     }
 
     const handleDelete = () => {
@@ -426,13 +626,7 @@ export default function MapPage() {
 
     // Use filteredLocos for rendering the map
     const handleSlotClick = (track: number, pos: number) => {
-        setAddTrack(track.toString())
-        setAddPosition(pos.toString())
-        setAddNumber("")
-        setAddStatus("active")
-        setAddRepairType("")
-        setAddPlannedRelease("")
-        setAddAcceptanceTime(formatToDateTimeLocal(new Date().toISOString()))
+        setSelectedSlot({ track: track.toString(), position: pos.toString() })
         setIsAddOpen(true)
     }
 
@@ -539,7 +733,13 @@ export default function MapPage() {
                                 <Printer className="h-4 w-4" />
                             </Button>
                             {(user?.role === 'admin' || user?.permissions?.can_edit_catalog) && (
-                                <Button onClick={() => setIsAddOpen(true)} className="gap-2 shadow-sm h-11 px-6">
+                                <Button
+                                    onClick={() => {
+                                        setSelectedSlot(null)
+                                        setIsAddOpen(true)
+                                    }}
+                                    className="gap-2 shadow-sm h-11 px-6"
+                                >
                                     <Plus className="h-4 w-4" /> <span className="hidden xs:inline">Добавить</span>
                                 </Button>
                             )}
@@ -632,136 +832,18 @@ export default function MapPage() {
             </main>
 
             {/* Add Dialog */}
-            < Dialog open={isAddOpen} onOpenChange={setIsAddOpen} >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Добавить локомотив</DialogTitle>
-                    </DialogHeader>
-
-                    <form onSubmit={handleAddSubmit} className="space-y-4 pt-4">
-                        <div className="grid grid-cols-3 gap-3">
-                            <div className="col-span-1 space-y-2">
-                                <Label>Серия</Label>
-                                <Input
-                                    value={addSeries}
-                                    onChange={e => setAddSeries(e.target.value)}
-                                    placeholder="ТЭ33А"
-                                />
-                            </div>
-                            <div className="col-span-2 space-y-2">
-                                <Label>Номер</Label>
-                                <Popover open={isNumberOpen} onOpenChange={setIsNumberOpen}>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            role="combobox"
-                                            aria-expanded={isNumberOpen}
-                                            className="w-full justify-between"
-                                        >
-                                            {addNumber || "Выберите..."}
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[400px] p-0" align="start">
-                                        <Command>
-                                            <CommandInput placeholder="Поиск в справочнике..." />
-                                            <CommandList>
-                                                <CommandEmpty>Ничего не найдено.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {catalog.map((item: any) => (
-                                                        <CommandItem
-                                                            key={item.id}
-                                                            value={`${item.series} ${item.number}`}
-                                                            onSelect={() => {
-                                                                setAddSeries(item.series || "")
-                                                                setAddNumber(item.number)
-                                                                setIsNumberOpen(false)
-                                                            }}
-                                                        >
-                                                            <Check
-                                                                className={cn(
-                                                                    "mr-2 h-4 w-4",
-                                                                    addNumber === item.number && addSeries === item.series ? "opacity-100" : "opacity-0"
-                                                                )}
-                                                            />
-                                                            {item.series} {item.number}
-                                                        </CommandItem>
-                                                    ))}
-                                                </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Статус</Label>
-                            <Select value={addStatus} onValueChange={setAddStatus}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="active">Активный</SelectItem>
-                                    <SelectItem value="repair">Ремонт</SelectItem>
-                                    <SelectItem value="waiting">Ожидание</SelectItem>
-                                    <SelectItem value="completed">Завершён</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Путь</Label>
-                                <Select value={addTrack} onValueChange={setAddTrack}>
-                                    <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">—</SelectItem>
-                                        {Array.from({ length: trackCount }).map((_, i) => <SelectItem key={i + 1} value={(i + 1).toString()}>Путь {i + 1}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Позиция</Label>
-                                <Select value={addPosition} onValueChange={setAddPosition}>
-                                    <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">—</SelectItem>
-                                        {Array.from({ length: slotCount }).map((_, i) => <SelectItem key={i + 1} value={(i + 1).toString()}>Слот {i + 1}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Тип ремонта</Label>
-                                <Select value={addRepairType} onValueChange={setAddRepairType}>
-                                    <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">—</SelectItem>
-                                        {repairTypes.map((rt: string) => <SelectItem key={rt} value={rt}>{rt}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>План. выпуск</Label>
-                                <Input type="date" value={addPlannedRelease} onChange={e => setAddPlannedRelease(e.target.value)} />
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Время приемки</Label>
-                            <Input type="datetime-local" value={addAcceptanceTime} onChange={e => setAddAcceptanceTime(e.target.value)} />
-                        </div>
-                        <DialogFooter className="pt-4">
-                            <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Отмена</Button>
-                            <Button type="submit" disabled={addMutation.isPending} className="flex items-center gap-2">
-                                {addMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                                Добавить на карту
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog >
+            <AddLocoDialog
+                isOpen={isAddOpen}
+                onOpenChange={setIsAddOpen}
+                onSubmit={handleAddSubmit}
+                catalog={catalog}
+                repairTypes={repairTypes}
+                trackCount={trackCount}
+                slotCount={slotCount}
+                isPending={addMutation.isPending}
+                initialTrack={selectedSlot?.track}
+                initialPosition={selectedSlot?.position}
+            />
 
             {/* Info Dialog */}
             <Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen}>
@@ -806,6 +888,9 @@ export default function MapPage() {
                                                                 setRemoveReason("Выпуск из ремонта")
                                                                 setIsRemoveReasonOpen(true)
                                                             }
+                                                        } else {
+                                                            const data = await res.json()
+                                                            toast.error(data.error || "Ошибка изменения статуса")
                                                         }
                                                     } catch (e) { toast.error("Ошибка сети") }
                                                 }}
@@ -991,6 +1076,13 @@ export default function MapPage() {
                                         >
                                             <QrCode className="w-4 h-4" /> QR код
                                         </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setIsWheelsetOpen(true)}
+                                            className="gap-2 border-amber-200 text-amber-700 hover:bg-amber-50"
+                                        >
+                                            <Scale className="w-4 h-4" /> Замеры бандажей
+                                        </Button>
 
                                     </div>
                                 </div>
@@ -1002,34 +1094,81 @@ export default function MapPage() {
 
             {/* QR Modal */}
             <Dialog open={!!qrLoco} onOpenChange={(open) => !open && setQrLoco(null)}>
-                <DialogContent className="sm:max-w-xs text-center border-slate-200 shadow-xl print-area">
-                    <DialogHeader>
-                        <DialogTitle className="text-center">
-                            Тепловоз {qrLoco?.series} {qrLoco?.number}
-                        </DialogTitle>
+                <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl print:shadow-none">
+                    <DialogHeader className="bg-slate-900 px-6 py-6 text-white text-left relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+                        <div className="relative z-10 flex items-center gap-4">
+                            <div className="p-2.5 bg-white/10 rounded-xl backdrop-blur-sm border border-white/10 shadow-inner">
+                                <QrCode className="w-6 h-6 text-indigo-400" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-xl font-bold tracking-tight">QR код локомотива</DialogTitle>
+                                <p className="text-slate-400 text-xs mt-0.5">Для быстрого перехода к замечаниям</p>
+                            </div>
+                        </div>
                     </DialogHeader>
-                    <div className="flex flex-col items-center justify-center p-6 bg-white rounded-xl">
-                        {qrLoco && (
-                            <>
-                                <QRCodeSVG
-                                    value={`${window.location.origin}/locomotive/${encodeURIComponent((qrLoco.series + ' ' + qrLoco.number).trim())}/remarks`}
-                                    size={220}
-                                    level="H"
-                                    includeMargin={true}
-                                    className="qr-code-svg-element"
-                                />
-                                <p className="mt-4 font-black text-3xl tracking-tight text-slate-900 border-2 border-slate-900 rounded-lg px-6 py-2 uppercase">
-                                    {(qrLoco.series + ' ' + qrLoco.number).trim()}
-                                </p>
-                            </>
-                        )}
+
+                    <div className="p-8 flex flex-col items-center">
+                        <div className="w-full flex justify-between items-center mb-6">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Серия и номер</span>
+                                <span className="text-2xl font-black text-slate-900 tracking-tighter">
+                                    {qrLoco?.series} {qrLoco?.number}
+                                </span>
+                            </div>
+                            <div className="h-10 w-[1px] bg-slate-100" />
+                            <div className="flex flex-col items-end">
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Статус</span>
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full mt-0.5 ${qrLoco ? statusColors[qrLoco.status as LocoStatus] : ''} text-white`}>
+                                    {qrLoco ? statusLabels[qrLoco.status] : ''}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-6 group transition-all hover:shadow-md relative">
+                            {qrLoco && (
+                                <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100">
+                                    <QRCodeSVG
+                                        value={`${window.location.origin}/locomotive/${qrLoco.id}/remarks`}
+                                        size={200}
+                                        level="H"
+                                        includeMargin={false}
+                                        className="rounded-sm"
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-4 w-full">
+                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex gap-3">
+                                <div className="mt-0.5 p-1.5 bg-amber-100 rounded-lg h-fit">
+                                    <Printer className="w-4 h-4 text-amber-700" />
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-sm font-bold text-amber-900 leading-none">Инструкция</p>
+                                    <p className="text-xs text-amber-800/80 leading-relaxed">
+                                        Распечатайте этот QR код и разместите его в кабине локомотива для быстрого доступа.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <DialogFooter className="sm:justify-center gap-3 pt-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setQrLoco(null)}
+                                    className="flex-1 h-11"
+                                >
+                                    Закрыть
+                                </Button>
+                                <Button
+                                    onClick={() => window.print()}
+                                    className="flex-[2] h-11 gap-2 bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200 transition-all active:scale-[0.98]"
+                                >
+                                    <Printer className="w-4 h-4" /> Печать кода
+                                </Button>
+                            </DialogFooter>
+                        </div>
                     </div>
-                    <p className="text-xs text-slate-500 mb-2">Распечатайте и наклейте в кабине</p>
-                    <DialogFooter className="sm:justify-center">
-                        <Button onClick={() => window.print()} className="w-full gap-2 bg-slate-900 hover:bg-slate-800 text-white shadow-md">
-                            <QrCode className="w-4 h-4" /> Печать
-                        </Button>
-                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
@@ -1109,6 +1248,13 @@ export default function MapPage() {
             </Dialog>
 
 
+            {selectedLoco && (
+                <WheelsetMeasurements
+                    locomotiveId={selectedLoco.id}
+                    isOpen={isWheelsetOpen}
+                    onOpenChange={setIsWheelsetOpen}
+                />
+            )}
         </div >
     )
 }

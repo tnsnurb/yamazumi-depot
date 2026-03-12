@@ -103,9 +103,11 @@ router.get('/active', requireAuth, async (req, res) => {
                 id,
                 is_completed,
                 is_verified,
-                locomotive:locomotives (id, number, series, location_id)
+                locomotive:locomotives (id, number, series, location_id),
+                repair_sessions!inner(status)
             `)
-            .eq('is_verified', false);
+            .eq('is_completed', false)
+            .eq('repair_sessions.status', 'active');
 
         const { data: remarks, error } = await query;
 

@@ -212,7 +212,7 @@ export default function Login() {
 
                 setScannedBarcode(null)
                 setScannedUser(null)
-                navigate("/map")
+                navigate("/active-locomotives")
             } else {
                 setPinError(error?.message || 'Неверный пин-код')
                 setPinCode(['', '', '', ''])
@@ -409,7 +409,7 @@ export default function Login() {
                     queryClient.setQueryData(['authUser'], loginData.user);
                 }
 
-                navigate("/map")
+                navigate("/active-locomotives")
             } else {
                 setError(error?.message || "Ошибка авторизации")
             }
