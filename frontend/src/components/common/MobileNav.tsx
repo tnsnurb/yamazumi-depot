@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Map as MapIcon, ClipboardList, BarChart3, Users, QrCode, History as JournalIcon, ListTodo } from "lucide-react";
+import { Map as MapIcon, ClipboardList, Users, QrCode, History as JournalIcon, Wrench, ScanLine } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useState } from "react";
 import { QRScannerModal } from "./QRScanner";
@@ -13,8 +13,8 @@ export function MobileNav() {
         { path: '/map', label: 'Карта', icon: MapIcon, reqPerm: 'can_view_map' },
         { path: '/active-locomotives', label: 'Список', icon: ClipboardList, reqPerm: 'can_view_journal' },
         { path: '/journal', label: 'Журнал', icon: JournalIcon, reqPerm: 'can_view_journal' },
-        { path: '/remarks', label: 'Замечания', icon: ListTodo, reqPerm: 'can_view_journal' },
-        { path: '/dashboard', label: 'Дашборд', icon: BarChart3, reqPerm: 'can_view_dashboard' },
+        { path: '/gauges/terminal', label: 'Терминал', icon: ScanLine, reqPerm: 'can_view_dashboard' },
+        { path: '/gauges', label: 'Приборы', icon: Wrench, reqPerm: 'can_view_dashboard' },
     ];
 
     const filteredNavItems = navItems.filter(item =>

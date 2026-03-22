@@ -1,6 +1,6 @@
 const express = require('express');
 const supabase = require('../../db');
-const { requireAuth } = require('../middlewares/auth');
+const { requireAuth, requireAdmin } = require('../middlewares/auth');
 
 const router = express.Router();
 
@@ -15,7 +15,7 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // Create new location
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireAdmin, async (req, res) => {
     if (!req.session.user.is_global_admin) {
         return res.status(403).json({ error: 'Только Главный Админ может создавать депо' });
     }
@@ -34,7 +34,7 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 // Update location
-router.put('/:id', requireAuth, async (req, res) => {
+router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
     if (!req.session.user.is_global_admin) {
         return res.status(403).json({ error: 'Только Главный Админ может изменять депо' });
     }

@@ -13,6 +13,7 @@ router.get('/public', async (req, res) => {
             id,
             username,
             full_name,
+            email,
             role,
             avatar_url
         `)
@@ -28,7 +29,7 @@ router.get('/public', async (req, res) => {
 });
 
 // GET /api/users
-router.get('/', requireAdmin, async (req, res) => {
+router.get('/', requireAuth, requireAdmin, async (req, res) => {
     let query = supabase
         .from('users')
         .select('id, username, full_name, role, created_at, barcode, is_active, specialization, total_points')
@@ -44,7 +45,7 @@ router.get('/', requireAdmin, async (req, res) => {
 });
 
 // POST /api/users (Create a new user) - Admins only
-router.post('/', requireAdmin, async (req, res) => {
+router.post('/', requireAuth, requireAdmin, async (req, res) => {
     const { username, password, email: providedEmail, full_name, role, barcode, location_id, specialization } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Логин и пароль обязательны' });
 
@@ -127,7 +128,7 @@ router.post('/', requireAdmin, async (req, res) => {
 });
 
 // PUT /api/users/:id (Admin updating user)
-router.put('/:id', requireAdmin, async (req, res) => {
+router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const { username, full_name, role, password, barcode, is_active, location_id, specialization, total_points } = req.body;
 
@@ -210,7 +211,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
 });
 
 // DELETE /api/users/:id
-router.delete('/:id', requireAdmin, async (req, res) => {
+router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
 
     // Protect deleting the main admin

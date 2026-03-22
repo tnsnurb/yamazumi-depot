@@ -29,7 +29,7 @@ router.get('/me', (req, res) => {
     if (req.session.user) {
         // Double check sanitization for existing sessions
         const sanitizedUser = { ...req.session.user };
-        const fieldsToRemove = ['password', 'pin_code', 'uuid', 'barcode', 'created_at', 'is_active', 'email'];
+        const fieldsToRemove = ['password', 'pin_code', 'barcode', 'created_at', 'is_active', 'email'];
         fieldsToRemove.forEach(field => delete sanitizedUser[field]);
 
         res.json({ authenticated: true, user: sanitizedUser });
@@ -76,7 +76,7 @@ router.post('/login/terminal', async (req, res) => {
         user.permissions = roleData || {};
 
         // Sanitize sensitive & technical data
-        const fieldsToRemove = ['password', 'pin_code', 'uuid', 'barcode', 'created_at', 'is_active', 'email'];
+        const fieldsToRemove = ['password', 'pin_code', 'barcode', 'created_at', 'is_active', 'email'];
         fieldsToRemove.forEach(field => delete user[field]);
 
         req.session.user = user;
@@ -137,7 +137,7 @@ router.post('/login', async (req, res) => {
 
         // Sanitize sensitive & technical data before sending to client or storing in cookie-session
         if (req.session.user) {
-            const fieldsToRemove = ['password', 'pin_code', 'uuid', 'barcode', 'created_at', 'is_active', 'email'];
+            const fieldsToRemove = ['password', 'pin_code', 'barcode', 'created_at', 'is_active', 'email'];
             fieldsToRemove.forEach(field => delete req.session.user[field]);
         }
 
@@ -309,7 +309,7 @@ router.post('/login/barcode', async (req, res) => {
     try {
         const { data: user, error } = await supabase
             .from('users')
-            .select('id, username, full_name, role, avatar_url')
+            .select('id, uuid, username, full_name, role, avatar_url')
             .eq('barcode', barcode)
             .maybeSingle();
 

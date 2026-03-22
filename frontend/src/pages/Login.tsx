@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
-import { Eye, EyeOff, User, ChevronDown, Barcode, CheckCircle2, Camera, Loader2, Mail } from "lucide-react"
+import { Eye, EyeOff, User, ChevronDown, CheckCircle2, Loader2, Mail } from "lucide-react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -39,20 +39,9 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false)
     const [publicUsers, setPublicUsers] = useState<PublicUser[]>([])
     const [selectedUser, setSelectedUser] = useState<PublicUser | null>(null)
-    const [isScanning, setIsScanning] = useState(false)
     const [dropdownOpen, setDropdownOpen] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
     const dropdownRef = useRef<HTMLDivElement>(null)
-    const [isCameraOpen, setIsCameraOpen] = useState(false)
-    const scannerRef = useRef<any>(null)
-    const scannerContainerRef = useRef<HTMLDivElement>(null)
-    // PIN dialog state
-    const [scannedBarcode, setScannedBarcode] = useState<string | null>(null)
-    const [scannedUser, setScannedUser] = useState<{ id: number; full_name: string; avatar_url?: string } | null>(null)
-    const [pinCode, setPinCode] = useState(['', '', '', ''])
-    const [pinError, setPinError] = useState('')
-    const [isPinLoading, setIsPinLoading] = useState(false)
-    const pinRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)]
 
     // Detect if we're returning from OAuth (Google Auth redirect)
     const [isOAuthCallback, setIsOAuthCallback] = useState(() => {
@@ -66,32 +55,6 @@ export default function Login() {
         const timeout = setTimeout(() => setIsOAuthCallback(false), 8000)
         return () => clearTimeout(timeout)
     }, [isOAuthCallback])
-
-    // Barcode scanner
-    useEffect(() => {
-        let buffer = ""
-        let lastKeyTime = Date.now()
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement && e.key === "Enter") return
-            if (e.target instanceof HTMLInputElement && e.key !== "Enter") return
-
-            const currentTime = Date.now()
-            if (e.key === "Enter") {
-                if (buffer.length > 2) handleBarcodeLogin(buffer)
-                buffer = ""
-                return
-            }
-            if (e.key.length === 1) {
-                if (currentTime - lastKeyTime > 50) buffer = ""
-                buffer += e.key
-                lastKeyTime = currentTime
-            }
-        }
-
-        window.addEventListener("keydown", handleKeyDown)
-        return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [])
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -126,111 +89,6 @@ export default function Login() {
             }
         }
     }, [])
-
-    const handleBarcodeLogin = async (barcode: string) => {
-        setIsScanning(true)
-        try {
-            const res = await fetch("/api/login/barcode", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ barcode }),
-            })
-            const data = await res.json()
-            console.log("Barcode login response:", res.status, res.ok, data)
-            if (res.ok && data.found) {
-                // Show PIN dialog
-                setScannedBarcode(barcode)
-                setScannedUser(data.user)
-                setPinCode(['', '', '', ''])
-                setPinError('')
-                setTimeout(() => pinRefs[0]?.current?.focus(), 100)
-            } else {
-                toast.error(data.error || "Код не распознан")
-            }
-        } catch {
-            toast.error("Ошибка при сканировании")
-        } finally {
-            setIsScanning(false)
-        }
-    }
-
-    const handlePinInput = (index: number, value: string) => {
-        if (!/^\d*$/.test(value)) return
-        const newPin = [...pinCode]
-        newPin[index] = value.slice(-1)
-        setPinCode(newPin)
-        setPinError('')
-        if (value && index < 3) {
-            pinRefs[index + 1]?.current?.focus()
-        }
-        // Auto-submit when all 4 digits entered
-        if (value && index === 3 && newPin.every(d => d !== '')) {
-            handlePinSubmit(newPin.join(''))
-        }
-    }
-
-    const handlePinKeyDown = (index: number, e: React.KeyboardEvent) => {
-        if (e.key === 'Backspace' && !pinCode[index] && index > 0) {
-            pinRefs[index - 1]?.current?.focus()
-        }
-    }
-
-    const handlePinSubmit = async (pin?: string) => {
-        const code = pin || pinCode.join('')
-        if (code.length !== 4) {
-            setPinError('Введите 4 цифры')
-            return
-        }
-        setIsPinLoading(true)
-        setPinError('')
-        try {
-            // Map barcode to dummy email
-            const email = `${scannedBarcode}@yamazumi.id`
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email,
-                password: code
-            })
-
-            if (!error && data.user && data.session) {
-                // Explicitly sync session with backend
-                const loginRes = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        token: data.session.access_token,
-                        user: data.user
-                    })
-                });
-                const loginData = await loginRes.json();
-
-                // Immediately set auth data in cache so ProtectedRoute sees the user
-                if (loginData.success && loginData.user) {
-                    queryClient.setQueryData(['authUser'], loginData.user);
-                }
-
-                toast.success(`Добро пожаловать!`)
-
-                setScannedBarcode(null)
-                setScannedUser(null)
-                navigate("/active-locomotives")
-            } else {
-                setPinError(error?.message || 'Неверный пин-код')
-                setPinCode(['', '', '', ''])
-                pinRefs[0]?.current?.focus()
-            }
-        } catch (err) {
-            setPinError('Ошибка сети')
-        } finally {
-            setIsPinLoading(false)
-        }
-    }
-
-    const closePinDialog = () => {
-        setScannedBarcode(null)
-        setScannedUser(null)
-        setPinCode(['', '', '', ''])
-        setPinError('')
-    }
 
     const handleMagicLink = async () => {
         const username = form.getValues("username")
@@ -283,70 +141,6 @@ export default function Login() {
             }
         })
         if (error) toast.error(error.message)
-    }
-
-    // Camera scanner
-    useEffect(() => {
-        if (!isCameraOpen) return
-
-        const scannerId = 'barcode-scanner-region'
-        let stopped = false
-
-        const startScanner = async () => {
-            try {
-                const { Html5Qrcode: QrCodeScanner } = await import("html5-qrcode")
-                const html5QrCode = new QrCodeScanner(scannerId)
-                scannerRef.current = html5QrCode
-                await html5QrCode.start(
-                    { facingMode: 'environment' },
-                    {
-                        fps: 10,
-                        qrbox: { width: 250, height: 150 },
-                    },
-                    async (decodedText) => {
-                        if (stopped) return
-                        stopped = true
-                        try {
-                            await html5QrCode.stop()
-                        } catch {
-                            // ignore stop error
-                        }
-                        scannerRef.current = null
-                        setIsCameraOpen(false)
-                        handleBarcodeLogin(decodedText)
-                    },
-                    () => { }
-                )
-            } catch (err) {
-                console.error('Camera error:', err)
-                toast.error('Не удалось запустить камеру. Проверьте разрешения.')
-                setIsCameraOpen(false)
-            }
-        }
-
-        setTimeout(startScanner, 200)
-
-        return () => {
-            stopped = true
-            const s = scannerRef.current
-            scannerRef.current = null
-            if (s) {
-                s.stop().catch(() => {
-                    // ignore
-                })
-            }
-        }
-    }, [isCameraOpen])
-
-    const closeCameraScanner = () => {
-        const s = scannerRef.current
-        scannerRef.current = null
-        if (s) {
-            s.stop().catch(() => {
-                // ignore
-            })
-        }
-        setIsCameraOpen(false)
     }
 
     useEffect(() => {
@@ -420,6 +214,7 @@ export default function Login() {
 
     const filteredUsers = publicUsers.filter(u =>
         u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.role_name.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
@@ -439,20 +234,6 @@ export default function Login() {
                             {/* Header */}
                             <div className="text-center mb-8">
                                 <h1 className="text-3xl font-bold text-slate-900 mt-2">Yamazumi</h1>
-                                <div className="mt-4 flex items-center gap-3">
-                                    <div className="inline-flex items-center gap-2 text-xs text-slate-400 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
-                                        <Barcode className={`w-3.5 h-3.5 ${isScanning ? 'text-indigo-500 animate-pulse' : 'text-slate-400'}`} />
-                                        <span>{isScanning ? 'Авторизация...' : 'USB-сканер активен'}</span>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsCameraOpen(true)}
-                                        className="inline-flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100 hover:bg-indigo-100 transition-colors cursor-pointer"
-                                    >
-                                        <Camera className="w-3.5 h-3.5" />
-                                        <span>Камера</span>
-                                    </button>
-                                </div>
                             </div>
 
                             <Form {...form}>
@@ -490,7 +271,7 @@ export default function Login() {
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <div className="font-medium text-slate-900 text-sm truncate">{selectedUser.full_name}</div>
-                                                            <div className="text-xs text-slate-500 truncate">{selectedUser.role_name}</div>
+                                                            <div className="text-xs text-indigo-600 font-medium truncate">{selectedUser.email}</div>
                                                         </div>
                                                         <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
                                                     </>
@@ -546,7 +327,7 @@ export default function Login() {
                                                                     </div>
                                                                     <div className="flex-1 min-w-0">
                                                                         <div className="font-medium text-slate-900 text-sm truncate">{u.full_name}</div>
-                                                                        <div className="text-xs text-slate-500 truncate">{u.role_name}</div>
+                                                                        <div className="text-xs text-indigo-600 font-medium truncate">{u.email}</div>
                                                                     </div>
                                                                     {selectedUser?.username === u.username && (
                                                                         <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
@@ -619,7 +400,7 @@ export default function Login() {
 
                                     <Button
                                         type="submit"
-                                        disabled={form.formState.isSubmitting || isScanning || !selectedUser}
+                                        disabled={form.formState.isSubmitting || !selectedUser}
                                         className="w-full h-[52px] rounded-xl text-lg font-bold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2"
                                     >
                                         {form.formState.isSubmitting ? (
@@ -698,86 +479,6 @@ export default function Login() {
                 </div>
             </div>
 
-            {/* PIN Code Dialog */}
-            {scannedUser && (
-                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-                        <div className="p-6 text-center">
-                            <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center mx-auto mb-4 overflow-hidden">
-                                {scannedUser.avatar_url ? (
-                                    <img src={scannedUser.avatar_url} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    <User className="w-8 h-8 text-indigo-600" />
-                                )}
-                            </div>
-                            <h3 className="text-lg font-semibold text-slate-900">{scannedUser.full_name}</h3>
-                            <p className="text-sm text-slate-500 mt-1">Введите пин-код</p>
-
-                            <div className="flex justify-center gap-3 mt-6">
-                                {pinCode.map((digit, i) => (
-                                    <input
-                                        key={i}
-                                        ref={pinRefs[i]}
-                                        type="password"
-                                        inputMode="numeric"
-                                        maxLength={1}
-                                        value={digit}
-                                        onChange={(e) => handlePinInput(i, e.target.value)}
-                                        onKeyDown={(e) => handlePinKeyDown(i, e)}
-                                        className="w-14 h-14 text-center text-2xl font-bold border-2 border-slate-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
-                                    />
-                                ))}
-                            </div>
-
-                            {pinError && (
-                                <p className="text-sm text-red-500 mt-3 font-medium">{pinError}</p>
-                            )}
-
-                            <div className="flex gap-3 mt-6">
-                                <Button variant="outline" className="flex-1" onClick={closePinDialog} disabled={isPinLoading}>
-                                    Отмена
-                                </Button>
-                                <Button
-                                    className="flex-1 bg-indigo-600 hover:bg-indigo-700"
-                                    onClick={() => handlePinSubmit()}
-                                    disabled={isPinLoading || pinCode.some(d => d === '')}
-                                >
-                                    {isPinLoading ? 'Вход...' : 'Войти'}
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Camera Scanner Modal */}
-            {isCameraOpen && (
-                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                        <div className="p-4 border-b flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Camera className="w-5 h-5 text-indigo-600" />
-                                <h3 className="font-semibold text-slate-900">Сканирование штрих-кода</h3>
-                            </div>
-                            <button
-                                onClick={closeCameraScanner}
-                                className="text-slate-400 hover:text-slate-600 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors"
-                            >
-                                ×
-                            </button>
-                        </div>
-                        <div className="p-4">
-                            <div id="barcode-scanner-region" ref={scannerContainerRef} className="w-full rounded-lg overflow-hidden" />
-                            <p className="text-xs text-slate-400 text-center mt-3">Наведите камеру на штрих-код бейджа</p>
-                        </div>
-                        <div className="p-4 border-t">
-                            <Button variant="outline" className="w-full" onClick={closeCameraScanner}>
-                                Отмена
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </>
     )
 }

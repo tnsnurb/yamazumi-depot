@@ -2,6 +2,7 @@ import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ClipboardCheck, Train, Calendar } from "lucide-react";
 import { LocomotiveChecklist } from "@/components/locomotive/LocomotiveChecklist";
+import { formatWO } from "@/lib/utils";
 
 export default function HistorySessionChecklists() {
     const { id } = useParams();
@@ -39,7 +40,7 @@ export default function HistorySessionChecklists() {
                             </div>
                             <div>
                                 <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">
-                                    Чек-листы: WO#{id}
+                                    Чек-листы: {id ? formatWO(id, session.start_date) : ''}
                                 </h1>
                                 <div className="flex items-center gap-2 mt-1.5 text-[10px] md:text-xs font-medium text-slate-400">
                                     <div className="flex items-center gap-1 text-blue-600">

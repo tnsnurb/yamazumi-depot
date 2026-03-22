@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { CheckCircle2, Clock, Wrench, FileText, User } from "lucide-react";
+import { formatWO } from "@/lib/utils";
 
 interface LocomotiveHistoryProps {
     locomotiveId: number | string;
@@ -57,7 +58,7 @@ export function LocomotiveHistory({ locomotiveId }: LocomotiveHistoryProps) {
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-2 text-left">
                                 <div>
                                     <div className="font-semibold text-slate-800 flex items-center gap-2">
-                                        МПР №{session.id}
+                                        {formatWO(session.id, session.start_date)}
                                         {session.status === 'active' ? (
                                             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Текущий ремонт</Badge>
                                         ) : (

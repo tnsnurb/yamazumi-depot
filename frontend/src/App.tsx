@@ -20,6 +20,8 @@ const HistorySessionRemarks = lazy(() => import("./pages/HistorySessionRemarks")
 
 const ActiveRemarks = lazy(() => import("./pages/ActiveRemarks"))
 const ActiveLocosList = lazy(() => import("./pages/ActiveLocosList"))
+const Gauges = lazy(() => import("./pages/Gauges"))
+const GaugeTerminal = lazy(() => import("./pages/GaugeTerminal"))
 
 import { ProtectedRoute } from "./components/common/ProtectedRoute"
 import { MobileNav } from "./components/common/MobileNav"
@@ -140,6 +142,8 @@ function App() {
               <Route path="/checklists" element={<ActiveChecklists />} />
               <Route path="/locomotive/:id/remarks" element={<LocomotiveRemarks />} />
               <Route path="/active-locomotives" element={<ActiveLocosList />} />
+              <Route path="/gauges" element={<Gauges />} />
+              <Route path="/gauges/terminal" element={<GaugeTerminal />} />
               <Route path="/locomotive/:id/checklist" element={<LocomotiveChecklistPage />} />
               <Route path="/history/:number" element={<History />} />
               <Route path="/global-history" element={<GlobalHistory />} />

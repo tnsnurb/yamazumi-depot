@@ -11,7 +11,9 @@ import {
     TrainFront,
     ShieldCheck,
     ClipboardCheck,
-    ListTodo
+    ListTodo,
+    Wrench,
+    ScanLine
 } from "lucide-react"
 
 import {
@@ -62,6 +64,16 @@ const navMain = [
         title: "Активные ремонты",
         url: "/active-locomotives",
         icon: ListTodo,
+    },
+    {
+        title: "Метрология",
+        url: "/gauges",
+        icon: Wrench,
+    },
+    {
+        title: "Терминал (Выдача/Снятие)",
+        url: "/gauges/terminal",
+        icon: ScanLine,
     },
 ]
 

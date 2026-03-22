@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react"
+import React, { useState, useMemo, useCallback } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useDebounce } from "@/hooks/useDebounce"
 import { useNavigate } from "react-router-dom"
@@ -7,373 +7,39 @@ import { Input } from "@/components/ui/input"
 import { FloatingInput } from "@/components/ui/FloatingInput"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Label } from "@/components/ui/label"
+// Simplified imports
+// Simplified imports
+// Simplified imports
 import { toast } from "sonner"
-import { Plus, Search, RefreshCw, Trash2, Check, ChevronsUpDown, Printer, Clock, History, ListTodo, Loader2, QrCode, Scale } from "lucide-react"
+import { Plus, Search, RefreshCw, Trash2, Printer, Clock, History, ListTodo, QrCode, Scale } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { supabase } from "@/lib/supabase"
-import { useAuth } from "@/hooks/useAuth"
+// Simplified imports
+import { locomotiveApi } from "@/api/locomotiveService"
+import type { Locomotive, LocoStatus, Location } from "@/types/locomotive"
+import { statusLabels, statusColors, formatToDateTimeLocal } from "@/types/locomotive"
 import { QRCodeSVG } from 'qrcode.react'
 import { WheelsetMeasurements } from "@/components/locomotive/WheelsetMeasurements"
+import { AddLocoDialog } from "@/components/locomotive/AddLocoDialog"
+import { TrackSlot } from "@/components/locomotive/TrackSlot"
+import { TimeCounter } from "@/components/locomotive/TimeCounter"
+import { useLocomotivesSync } from "@/hooks/useLocomotivesSync"
+import { useAuth } from "@/hooks/useAuth"
 
-export type LocoStatus = 'active' | 'repair' | 'waiting' | 'completed';
-
-export interface Location {
-    id: number;
-    name: string;
-    track_count: number;
-    slot_count: number;
-    gate_position: string | number | null;
-    track_config: string | null;
-}
-
-export interface Locomotive {
-    id: number;
-    series: string | null;
-    number: string;
-    status: LocoStatus;
-    track: number | null;
-    position: number | null;
-    created_at: string;
-    repair_type: string | null;
-    planned_release: string | null;
-    acceptance_time: string | null;
-}
-
-const formatToDateTimeLocal = (dateStr: string | null) => {
-    if (!dateStr) return "";
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return "";
-
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-};
-
-
-const statusColors = {
-    active: 'bg-green-500',
-    repair: 'bg-red-500',
-    waiting: 'bg-yellow-500',
-    completed: 'bg-blue-500',
-};
-
-const statusLabels: Record<string, string> = {
-    active: 'Активный',
-    repair: 'Ремонт',
-    waiting: 'Ожидание',
-    completed: 'Завершён',
-};
-
-const LocoCard = React.memo(({ loco, isHighlighted, canMove, onDragStart, onClick, currentTime }: { loco: Locomotive, isHighlighted: boolean, canMove: boolean, onDragStart: (e: React.DragEvent<HTMLDivElement>, id: number) => void, onClick: (loco: Locomotive) => void, currentTime: Date }) => {
-    return (
-        <TooltipProvider delayDuration={200}>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <div
-                        draggable={canMove}
-                        onDragStart={(e) => {
-                            if (canMove) {
-                                onDragStart(e, loco.id)
-                            }
-                        }}
-                        onClick={(e) => { e.stopPropagation(); onClick(loco) }}
-                        className={`relative w-[92%] h-[65%] mt-3 rounded-sm shadow-md cursor-pointer transition-all flex flex-row border border-slate-800 group/loco
-                            ${isHighlighted ? 'ring-4 ring-blue-500 ring-offset-1 z-10 scale-105' : 'hover:scale-105 hover:z-10 z-0'}
-                        `}
-                    >
-                        <div className="w-1/4 h-full bg-slate-700 relative border-r border-slate-900 flex items-center justify-center overflow-hidden rounded-l-sm">
-                            <div className="absolute inset-y-1 right-1 w-1/3 bg-blue-200/30 rounded-sm" />
-                            <div className={`w-2.5 h-2.5 rounded-full ${statusColors[loco.status]} border border-slate-900 shadow-sm relative z-10 ring-1 ring-black/20`} />
-                        </div>
-                        <div className="flex-1 h-full bg-gradient-to-r from-red-700 to-red-500 relative flex items-center justify-center overflow-hidden group-hover/loco:brightness-110 transition-all">
-                            <div className="absolute top-[20%] w-full h-[2px] bg-yellow-400 opacity-90" />
-                            <div className="absolute bottom-[20%] w-full h-[2px] bg-yellow-400 opacity-90" />
-                            <div className="bg-slate-900 px-2 py-0.5 rounded-sm text-white font-mono font-bold text-[10px] leading-tight z-10 shadow-inner border border-slate-700/80 drop-shadow-md flex flex-col items-center min-w-[32px]">
-                                {loco.series && <span className="text-[7px] text-slate-400 -mb-0.5">{loco.series}</span>}
-                                <span>{loco.number}</span>
-                                {loco.repair_type && (
-                                    <span className="text-[7px] text-amber-400 border-t border-slate-800 w-full text-center mt-0.5 pt-0.5 font-black uppercase tracking-tighter">
-                                        {loco.repair_type}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                        <div className="w-[6px] h-full bg-slate-800 rounded-r-sm flex flex-col justify-between py-1 border-l border-slate-900/50">
-                            <div className="w-full h-[2px] bg-yellow-200 shadow-[0_0_2px_1px_rgba(253,230,138,0.5)]" />
-                            <div className="w-full h-[2px] bg-yellow-200 shadow-[0_0_2px_1px_rgba(253,230,138,0.5)]" />
-                        </div>
-                    </div>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs space-y-0.5">
-                    <p className="font-bold">{loco.number}</p>
-                    <p>{statusLabels[loco.status]}{loco.repair_type ? ` • ${loco.repair_type}` : ''}</p>
-                    {(() => {
-                        const days = Math.floor((currentTime.getTime() - new Date(loco.created_at).getTime()) / (1000 * 60 * 60 * 24));
-                        return <p>На пути: {days === 0 ? 'сегодня' : `${days} дн.`}</p>
-                    })()}
-                    {loco.planned_release && (
-                        <p>Выпуск: {new Date(loco.planned_release).toLocaleDateString('ru-RU')}</p>
-                    )}
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
-    )
-});
-
-const AddLocoDialog = React.memo(({
-    isOpen,
-    onOpenChange,
-    onSubmit,
-    catalog,
-    repairTypes,
-    trackCount,
-    slotCount,
-    isPending,
-    initialTrack,
-    initialPosition
-}: {
-    isOpen: boolean;
-    onOpenChange: (open: boolean) => void;
-    onSubmit: (data: any) => void;
-    catalog: any[];
-    repairTypes: string[];
-    trackCount: number;
-    slotCount: number;
-    isPending: boolean;
-    initialTrack?: string;
-    initialPosition?: string;
-}) => {
-    const [series, setSeries] = useState("")
-    const [number, setNumber] = useState("")
-    const [status, setStatus] = useState<string>("waiting")
-    const [track, setTrack] = useState<string>(initialTrack || "")
-    const [position, setPosition] = useState<string>(initialPosition || "")
-    const [repairType, setRepairType] = useState<string>("")
-    const [acceptanceTime, setAcceptanceTime] = useState<string>(formatToDateTimeLocal(new Date().toISOString()))
-    const [isNumberOpen, setIsNumberOpen] = useState(false)
-    const [search, setSearch] = useState("")
-
-    const filteredCatalog = useMemo(() => {
-        const s = search.toLowerCase()
-        return catalog
-            .filter(item =>
-                `${item.series || ''} ${item.number}`.toLowerCase().includes(s)
-            )
-            .slice(0, 100)
-    }, [catalog, search])
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!number) return
-        onSubmit({
-            series,
-            number,
-            status,
-            track: track && track !== 'none' ? parseInt(track) : null,
-            position: position && position !== 'none' ? parseInt(position) : null,
-            repair_type: repairType && repairType !== 'none' ? repairType : null,
-            planned_release: null,
-            acceptance_time: acceptanceTime || null
-        })
-    }
-
-    useEffect(() => {
-        if (isOpen) {
-            setSeries("")
-            setNumber("")
-            setStatus("waiting")
-            setTrack(initialTrack || "")
-            setPosition(initialPosition || "")
-            setRepairType("")
-            setAcceptanceTime(formatToDateTimeLocal(new Date().toISOString()))
-            setSearch("")
-        }
-    }, [isOpen, initialTrack, initialPosition])
-
-    return (
-        <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                    <DialogTitle>Добавить локомотив</DialogTitle>
-                </DialogHeader>
-
-                <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="col-span-1 space-y-2">
-                            <Label>Серия</Label>
-                            <Input
-                                value={series}
-                                onChange={e => setSeries(e.target.value)}
-                                placeholder="ТЭ33А"
-                            />
-                        </div>
-                        <div className="col-span-2 space-y-2">
-                            <Label>Номер</Label>
-                            <Popover open={isNumberOpen} onOpenChange={setIsNumberOpen}>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        role="combobox"
-                                        aria-expanded={isNumberOpen}
-                                        className="w-full justify-between"
-                                    >
-                                        {number || "Выберите..."}
-                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[300px] p-0" align="start">
-                                    <Command shouldFilter={false}>
-                                        <CommandInput
-                                            placeholder="Поиск в справочнике..."
-                                            value={search}
-                                            onValueChange={setSearch}
-                                        />
-                                        <CommandList>
-                                            <CommandEmpty>Ничего не найдено.</CommandEmpty>
-                                            <CommandGroup>
-                                                {filteredCatalog.map((item: any) => (
-                                                    <CommandItem
-                                                        key={item.id}
-                                                        value={`${item.series} ${item.number}`}
-                                                        onSelect={() => {
-                                                            setSeries(item.series || "")
-                                                            setNumber(item.number)
-                                                            setIsNumberOpen(false)
-                                                        }}
-                                                    >
-                                                        <Check
-                                                            className={cn(
-                                                                "mr-2 h-4 w-4",
-                                                                number === item.number && series === item.series ? "opacity-100" : "opacity-0"
-                                                            )}
-                                                        />
-                                                        {item.series} {item.number}
-                                                    </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                        </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>Статус</Label>
-                        <Select value={status} onValueChange={setStatus}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="repair">Ремонт</SelectItem>
-                                <SelectItem value="waiting">Ожидание</SelectItem>
-                                <SelectItem value="completed">Завершён</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label>Путь</Label>
-                            <Select value={track} onValueChange={setTrack}>
-                                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">—</SelectItem>
-                                    {Array.from({ length: trackCount }).map((_, i) => (
-                                        <SelectItem key={i + 1} value={(i + 1).toString()}>
-                                            Путь {i + 1}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Позиция</Label>
-                            <Select value={position} onValueChange={setPosition}>
-                                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">—</SelectItem>
-                                    {Array.from({ length: slotCount }).map((_, i) => (
-                                        <SelectItem key={i + 1} value={(i + 1).toString()}>
-                                            Слот {i + 1}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    {(status === 'repair' || status === 'waiting') && (
-                        <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                            <Label>Тип ремонта</Label>
-                            <Select value={repairType} onValueChange={setRepairType}>
-                                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">—</SelectItem>
-                                    {repairTypes.map((rt: string) => (
-                                        <SelectItem key={rt} value={rt}>{rt}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-
-                    <div className="space-y-2">
-                        <Label>Время приемки</Label>
-                        <Input
-                            type="datetime-local"
-                            value={acceptanceTime}
-                            onChange={e => setAcceptanceTime(e.target.value)}
-                        />
-                    </div>
-
-                    <DialogFooter className="pt-4 gap-2 sm:gap-0">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                            Отмена
-                        </Button>
-                        <Button type="submit" disabled={isPending} className="flex items-center gap-2">
-                            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Добавить на карту
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    )
-});
 
 export default function MapPage() {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
-    const [draggedId, setDraggedId] = useState<string | null>(null)
+    const [draggedId, setDraggedId] = useState<number | null>(null)
     const [isRemoveReasonOpen, setIsRemoveReasonOpen] = useState(false)
     const [removeReason, setRemoveReason] = useState("")
-    const [pendingMove, setPendingMove] = useState<{ locoId: string; locoSeries: string; locoNumber: string; fromTrack: number | null; fromPos: number | null; toTrack: number; toPos: number } | null>(null)
+    const [pendingMove, setPendingMove] = useState<{ locoId: number; locoSeries: string; locoNumber: string; fromTrack: number | null; fromPos: number | null; toTrack: number; toPos: number } | null>(null)
 
     // Search and filters
     const [searchQuery, setSearchQuery] = useState("")
     const debouncedSearch = useDebounce(searchQuery, 400)
     const [statusFilter, setStatusFilter] = useState<string>("all")
-    const [currentTime, setCurrentTime] = useState(new Date())
 
-    useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 60000)
-        return () => clearInterval(timer)
-    }, [])
-
-    const getHoursSince = (dateStr: string | null) => {
-        if (!dateStr) return 0
-        const diff = currentTime.getTime() - new Date(dateStr).getTime()
-        const hours = Math.floor(diff / (1000 * 60 * 60))
-        return hours > 0 ? hours : 0
-    }
 
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [isInfoOpen, setIsInfoOpen] = useState(false)
@@ -386,33 +52,28 @@ export default function MapPage() {
 
     // React Query Hooks
     const { user } = useAuth()
+    useLocomotivesSync(user?.active_location_id)
 
     const { data: locations = [] } = useQuery({
         queryKey: ['locations'],
-        queryFn: () => fetch('/api/locations').then(res => res.json()),
+        queryFn: () => locomotiveApi.getLocations(),
         enabled: !!user
     })
 
     const { data: locomotives = [], isLoading: isLoadingLocos } = useQuery({
         queryKey: ['locomotives', user?.active_location_id],
-        queryFn: async () => {
-            const url = user?.active_location_id
-                ? `/api/locomotives?location_id=${user.active_location_id}`
-                : "/api/locomotives"
-            const res = await fetch(url)
-            return res.json()
-        },
+        queryFn: () => locomotiveApi.getAll(user?.active_location_id as number | undefined),
         enabled: !!user
     })
 
     const { data: catalog = [] } = useQuery({
         queryKey: ['catalog'],
-        queryFn: () => fetch("/api/catalog").then(res => res.json())
+        queryFn: () => locomotiveApi.getCatalog()
     })
 
     const { data: repairTypes = [] } = useQuery({
         queryKey: ['repair-types'],
-        queryFn: () => fetch("/api/repair-types").then(res => res.json()).then((d: any[]) => d.map((r: any) => r.name))
+        queryFn: () => locomotiveApi.getRepairTypes()
     })
 
     // Setup Dynamic Configs
@@ -446,37 +107,10 @@ export default function MapPage() {
 
     // No manual fetch needed on mount, handled by React Query
 
-    useEffect(() => {
-        if (!user?.active_location_id) return;
-
-        const channel = supabase
-            .channel('public:locomotives')
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'locomotives' },
-                () => {
-                    // Simple and robust: just invalidate the list
-                    queryClient.invalidateQueries({ queryKey: ['locomotives'] })
-                }
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [user?.active_location_id, queryClient])
 
     // Mutations
     const addMutation = useMutation({
-        mutationFn: (payload: any) => fetch("/api/locomotives", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        }).then(async res => {
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error)
-            return data
-        }),
+        mutationFn: (payload: any) => locomotiveApi.create(payload),
         onSuccess: (data) => {
             toast.success(`Локомотив ${data.series || ''} ${data.number} добавлен`)
             setIsAddOpen(false)
@@ -487,15 +121,7 @@ export default function MapPage() {
 
     const moveMutation = useMutation({
         mutationFn: ({ id, track, position, reason }: { id: string | number, track: number | null, position: number | null, reason?: string }) =>
-            fetch(`/api/locomotives/${id}/move`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ track, position, reason })
-            }).then(async res => {
-                const data = await res.json()
-                if (!res.ok) throw new Error(data.error)
-                return data
-            }),
+            locomotiveApi.move(id, { track, position, reason }),
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['locomotives'] })
             toast.success(`Локомотив ${data.series || ''} ${data.number} перемещён`)
@@ -504,12 +130,7 @@ export default function MapPage() {
     })
 
     const deleteMutation = useMutation({
-        mutationFn: (id: number) => fetch(`/api/locomotives/${id}`, { method: "DELETE" }).then(async res => {
-            if (!res.ok) {
-                const data = await res.json()
-                throw new Error(data.error)
-            }
-        }),
+        mutationFn: (id: number) => locomotiveApi.delete(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['locomotives'] })
             setIsInfoOpen(false)
@@ -522,18 +143,18 @@ export default function MapPage() {
         const encodedNum = encodeURIComponent(number);
         queryClient.prefetchQuery({
             queryKey: ['locomotive', number],
-            queryFn: () => fetch(`/api/locomotives/${encodedNum}`).then(res => res.json())
+            queryFn: () => locomotiveApi.getById(encodedNum)
         })
         queryClient.prefetchQuery({
             queryKey: ['remarks', number],
-            queryFn: () => fetch(`/api/locomotives/${encodedNum}/remarks`).then(res => res.json())
+            queryFn: () => locomotiveApi.getRemarks(encodedNum)
         })
     }
 
     const handlePrefetchHistory = (number: string) => {
         queryClient.prefetchQuery({
             queryKey: ['locomotive-history', number],
-            queryFn: () => fetch(`/api/history/${encodeURIComponent(number)}`).then(res => res.json())
+            queryFn: () => locomotiveApi.getHistory(number)
         })
     }
 
@@ -576,25 +197,28 @@ export default function MapPage() {
     }, [locomotives, debouncedSearch, statusFilter])
 
     // Drag and Drop
-    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: number) => {
-        setDraggedId(id.toString())
+    const handleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, id: number) => {
+        setDraggedId(id)
         e.dataTransfer.setData("text/plain", id.toString())
         e.dataTransfer.effectAllowed = "move"
-    }
+    }, [])
 
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>, track: number, pos: number) => {
+    const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>, track: number, pos: number) => {
         e.preventDefault()
-        if (!draggedId) return
+        const idStr = e.dataTransfer.getData("text/plain")
+        const id = parseInt(idStr)
+        if (isNaN(id)) return
+
         const locoList = Array.isArray(locomotives) ? locomotives : []
 
         const existing = locoList.find((l: Locomotive) => l.track === track && l.position === pos)
-        if (existing && existing.id.toString() !== draggedId) {
+        if (existing && existing.id !== id) {
             toast.error("Позиция уже занята")
             setDraggedId(null)
             return
         }
 
-        const loco = locoList.find((l: Locomotive) => l.id.toString() === draggedId)
+        const loco = locoList.find((l: Locomotive) => l.id === id)
         if (!loco) { setDraggedId(null); return }
 
         if (loco.track === track && loco.position === pos) {
@@ -603,7 +227,7 @@ export default function MapPage() {
         }
 
         setPendingMove({
-            locoId: draggedId,
+            locoId: id,
             locoSeries: loco.series || "",
             locoNumber: loco.number,
             fromTrack: loco.track,
@@ -612,7 +236,7 @@ export default function MapPage() {
             toPos: pos
         })
         setDraggedId(null)
-    }
+    }, [locomotives])
 
     const locoMap = React.useMemo(() => {
         const map = new Map<string, Locomotive>();
@@ -624,58 +248,21 @@ export default function MapPage() {
         return map;
     }, [filteredLocos]);
 
-    // Use filteredLocos for rendering the map
-    const handleSlotClick = (track: number, pos: number) => {
+    const handleSlotClick = useCallback((track: number, pos: number) => {
         setSelectedSlot({ track: track.toString(), position: pos.toString() })
         setIsAddOpen(true)
-    }
+    }, [])
 
-    const renderSlot = (track: number, pos: number) => {
-        const loco = locoMap.get(`${track}-${pos}`)
-        const isHighlighted = !!(loco && searchQuery && loco.number.toLowerCase().includes(searchQuery.toLowerCase()))
-        const canMove = !!(user?.role === 'admin' || user?.permissions?.can_move_locomotives)
-        const canEdit = !!(user?.role === 'admin' || user?.permissions?.can_edit_catalog)
+    const handleLocoClick = useCallback(async (loco: Locomotive) => {
+        // Ensure we have the latest data including acceptance_time
+        setSelectedLoco(loco);
+        setIsInfoOpen(true);
+        try {
+            const fullLoco = await locomotiveApi.getById(loco.id);
+            setSelectedLoco(fullLoco);
+        } catch (e) { console.error("Error fetching full loco", e) }
+    }, [])
 
-        return (
-            <div
-                key={`${track}-${pos}`}
-                className={`relative w-32 h-16 border rounded-md flex items-center justify-center transition-colors
-          ${draggedId ? 'border-dashed border-2 border-slate-300 hover:border-slate-500 hover:bg-slate-50' : 'border-slate-200'}
-          ${!loco && !draggedId ? 'cursor-pointer hover:bg-indigo-50 hover:border-indigo-300 group' : ''}
-          ${!isInside(pos) ? 'bg-slate-100/50' : 'bg-white shadow-sm'}
-        `}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => handleDrop(e, track, pos)}
-                onClick={() => { if (!loco && !draggedId && canEdit) handleSlotClick(track, pos) }}
-            >
-                <div className="absolute top-1 left-2 text-xs text-slate-400 font-mono">{pos}</div>
-
-                {loco ? (
-                    <LocoCard
-                        loco={loco}
-                        isHighlighted={isHighlighted}
-                        canMove={canMove}
-                        currentTime={currentTime}
-                        onDragStart={handleDragStart}
-                        onClick={async (loco) => {
-                            // Ensure we have the latest data including acceptance_time
-                            setSelectedLoco(loco);
-                            setIsInfoOpen(true);
-                            try {
-                                const res = await fetch(`/api/locomotives/${loco.id}`);
-                                if (res.ok) {
-                                    const fullLoco = await res.json();
-                                    setSelectedLoco(fullLoco);
-                                }
-                            } catch (e) { console.error("Error fetching full loco", e) }
-                        }}
-                    />
-                ) : (
-                    <Plus className="w-5 h-5 text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-                )}
-            </div>
-        )
-    }
 
     return (
         <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
@@ -805,9 +392,27 @@ export default function MapPage() {
                                                 <div className="flex gap-3 shrink-0">
                                                     {Array.from({ length: slotCount }).map((_, j) => {
                                                         const pos = j + 1;
+                                                        const loco = locoMap.get(`${trackNum}-${pos}`)
+                                                        const isHighlighted = !!(loco && searchQuery && loco.number.toLowerCase().includes(searchQuery.toLowerCase()))
+                                                        const canMove = !!(user?.role === 'admin' || user?.permissions?.can_move_locomotives)
+                                                        const canEdit = !!(user?.role === 'admin' || user?.permissions?.can_edit_catalog)
+
                                                         return (
                                                             <React.Fragment key={j}>
-                                                                {renderSlot(trackNum, pos)}
+                                                                <TrackSlot
+                                                                    track={trackNum}
+                                                                    pos={pos}
+                                                                    loco={loco}
+                                                                    isHighlighted={isHighlighted}
+                                                                    canMove={canMove}
+                                                                    canEdit={canEdit}
+                                                                    draggedId={draggedId}
+                                                                    isInside={isInside}
+                                                                    onDrop={handleDrop}
+                                                                    onDragStart={handleDragStart}
+                                                                    onSlotClick={handleSlotClick}
+                                                                    onLocoClick={handleLocoClick}
+                                                                />
                                                                 {pos < slotCount && isInside(pos) !== isInside(pos + 1) && (
                                                                     <div className="w-4 h-16 flex flex-col justify-between py-1 shrink-0 items-center">
                                                                         <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
@@ -853,9 +458,6 @@ export default function MapPage() {
                     </DialogHeader>
                     {selectedLoco ? (
                         (() => {
-                            const daysOnTrack = selectedLoco.track
-                                ? Math.floor((currentTime.getTime() - new Date(selectedLoco.created_at).getTime()) / (1000 * 60 * 60 * 24))
-                                : null
                             return (
                                 <div className="space-y-4 py-4">
                                     <div className="grid grid-cols-2 gap-y-3 text-sm">
@@ -873,26 +475,17 @@ export default function MapPage() {
                                                 onValueChange={async (val) => {
                                                     if (!selectedLoco) return
                                                     try {
-                                                        const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
-                                                            method: "PUT",
-                                                            headers: { "Content-Type": "application/json" },
-                                                            body: JSON.stringify({ status: val })
-                                                        })
-                                                        if (res.ok) {
-                                                            toast.success(`Статус изменён на: ${statusLabels[val as LocoStatus]}`)
-                                                            setSelectedLoco({ ...selectedLoco, status: val as LocoStatus })
-                                                            queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+                                                        const updated = await locomotiveApi.updateStatus(selectedLoco.id, val as LocoStatus);
+                                                        toast.success(`Статус изменён на: ${statusLabels[val as LocoStatus]}`)
+                                                        setSelectedLoco(updated)
+                                                        queryClient.invalidateQueries({ queryKey: ['locomotives'] })
 
-                                                            // Automatically open removal dialog if status is completed and loco is on track
-                                                            if (val === 'completed' && selectedLoco.track) {
-                                                                setRemoveReason("Выпуск из ремонта")
-                                                                setIsRemoveReasonOpen(true)
-                                                            }
-                                                        } else {
-                                                            const data = await res.json()
-                                                            toast.error(data.error || "Ошибка изменения статуса")
+                                                        // Automatically open removal dialog if status is completed and loco is on track
+                                                        if (val === 'completed' && selectedLoco.track) {
+                                                            setRemoveReason("Выпуск из ремонта")
+                                                            setIsRemoveReasonOpen(true)
                                                         }
-                                                    } catch (e) { toast.error("Ошибка сети") }
+                                                    } catch (e) { toast.error(e instanceof Error ? e.message : "Ошибка изменения статуса") }
                                                 }}
                                             >
                                                 <SelectTrigger className="h-8 w-40">
@@ -914,21 +507,11 @@ export default function MapPage() {
                                             </Select>
                                         </div>
 
-                                        <div className="text-slate-500">Позиция:</div>
-                                        <div>{selectedLoco.track ? `Путь ${selectedLoco.track}, Слот ${selectedLoco.position}` : '—'}</div>
-
-                                        {daysOnTrack !== null && (
-                                            <>
-                                                <div className="text-slate-500">На пути:</div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                                                    <span className={daysOnTrack > 7 ? 'text-red-600 font-semibold' : ''}>
-                                                        {daysOnTrack === 0 ? 'Сегодня' : `${daysOnTrack} дн.`}
-                                                    </span>
-                                                    {daysOnTrack > 7 && <span className="text-xs text-red-500">⚠️</span>}
-                                                </div>
-                                            </>
-                                        )}
+                                        <div className="text-slate-500">На пути:</div>
+                                        <div className="flex items-center gap-1.5">
+                                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                            <TimeCounter date={selectedLoco.created_at} variant="days" className="font-medium" />
+                                        </div>
 
                                         <div className="text-slate-500">Добавлен в депо:</div>
                                         <div>{new Date(selectedLoco.created_at).toLocaleString()}</div>
@@ -947,18 +530,11 @@ export default function MapPage() {
                                                     if (!selectedLoco) return
                                                     const val = e.target.value || null;
                                                     try {
-                                                        const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
-                                                            method: "PUT",
-                                                            headers: { "Content-Type": "application/json" },
-                                                            body: JSON.stringify({ acceptance_time: val ? new Date(val).toISOString() : null })
-                                                        })
-                                                        if (res.ok) {
-                                                            const updatedLoco = await res.json();
-                                                            toast.success(`Время приемки обновлено`)
-                                                            setSelectedLoco(updatedLoco)
-                                                            queryClient.invalidateQueries({ queryKey: ['locomotives'] })
-                                                        }
-                                                    } catch (err) { toast.error("Ошибка сети") }
+                                                        const updated = await locomotiveApi.updateAcceptanceTime(selectedLoco.id, val ? new Date(val).toISOString() : null);
+                                                        toast.success(`Время приемки обновлено`)
+                                                        setSelectedLoco(updated)
+                                                        queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+                                                    } catch (err) { toast.error(err instanceof Error ? err.message : "Ошибка сети") }
                                                 }}
                                             />
                                             {selectedLoco.acceptance_time && (
@@ -968,7 +544,7 @@ export default function MapPage() {
                                                         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
                                                     </div>
                                                     <span className="font-mono font-bold tracking-tight text-[10px] whitespace-nowrap uppercase">
-                                                        {getHoursSince(selectedLoco.acceptance_time)} ч
+                                                        <TimeCounter date={selectedLoco.acceptance_time} variant="hours" />
                                                     </span>
                                                 </div>
                                             )}
@@ -983,18 +559,11 @@ export default function MapPage() {
                                                     if (!selectedLoco) return
                                                     const finalVal = val === "none" ? null : val;
                                                     try {
-                                                        const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
-                                                            method: "PUT",
-                                                            headers: { "Content-Type": "application/json" },
-                                                            body: JSON.stringify({ repair_type: finalVal })
-                                                        })
-                                                        if (res.ok) {
-                                                            const updatedLoco = await res.json()
-                                                            toast.success(`Тип ремонта обновлен`)
-                                                            setSelectedLoco(updatedLoco)
-                                                            queryClient.invalidateQueries({ queryKey: ['locomotives'] })
-                                                        }
-                                                    } catch (e) { toast.error("Ошибка сети") }
+                                                        const updated = await locomotiveApi.updateRepairType(selectedLoco.id, finalVal);
+                                                        toast.success(`Тип ремонта обновлен`)
+                                                        setSelectedLoco(updated)
+                                                        queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+                                                    } catch (e) { toast.error(e instanceof Error ? e.message : "Ошибка сети") }
                                                 }}
                                             >
                                                 <SelectTrigger className="h-8 w-40 border-slate-200">
@@ -1018,18 +587,11 @@ export default function MapPage() {
                                                     if (!selectedLoco) return
                                                     const val = e.target.value || null
                                                     try {
-                                                        const res = await fetch(`/api/locomotives/${selectedLoco.id}`, {
-                                                            method: "PUT",
-                                                            headers: { "Content-Type": "application/json" },
-                                                            body: JSON.stringify({ planned_release: val ? new Date(val).toISOString() : null })
-                                                        })
-                                                        if (res.ok) {
-                                                            const updatedLoco = await res.json()
-                                                            toast.success(`План. выпуск обновлен`)
-                                                            setSelectedLoco(updatedLoco)
-                                                            queryClient.invalidateQueries({ queryKey: ['locomotives'] })
-                                                        }
-                                                    } catch (err) { toast.error("Ошибка сети") }
+                                                        const updated = await locomotiveApi.updatePlannedRelease(selectedLoco.id, val ? new Date(val).toISOString() : null);
+                                                        toast.success(`План. выпуск обновлен`)
+                                                        setSelectedLoco(updated)
+                                                        queryClient.invalidateQueries({ queryKey: ['locomotives'] })
+                                                    } catch (err) { toast.error(err instanceof Error ? err.message : "Ошибка сети") }
                                                 }}
                                             />
                                             {selectedLoco.planned_release && (() => {

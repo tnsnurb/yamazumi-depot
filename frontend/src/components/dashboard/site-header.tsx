@@ -56,6 +56,8 @@ export function SiteHeader() {
         queryClient.invalidateQueries({ queryKey: ['locomotives'] })
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
         queryClient.invalidateQueries({ queryKey: ['reports'] })
+        queryClient.invalidateQueries({ queryKey: ['global-history'] })
+        queryClient.invalidateQueries({ queryKey: ['movements-locomotives'] })
     }
 
     return (

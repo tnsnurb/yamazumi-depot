@@ -9,6 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useAuth } from "@/hooks/useAuth"
 
+import { RecentActivity } from "@/components/dashboard/recent-activity"
+import { WeatherStatus } from "@/components/dashboard/weather-status"
+
 interface DashboardData {
     totalLocomotives: number
     onTracks: number
@@ -17,6 +20,9 @@ interface DashboardData {
     trackOccupancy: Record<string, number>
     movementsToday: number
     movementsWeek: number
+    overdueRepairs: number
+    overdueGauges: number
+    recentActivity: any[]
 }
 
 interface ChartData {
@@ -67,29 +73,46 @@ export default function Dashboard() {
                         </div>
                     </div>
                 ) : (
-                    <div className="space-y-12 pb-12">
-                        <SectionCards data={data} chartData={chartData} />
+                    <div className="space-y-8 pb-12">
+                        {/* Section 1: Top Stats */}
+                        <SectionCards data={data} />
 
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 px-4 lg:px-6">
-                            <div className="lg:col-span-2">
-                                <Card className="border-none bg-white/50 backdrop-blur-sm rounded-3xl overflow-hidden p-2">
-                                    <ChartAreaInteractive data={chartData?.chart} />
-                                </Card>
+                        {/* Section 2: Bento Grid */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 auto-rows-[200px] gap-6 px-4 lg:px-6">
+                            
+                            {/* Weather Widget (Small Bento) */}
+                            <div className="lg:col-span-3 lg:row-span-1">
+                                <WeatherStatus />
                             </div>
-                            <div className="flex flex-col gap-8">
-                                <Card className="border-none bg-white/50 backdrop-blur-sm rounded-3xl p-6">
+
+                            {/* Status Distribution (Medium Bento) */}
+                            <div className="lg:col-span-3 lg:row-span-2">
+                                <Card className="h-full border-none bg-white/50 backdrop-blur-sm rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
                                     <StatusDistribution
                                         statusCounts={data?.statusCounts}
                                         onTracks={data?.onTracks || 0}
                                     />
                                 </Card>
                             </div>
-                        </div>
 
-                        <div className="px-4 lg:px-6">
-                            <Card className="border-none bg-white/50 backdrop-blur-sm rounded-3xl p-6">
-                                <TrackOccupancy trackOccupancy={data?.trackOccupancy} />
-                            </Card>
+                             {/* Chart (Large Bento) */}
+                             <div className="lg:col-span-6 lg:row-span-2">
+                                <Card className="h-full border-none bg-white/50 backdrop-blur-sm rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+                                    <ChartAreaInteractive data={chartData?.chart} />
+                                </Card>
+                            </div>
+
+                            {/* Activity Feed (High Bento) */}
+                            <div className="lg:col-span-3 lg:row-span-2 -mt-[200px] lg:mt-0">
+                                <RecentActivity activities={data?.recentActivity || []} />
+                            </div>
+
+                            {/* Track Occupancy (Wide Bento) */}
+                            <div className="lg:col-span-9 lg:row-span-1">
+                                <Card className="h-full border-none bg-white/50 backdrop-blur-sm rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
+                                    <TrackOccupancy trackOccupancy={data?.trackOccupancy} />
+                                </Card>
+                            </div>
                         </div>
                     </div>
                 )}

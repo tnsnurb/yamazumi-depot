@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const ExcelJS = require('exceljs');
 const supabase = require('../../db');
-const { requireAuth } = require('../middlewares/auth');
+const { requireAuth, requireAdmin } = require('../middlewares/auth');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -57,7 +57,7 @@ router.get('/templates/:id', requireAuth, async (req, res) => {
 });
 
 // 3. Create a new template
-router.post('/templates', requireAuth, async (req, res) => {
+router.post('/templates', requireAuth, requireAdmin, async (req, res) => {
     // Requires admin privileges - assuming checking in frontend, but could add middleware
     if (!req.session.user?.is_global_admin) {
         // Allowing for now, adapt if needed
@@ -431,6 +431,88 @@ router.post('/instances/bulk-complete', requireAuth, async (req, res) => {
     } catch (err) {
         console.error('Error in bulk complete:', err);
         res.status(500).json({ error: 'Failed to complete checklists' });
+    }
+});
+
+// Bulk complete items in a checklist
+router.patch('/items/complete-batch', requireAuth, async (req, res) => {
+    const { itemIds, is_completed } = req.body;
+    const userId = req.session.user.id;
+
+    if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+        return res.status(400).json({ error: 'No item IDs provided' });
+    }
+
+    try {
+        // 1. Fetch items to get points and instance IDs
+        const { data: items, error: fetchError } = await supabase
+            .from('checklist_instance_items')
+            .select('*, template_item:template_item_id(points)')
+            .in('id', itemIds);
+
+        if (fetchError) throw fetchError;
+        if (!items || items.length === 0) return res.json([]);
+
+        // group by instance_id to check completion later
+        const instanceIds = [...new Set(items.map(it => it.instance_id))];
+
+        // 2. Calculate points
+        const totalPoints = items.reduce((sum, it) => {
+            // Only count if it was not already in the target state
+            if (it.is_completed !== is_completed) {
+                return sum + (it.template_item?.points || 5);
+            }
+            return sum;
+        }, 0);
+
+        // 3. Perform Update
+        const updates = {
+            is_completed,
+            completed_by: is_completed ? userId : null,
+            completed_at: is_completed ? new Date().toISOString() : null
+        };
+
+        const { data: updatedItems, error: updateError } = await supabase
+            .from('checklist_instance_items')
+            .update(updates)
+            .in('id', itemIds)
+            .select(`
+                *,
+                template_item:template_item_id(*),
+                completed_by_user:completed_by(full_name),
+                verified_by_user:verified_by(full_name)
+            `);
+
+        if (updateError) throw updateError;
+
+        // 4. Update Points if changed
+        if (totalPoints !== 0) {
+            await supabase.rpc('increment_user_points', { 
+                user_id: userId, 
+                amount: is_completed ? totalPoints : -totalPoints 
+            });
+        }
+
+        // 5. Log History
+        const historyData = items.map(it => ({
+            item_id: it.id,
+            user_id: userId,
+            action: is_completed ? 'completed' : 'reopened',
+            details: is_completed 
+                ? `Групповое выполнение (+${it.template_item?.points || 5} б.)` 
+                : `Групповая отмена (-${it.template_item?.points || 5} б.)`
+        }));
+        await supabase.from('checklist_item_history').insert(historyData);
+
+        // 6. Check Instance Completions
+        for (const instanceId of instanceIds) {
+            await checkInstanceCompletion(instanceId, userId);
+        }
+
+        res.json(updatedItems);
+    } catch (err) {
+        console.error('Error in batch item completion:', err);
+        res.status(500).json({ error: 'Failed to complete items in batch' });
     }
 });
 

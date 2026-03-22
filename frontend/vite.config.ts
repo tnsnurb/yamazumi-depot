@@ -34,7 +34,25 @@ export default defineConfig({
         description: 'Locomotive Tracking Map',
         theme_color: '#ffffff',
         background_color: '#ffffff',
-        display: 'standalone'
+        display: 'standalone',
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
+          }
+        ]
       }
     })
   ],
@@ -53,6 +71,16 @@ export default defineConfig({
     }
   },
   build: {
-    chunkSizeWarningLimit: 1000
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-excel': ['exceljs'],
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-utils': ['date-fns', 'zod', 'clsx', 'tailwind-merge'],
+          'vendor-ui': ['framer-motion', 'lucide-react', 'recharts'],
+        }
+      }
+    }
   }
 })

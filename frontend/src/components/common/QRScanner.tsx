@@ -53,9 +53,17 @@ export function QRScannerModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
               if (extractedId) {
                 if (scannerRef.current) scannerRef.current.stop()
                 onClose()
-                // Use encodeURIComponent to handle spaces and cyrillic in series
-                navigate(`/locomotive/${encodeURIComponent(extractedId)}/remarks`)
-                toast.success('Локомотив найден!', { position: 'top-center' })
+                
+                // If it looks like a gauge (starts with gauge: or KSK)
+                if (decodedText.startsWith('gauge:') || extractedId.startsWith('KSK')) {
+                  const serial = extractedId.replace('gauge:', '');
+                  navigate(`/gauges?serial=${encodeURIComponent(serial)}`)
+                  toast.success('Прибор найден!', { position: 'top-center' })
+                } else {
+                  // Default to locomotive
+                  navigate(`/locomotive/${encodeURIComponent(extractedId)}/remarks`)
+                  toast.success('Локомотив найден!', { position: 'top-center' })
+                }
               }
             },
             () => {

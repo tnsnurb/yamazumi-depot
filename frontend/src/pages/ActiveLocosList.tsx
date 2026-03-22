@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Train, Clock, Wrench, FileText, MoreHorizontal, History, QrCode, Scale, Camera } from "lucide-react";
+import { formatWO } from "@/lib/utils";
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { WheelsetMeasurements } from "@/components/locomotive/WheelsetMeasurements";
@@ -115,7 +116,7 @@ export default function ActiveLocosList() {
                                 <div key={session.id} className="border rounded-xl bg-white p-4 md:p-6 shadow-sm hover:shadow transition-shadow flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div className="flex-1">
                                         <div className="font-bold text-slate-900 flex items-center gap-2 text-base md:text-lg">
-                                            WO#{session.id}
+                                            {formatWO(session.id, session.start_date)}
                                             <span className="text-slate-300 mx-1 md:mx-2">•</span>
                                             <div className="flex items-center gap-1.5 text-indigo-600">
                                                 <Train className="w-4 h-4 md:w-5 md:h-5" />

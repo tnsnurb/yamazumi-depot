@@ -65,6 +65,9 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
     const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({})
     const [commentText, setCommentText] = useState("")
     const [uploadingPhoto, setUploadingPhoto] = useState(false)
+    const [isCompact, setIsCompact] = useState(false)
+    const [isBatchLoading, setIsBatchLoading] = useState(false)
+    const [itemLoading, setItemLoading] = useState<Record<string, boolean>>({})
 
     // Rejection states
     const [rejectItemId, setRejectItemId] = useState<string | null>(null)
@@ -224,6 +227,18 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
     }
 
     const handleCompleteItem = async (itemId: string, checked: boolean) => {
+        // Show preloader
+        setItemLoading(prev => ({ ...prev, [itemId]: true }));
+
+        // Optimistic Update
+        const previousItems = [...items];
+        setItems(prev => prev.map(i => i.id === itemId ? {
+            ...i,
+            is_completed: checked,
+            completed_by_user: checked ? { full_name: user?.full_name || 'Я' } : null,
+            completed_at: checked ? new Date().toISOString() : null
+        } : i));
+
         try {
             const token = localStorage.getItem('access_token')
             const res = await fetch(`/api/checklists/items/${itemId}/complete`, {
@@ -237,13 +252,58 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
             if (!res.ok) throw new Error('Failed to complete item')
             const updatedItem = await res.json()
 
-            // Update local state
+            // Update with real data from server
             setItems((prev: ChecklistItem[]) => prev.map((i: ChecklistItem) => i.id === itemId ? updatedItem : i))
         } catch (error) {
             console.error(error)
             toast.error("Ошибка при обновлении пункта")
+            // Rollback on error
+            setItems(previousItems);
+        } finally {
+            setItemLoading(prev => ({ ...prev, [itemId]: false }));
         }
     }
+
+    const handleCompleteBatch = async (itemIds: string[], checked: boolean) => {
+        if (itemIds.length === 0) return;
+
+        // Optimistic Update
+        const previousItems = [...items];
+        setItems(prev => prev.map(i => itemIds.includes(i.id) ? {
+            ...i,
+            is_completed: checked,
+            completed_by_user: checked ? { full_name: user?.full_name || 'Я' } : null,
+            completed_at: checked ? new Date().toISOString() : null
+        } : i));
+
+        try {
+            setIsBatchLoading(true);
+            const token = localStorage.getItem('access_token');
+            const res = await fetch(`/api/checklists/items/complete-batch`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ itemIds, is_completed: checked })
+            });
+
+            if (!res.ok) throw new Error('Failed to complete items in batch');
+            const updatedItems = await res.json();
+
+            // The API should return the list of updated items
+            const updatedItemsMap = new Map<string, ChecklistItem>(updatedItems.map((i: any) => [i.id, i]));
+            setItems(prev => prev.map(i => updatedItemsMap.has(i.id) ? updatedItemsMap.get(i.id)! : i));
+            
+            toast.success(checked ? `Выполнено: ${itemIds.length} шт.` : `Сброшено: ${itemIds.length} шт.`);
+        } catch (error) {
+            console.error(error);
+            toast.error("Ошибка при групповом обновлении");
+            setItems(previousItems);
+        } finally {
+            setIsBatchLoading(false);
+        }
+    };
 
     const handleVerifyItem = async (itemId: string, verified: boolean) => {
         try {
@@ -431,10 +491,28 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                             </div>
                         </div>
                     </div>
-                    <Button variant="outline" size="sm" className="hidden sm:flex h-9 border-slate-200 hover:bg-slate-50" onClick={downloadPDF}>
-                        <Download className="w-4 h-4 mr-2" />
-                        Скачать PDF
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        {!readOnly && remainingItems > 0 && instance.status !== 'completed' && (
+                            <Button 
+                                size="sm" 
+                                className="bg-emerald-600 hover:bg-emerald-700 h-9 font-bold"
+                                onClick={() => {
+                                    const available = items.filter(i => !i.is_completed && !i.verified_at).map(i => i.id);
+                                    if (confirm(`Отметить все оставшиеся пункты (${available.length}) как выполненные?`)) {
+                                        handleCompleteBatch(available, true);
+                                    }
+                                }}
+                                disabled={isBatchLoading}
+                            >
+                                {isBatchLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                                Выполнить всё ({remainingItems})
+                            </Button>
+                        )}
+                        <Button variant="outline" size="sm" className="hidden sm:flex h-9 border-slate-200 hover:bg-slate-50" onClick={downloadPDF}>
+                            <Download className="w-4 h-4 mr-2" />
+                            PDF
+                        </Button>
+                    </div>
                 </div>
             )}
 
@@ -531,6 +609,15 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                             <FilterX className="w-4 h-4" />
                         </Button>
                     )}
+
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsCompact(!isCompact)}
+                        className={cn("h-9 px-3 font-semibold text-xs", isCompact ? "bg-slate-900 text-white" : "bg-white text-slate-600")}
+                    >
+                        {isCompact ? "Обычный вид" : "Компактный вид"}
+                    </Button>
                 </div>
             </div>
 
@@ -562,6 +649,21 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-3">
+                                        {!readOnly && groupItems.some(i => !i.is_completed) && (
+                                            <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                className="h-7 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const available = groupItems.filter(i => !i.is_completed && !i.verified_at).map(i => i.id);
+                                                    handleCompleteBatch(available, true);
+                                                }}
+                                                disabled={isBatchLoading}
+                                            >
+                                                Выполнить группу
+                                            </Button>
+                                        )}
                                         <div className="hidden sm:block w-32 bg-slate-100 h-1 rounded-full overflow-hidden">
                                             <div
                                                 className="bg-emerald-400 h-full transition-all"
@@ -586,11 +688,12 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                         item.verified_at ? "opacity-60" : item.is_completed ? "border-amber-200/50 shadow-sm" : "hover:border-indigo-200"
                                                     )}
                                                 >
-                                                    <div className="flex flex-col md:flex-row md:items-center gap-4 flex-1">
+                                                    <div className={cn("flex flex-col md:flex-row md:items-center gap-4 flex-1", isCompact && "md:gap-2")}>
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-start justify-between gap-2">
                                                                 <ItemTitle className={cn(
-                                                                    "text-base whitespace-normal leading-snug cursor-pointer hover:text-indigo-600 transition-colors",
+                                                                    isCompact ? "text-sm" : "text-base",
+                                                                    "whitespace-normal leading-snug cursor-pointer hover:text-indigo-600 transition-colors",
                                                                     item.verified_at ? "text-slate-400 line-through font-normal" :
                                                                         item.is_completed ? "text-slate-700 font-medium" :
                                                                             "text-slate-900 font-semibold"
@@ -612,7 +715,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                 )}
                                                             </div>
 
-                                                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                            <div className={cn("flex flex-wrap items-center gap-2", isCompact ? "mt-1" : "mt-2")}>
                                                                 {item.template_item?.executor_role && (
                                                                     <div className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
                                                                         <LucideUser className="w-3 h-3" />
@@ -659,7 +762,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                             </div>
 
                                                             {item.is_completed && !item.verified_at && !readOnly && (user?.role === 'admin' || user?.role === 'master' || user?.permissions?.can_verify_remarks) && (
-                                                                <div className="flex gap-2 mt-3 w-full sm:w-auto">
+                                                                <div className={cn("flex gap-2 w-full sm:w-auto", isCompact ? "mt-1.5" : "mt-3")}>
                                                                     <Button
                                                                         size="sm"
                                                                         onClick={() => handleVerifyItem(item.id, true)}
@@ -682,43 +785,46 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                             )}
                                                         </div>
 
-                                                        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 mt-3 md:mt-0">
+                                                        <div className={cn("flex flex-col md:flex-row items-stretch md:items-center gap-2", !isCompact && "mt-3 md:mt-0")}>
                                                             {/* Actions Row */}
                                                             <div className="flex gap-1.5 flex-1 md:flex-none order-2 md:order-1">
                                                                 <button
                                                                     onClick={() => toggleItemId(item.id, 'comments')}
                                                                     className={cn(
-                                                                        "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-all border",
+                                                                        "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs rounded-lg transition-all border",
+                                                                        isCompact ? "px-2 py-1" : "px-3 py-2",
                                                                         expandedItemId === item.id && activeDetailTab === 'comments'
                                                                             ? "bg-slate-900 text-white border-slate-900"
                                                                             : "bg-white text-slate-600 border-slate-200"
                                                                     )}
                                                                 >
-                                                                    <MessageSquare className="w-3.5 h-3.5" />
+                                                                    <MessageSquare className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
                                                                     {comments[item.id]?.length ? comments[item.id].length : ''}
                                                                 </button>
                                                                 <button
                                                                     onClick={() => toggleItemId(item.id, 'photos')}
                                                                     className={cn(
-                                                                        "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-all border",
+                                                                        "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs rounded-lg transition-all border",
+                                                                        isCompact ? "px-2 py-1" : "px-3 py-2",
                                                                         expandedItemId === item.id && activeDetailTab === 'photos'
                                                                             ? "bg-slate-900 text-white border-slate-900"
                                                                             : "bg-white text-slate-600 border-slate-200"
                                                                     )}
                                                                 >
-                                                                    <Camera className="w-3.5 h-3.5" />
+                                                                    <Camera className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
                                                                     {photos[item.id]?.length ? photos[item.id].length : ''}
                                                                 </button>
                                                                 <button
                                                                     onClick={() => toggleItemId(item.id, 'history')}
                                                                     className={cn(
-                                                                        "flex-none inline-flex items-center justify-center w-9 h-9 rounded-lg transition-all border",
+                                                                        "flex-none inline-flex items-center justify-center rounded-lg transition-all border",
+                                                                        isCompact ? "w-7 h-7" : "w-9 h-9",
                                                                         expandedItemId === item.id && activeDetailTab === 'history'
                                                                             ? "bg-slate-900 text-white border-slate-900"
                                                                             : "bg-white text-slate-600 border-slate-200"
                                                                     )}
                                                                 >
-                                                                    <History className="w-3.5 h-3.5" />
+                                                                    <History className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
                                                                 </button>
                                                             </div>
 
@@ -727,19 +833,30 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                     !item.is_completed ? (
                                                                         <Button
                                                                             onClick={() => handleCompleteItem(item.id, true)}
-                                                                            className="gap-2 bg-emerald-600 hover:bg-emerald-700 h-9 px-4 text-sm font-bold shadow-sm w-full md:w-auto"
+                                                                            disabled={itemLoading[item.id]}
+                                                                            className={cn("gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold shadow-sm w-full md:w-auto", isCompact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm")}
                                                                         >
-                                                                            <CheckCircle2 className="w-4 h-4" /> Выполнить
+                                                                            {itemLoading[item.id] ? (
+                                                                                <Loader2 className={cn("animate-spin", isCompact ? "w-3.5 h-3.5" : "w-4 h-4")} />
+                                                                            ) : (
+                                                                                <CheckCircle2 className={cn(isCompact ? "w-3.5 h-3.5" : "w-4 h-4")} />
+                                                                            )} 
+                                                                            Выполнить
                                                                         </Button>
                                                                     ) : (
                                                                         <Button
                                                                             variant="ghost"
                                                                             onClick={() => handleCompleteItem(item.id, false)}
-                                                                            className="h-9 gap-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg w-full md:w-auto"
+                                                                            disabled={itemLoading[item.id]}
+                                                                            className={cn("gap-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg w-full md:w-auto", isCompact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm")}
                                                                             title="Снять отметку"
                                                                         >
-                                                                            <X className="w-4 h-4" />
-                                                                            Снять отметку
+                                                                            {itemLoading[item.id] ? (
+                                                                                <Loader2 className={cn("animate-spin", isCompact ? "w-3.5 h-3.5" : "w-4 h-4")} />
+                                                                            ) : (
+                                                                                <X className={cn(isCompact ? "w-3.5 h-3.5" : "w-4 h-4")} />
+                                                                            )}
+                                                                            {isCompact ? "Снять" : "Снять отметку"}
                                                                         </Button>
                                                                     )
                                                                 )}

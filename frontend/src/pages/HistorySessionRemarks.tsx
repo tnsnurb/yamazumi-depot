@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, Wrench, Train, Calendar } from "lucide-react";
 import { RemarkArchiveItem } from "@/components/locomotive/archive/RemarkArchiveItem";
 import { ItemGroup } from "@/components/ui/item";
+import { formatWO } from "@/lib/utils";
 
 export default function HistorySessionRemarks() {
     const { id } = useParams();
@@ -40,7 +41,7 @@ export default function HistorySessionRemarks() {
                             </div>
                             <div>
                                 <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">
-                                    Замечания: WO#{id}
+                                    Замечания: {id ? formatWO(id, session.start_date) : ''}
                                 </h1>
                                 <div className="flex items-center gap-2 mt-1.5 text-[10px] md:text-xs font-medium text-slate-400">
                                     <div className="flex items-center gap-1 text-blue-600">
