@@ -450,7 +450,15 @@ const GaugeTerminal = () => {
                   <span className="text-xl font-black text-slate-800">{loco.series} {loco.number}</span>
                   <Badge className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md ${
                     loco.status === 'repair' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-100'
-                  }`}>{loco.status}</Badge>
+                  }`}>
+                    {loco.repair_type || (
+                      loco.status === 'repair' ? 'Ремонт' :
+                      loco.status === 'active' ? 'В работе' :
+                      loco.status === 'waiting' ? 'Ожидание' :
+                      loco.status === 'completed' ? 'Готов' : 
+                      loco.status
+                    )}
+                  </Badge>
                 </CardContent>
               </Card>
             ))}
