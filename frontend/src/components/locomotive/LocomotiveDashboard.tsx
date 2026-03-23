@@ -439,7 +439,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                                                                 <Wrench className="w-5 h-5" />
                                                                             </div>
                                                                             <div>
-                                                                                <div className="font-bold text-slate-900 text-base">{session.repair_type || session.type || 'Плановый ремонт'} <span className="text-slate-400 ml-1">{formatWO(session.id, session.start_date || session.created_at)}</span></div>
+                                                                                <div className="font-bold text-slate-900 text-base">{session.repair_type || session.type || 'Плановый ремонт'} <span className="text-slate-400 ml-1">{formatWO(session.id, locomotive.number)}</span></div>
                                                                                 <div className="text-sm text-slate-500 font-medium mt-0.5">
                                                                                     {new Date(session.end_date || session.start_date || new Date()).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                                                                                 </div>
@@ -535,7 +535,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                                                 <ClipboardCheck className="w-5 h-5" />
                                                             </div>
                                                             <div>
-                                                                <div className="font-bold text-slate-900 text-base">{session.repair_type || session.type || 'Текущий ремонт'} <span className="text-indigo-600 ml-1">{formatWO(session.id, session.start_date || session.created_at)}</span></div>
+                                                                <div className="font-bold text-slate-900 text-base">{session.repair_type || session.type || 'Текущий ремонт'} <span className="text-indigo-600 ml-1">{formatWO(session.id, locomotive.number)}</span></div>
                                                                 <div className="text-sm text-slate-500 font-medium mt-0.5">
                                                                     Начат: {new Date(session.start_date || new Date()).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                                                                 </div>
@@ -585,7 +585,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                                                     <ClipboardCheck className="w-5 h-5" />
                                                                 </div>
                                                                 <div>
-                                                                    <div className="font-bold text-slate-900 text-base">{session.repair_type || session.type || 'Плановый ремонт'} <span className="text-slate-400 ml-1">{formatWO(session.id, session.start_date || session.created_at)}</span></div>
+                                                                    <div className="font-bold text-slate-900 text-base">{session.repair_type || session.type || 'Плановый ремонт'} <span className="text-slate-400 ml-1">{formatWO(session.id, locomotive.number)}</span></div>
                                                                     <div className="text-sm text-slate-500 font-medium mt-0.5">
                                                                         {new Date(session.end_date || session.start_date || new Date()).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                                                                     </div>

@@ -33,6 +33,8 @@ const GaugeTerminal = () => {
   const [selectedGauge, setSelectedGauge] = useState<Gauge | null>(null)
   const [selectedLoco, setSelectedLoco] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [showManualInput, setShowManualInput] = useState(false)
+  const [manualSerial, setManualSerial] = useState("")
   
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const scannerContainerId = "terminal-scanner-container"
@@ -116,6 +118,8 @@ const GaugeTerminal = () => {
 
     setSelectedGauge(found);
     stopScanner();
+    setShowManualInput(false);
+    setManualSerial("");
 
     if (mode === 'issue') {
       if (found.status !== 'На складе') {
@@ -163,6 +167,8 @@ const GaugeTerminal = () => {
     setSelectedGauge(null);
     setSelectedLoco(null);
     setSearchTerm("");
+    setShowManualInput(false);
+    setManualSerial("");
   };
 
   const filteredLocos = locomotives.filter((l: any) => 
@@ -239,16 +245,63 @@ const GaugeTerminal = () => {
       {step === 'scanning-gauge' && (
         <div className="space-y-6">
           <Header title={mode === 'issue' ? 'Сканируйте манометр' : 'Сканируйте манометр'} />
-          <div className="rounded-3xl overflow-hidden bg-black aspect-square shadow-2xl relative border-4 border-white">
-            <div id={scannerContainerId} className="w-full h-full" />
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-               <div className="w-64 h-64 border-2 border-white/50 rounded-2xl animate-pulse" />
-               <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-scan" />
+          
+          {!showManualInput ? (
+            <>
+              <div className="rounded-3xl overflow-hidden bg-black aspect-square shadow-2xl relative border-4 border-white">
+                <div id={scannerContainerId} className="w-full h-full" />
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                   <div className="w-64 h-64 border-2 border-white/50 rounded-2xl animate-pulse" />
+                   <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-scan" />
+                </div>
+              </div>
+              <div className="text-center p-4 space-y-4">
+                 <p className="text-slate-400 font-medium">Наведите камеру на QR манометра</p>
+                 <Button 
+                   variant="outline" 
+                   className="w-full h-14 rounded-2xl border-2 border-slate-200 text-slate-600 font-bold"
+                   onClick={() => setShowManualInput(true)}
+                 >
+                   <Search className="w-5 h-5 mr-2" />
+                   Ввести вручную
+                 </Button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-xl shadow-slate-100/50">
+                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                    <History className="w-8 h-8" />
+                </div>
+                <h3 className="text-center text-xl font-black text-slate-800 mb-2">Ручной ввод</h3>
+                <p className="text-center text-slate-500 text-sm mb-8">Введите серийный номер манометра с корпуса устройства</p>
+                
+                <div className="space-y-4">
+                  <Input 
+                    value={manualSerial}
+                    onChange={(e) => setManualSerial(e.target.value)}
+                    placeholder="S/N: 000000"
+                    className="h-16 text-center text-2xl font-black rounded-2xl border-2 border-slate-200 focus:border-blue-500 bg-slate-50 shadow-inner"
+                    autoFocus
+                  />
+                  <Button 
+                    className="w-full h-16 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-lg shadow-lg shadow-blue-100"
+                    onClick={() => handleScanSuccess(manualSerial)}
+                    disabled={!manualSerial.trim()}
+                  >
+                    Найти прибор
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    className="w-full h-12 rounded-xl text-slate-400 font-bold"
+                    onClick={() => setShowManualInput(false)}
+                  >
+                    Вернуться к сканеру
+                  </Button>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="text-center p-4">
-             <p className="text-slate-400 font-medium">Наведите камеру на QR манометра</p>
-          </div>
+          )}
         </div>
       )}
 

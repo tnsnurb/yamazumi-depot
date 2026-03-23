@@ -58,7 +58,7 @@ export function LocomotiveHistory({ locomotiveId }: LocomotiveHistoryProps) {
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-2 text-left">
                                 <div>
                                     <div className="font-semibold text-slate-800 flex items-center gap-2">
-                                        {formatWO(session.id, session.start_date)}
+                                        {formatWO(session.id, session.locomotive?.number)}
                                         {session.status === 'active' ? (
                                             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Текущий ремонт</Badge>
                                         ) : (

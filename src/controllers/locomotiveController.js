@@ -454,6 +454,7 @@ const locomotiveController = {
                 .from('repair_sessions')
                 .select(`
                     *,
+                    locomotive:locomotives(id, number, series),
                     created_by_user:users!repair_sessions_created_by_fkey(full_name, username),
                     remarks:locomotive_remarks!locomotive_remarks_session_id_fkey(id, text, status, is_template)
                 `)

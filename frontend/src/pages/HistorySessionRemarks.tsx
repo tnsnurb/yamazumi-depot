@@ -41,7 +41,7 @@ export default function HistorySessionRemarks() {
                             </div>
                             <div>
                                 <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">
-                                    Замечания: {id ? formatWO(id, session.start_date) : ''}
+                                    Замечания: {id ? formatWO(id, session.locomotive?.number) : ''}
                                 </h1>
                                 <div className="flex items-center gap-2 mt-1.5 text-[10px] md:text-xs font-medium text-slate-400">
                                     <div className="flex items-center gap-1 text-blue-600">
