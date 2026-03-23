@@ -13,7 +13,10 @@ import {
   Search,
   Wrench,
   AlertTriangle,
-  History
+  History,
+  Check,
+  X,
+  Package
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -35,6 +38,7 @@ const GaugeTerminal = () => {
   const [searchTerm, setSearchTerm] = useState("")
   const [showManualInput, setShowManualInput] = useState(false)
   const [manualSerial, setManualSerial] = useState("")
+  const [showConfirmation, setShowConfirmation] = useState(false)
   
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const scannerContainerId = "terminal-scanner-container"
@@ -120,16 +124,22 @@ const GaugeTerminal = () => {
     stopScanner();
     setShowManualInput(false);
     setManualSerial("");
+    setShowConfirmation(true);
+  };
 
+  const handleConfirmGauge = () => {
+    if (!selectedGauge) return;
+    setShowConfirmation(false);
+    
     if (mode === 'issue') {
-      if (found.status !== 'На складе') {
-        toast.error(`Прибор уже ${found.status}`);
+      if (selectedGauge.status !== 'На складе') {
+        toast.error(`Прибор уже ${selectedGauge.status}`);
         return;
       }
       setStep('select-loco');
     } else {
-      if (found.status !== 'На локомотиве') {
-        toast.error(`Прибор не на локомотиве`);
+      if (selectedGauge.status !== 'На локомотиве') {
+        toast.error(`Прибор не на локомотиве (текущий статус: ${selectedGauge.status})`);
         return;
       }
       setStep('select-reason');
@@ -169,6 +179,7 @@ const GaugeTerminal = () => {
     setSearchTerm("");
     setShowManualInput(false);
     setManualSerial("");
+    setShowConfirmation(false);
   };
 
   const filteredLocos = locomotives.filter((l: any) => 
@@ -302,6 +313,65 @@ const GaugeTerminal = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Модальное окно подтверждения найденного прибора */}
+      {showConfirmation && selectedGauge && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-10 duration-500">
+            <div className="relative aspect-video bg-slate-100 flex items-center justify-center overflow-hidden">
+              {(selectedGauge.photo_url || (selectedGauge as any).model_image_url) ? (
+                <img 
+                  src={selectedGauge.photo_url || (selectedGauge as any).model_image_url} 
+                  alt={selectedGauge.serial_number}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-20 h-20 bg-blue-50 text-blue-400 rounded-full flex items-center justify-center">
+                  <Package className="w-10 h-10" />
+                </div>
+              )}
+              <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full shadow-sm border border-white/20">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Прибор найден</span>
+              </div>
+            </div>
+            
+            <div className="p-8 space-y-6 text-center">
+              <div>
+                <h2 className="text-3xl font-black text-slate-800 mb-1">{selectedGauge.serial_number}</h2>
+                <p className="text-slate-500 font-medium">{(selectedGauge as any).description || 'Манометр технический'}</p>
+              </div>
+              
+              <div className="flex items-center justify-center gap-2 py-3 px-6 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className={`w-2 h-2 rounded-full ${
+                  selectedGauge.status === 'На складе' ? 'bg-emerald-500' : 'bg-blue-500'
+                }`} />
+                <span className="text-sm font-bold text-slate-600 font-mono tracking-tight uppercase">{selectedGauge.status}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <Button 
+                  variant="outline" 
+                  className="h-14 rounded-2xl border-2 border-slate-100 text-slate-500 font-bold"
+                  onClick={() => {
+                    setShowConfirmation(false);
+                    setSelectedGauge(null);
+                  }}
+                >
+                  <X className="w-5 h-5 mr-1" />
+                  Отмена
+                </Button>
+                <Button 
+                  className="h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black shadow-lg shadow-blue-200"
+                  onClick={handleConfirmGauge}
+                >
+                  <Check className="w-5 h-5 mr-1" />
+                  Далее
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

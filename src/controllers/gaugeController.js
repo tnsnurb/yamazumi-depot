@@ -39,7 +39,7 @@ const gaugeController = {
         .select(`
           *,
           locomotive:locomotives(number, series),
-          type:gauge_types(part_number, description)
+          type:gauge_types(part_number, description, image_url)
         `)
         .eq('serial_number', serial)
         .single();
@@ -50,6 +50,7 @@ const gaugeController = {
         ...data,
         part_number: data.type?.part_number,
         description: data.type?.description,
+        model_image_url: data.type?.image_url,
         type: undefined
       };
       
