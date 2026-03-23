@@ -172,6 +172,7 @@ const GaugeTerminal = () => {
 
     updateMutation.mutate(updates);
   };
+  const [showOnlyRepair, setShowOnlyRepair] = useState(true)
 
   const reset = () => {
     setStep('home');
@@ -182,11 +183,18 @@ const GaugeTerminal = () => {
     setShowManualInput(false);
     setManualSerial("");
     setShowConfirmation(false);
+    setShowOnlyRepair(true);
   };
 
-  const filteredLocos = locomotives.filter((l: any) => 
-    l.number.includes(searchTerm) || l.series.toLowerCase().includes(searchTerm.toLowerCase())
-  ).slice(0, 10);
+  const filteredLocos = locomotives.filter((l: any) => {
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = l.number.includes(term) || (l.series && l.series.toLowerCase().includes(term));
+    
+    if (showOnlyRepair) {
+      return matchesSearch && l.status === 'repair';
+    }
+    return matchesSearch;
+  }).slice(0, 15);
 
   // Render helpers
   const Header = ({ title, showBack = true }: { title: string, showBack?: boolean }) => (
@@ -440,10 +448,21 @@ const GaugeTerminal = () => {
               >
                 <CardContent className="p-5 flex items-center justify-between">
                   <span className="text-xl font-black text-slate-800">{loco.series} {loco.number}</span>
-                  <Badge className="bg-slate-100 text-slate-500 hover:bg-slate-100">{loco.status}</Badge>
+                  <Badge className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                    loco.status === 'repair' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-100'
+                  }`}>{loco.status}</Badge>
                 </CardContent>
               </Card>
             ))}
+
+            {/* Переключатель фильтра */}
+            <Button
+              variant="ghost"
+              className="mt-2 text-slate-400 hover:text-blue-500 font-bold text-xs uppercase tracking-widest"
+              onClick={() => setShowOnlyRepair(!showOnlyRepair)}
+            >
+              {showOnlyRepair ? 'Выбрать другой локомотив (Показать все)' : 'Показать только локомотивы в ремонте'}
+            </Button>
           </div>
         </div>
       )}
