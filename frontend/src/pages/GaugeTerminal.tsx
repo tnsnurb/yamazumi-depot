@@ -16,7 +16,9 @@ import {
   History,
   Check,
   X,
-  Package
+  Package,
+  Calendar,
+  Hash
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -339,18 +341,59 @@ const GaugeTerminal = () => {
             
             <div className="p-8 space-y-6 text-center">
               <div>
-                <h2 className="text-3xl font-black text-slate-800 mb-1">{selectedGauge.serial_number}</h2>
-                <p className="text-slate-500 font-medium">{(selectedGauge as any).description || 'Манометр технический'}</p>
-              </div>
-              
-              <div className="flex items-center justify-center gap-2 py-3 px-6 bg-slate-50 rounded-2xl border border-slate-100">
-                <div className={`w-2 h-2 rounded-full ${
-                  selectedGauge.status === 'На складе' ? 'bg-emerald-500' : 'bg-blue-500'
-                }`} />
-                <span className="text-sm font-bold text-slate-600 font-mono tracking-tight uppercase">{selectedGauge.status}</span>
+                <h2 className="text-3xl font-black text-slate-800 mb-1 leading-tight">{selectedGauge.serial_number}</h2>
+                <p className="text-slate-500 font-medium tracking-tight">{(selectedGauge as any).description || 'Манометр технический'}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              {/* Технические детали */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center">
+                  <Hash className="w-4 h-4 text-slate-400 mb-1" />
+                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Парт-номер</span>
+                  <span className="text-xs font-black text-slate-700 font-mono">{(selectedGauge as any).part_number || 'НЕТ ДАННЫХ'}</span>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center">
+                  <Calendar className="w-4 h-4 text-slate-400 mb-1" />
+                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Поверка до</span>
+                  <span className="text-xs font-black text-slate-700 font-mono">
+                    {new Date(selectedGauge.next_verification).toLocaleDateString('ru-RU')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Статус и дни */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-center gap-2 py-3 px-6 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className={`w-2.5 h-2.5 rounded-full ${
+                    selectedGauge.status === 'На складе' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'
+                  }`} />
+                  <span className="text-xs font-black text-slate-700 font-mono tracking-tight uppercase tracking-widest">{selectedGauge.status}</span>
+                </div>
+                
+                {(() => {
+                  const calculateDays = (dateStr: string) => {
+                    const next = new Date(dateStr);
+                    const today = new Date();
+                    const diff = next.getTime() - today.getTime();
+                    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+                  };
+                  const daysLeft = calculateDays(selectedGauge.next_verification);
+                  const isCritical = daysLeft <= 30;
+                  const isWarning = daysLeft <= 90;
+                  
+                  return (
+                    <div className={`py-2.5 px-6 rounded-2xl border font-black text-xs uppercase tracking-widest ${
+                      isCritical ? 'bg-red-50 text-red-600 border-red-100' :
+                      isWarning ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                      'bg-emerald-50 text-emerald-600 border-emerald-100'
+                    }`}>
+                      {daysLeft <= 0 ? 'ПОВЕРКА ПРОСРОЧЕНА' : `Осталось дней: ${daysLeft}`}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-4">
                 <Button 
                   variant="outline" 
                   className="h-14 rounded-2xl border-2 border-slate-100 text-slate-500 font-bold"
