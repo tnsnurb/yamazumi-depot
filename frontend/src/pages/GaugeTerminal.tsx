@@ -127,6 +127,9 @@ const GaugeTerminal = () => {
     setShowManualInput(false);
     setManualSerial("");
     setShowConfirmation(true);
+    
+    // Dispatch event for MobileNav history tracking
+    window.dispatchEvent(new CustomEvent('gauge-scanned', { detail: found }));
   };
 
   const handleConfirmGauge = () => {
