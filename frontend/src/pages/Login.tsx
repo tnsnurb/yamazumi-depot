@@ -37,10 +37,6 @@ export default function Login() {
     const navigate = useNavigate()
     const [error, setError] = useState("")
     const [showPassword, setShowPassword] = useState(false)
-    const [publicUsers, setPublicUsers] = useState<PublicUser[]>([])
-    const [selectedUser, setSelectedUser] = useState<PublicUser | null>(null)
-    const [dropdownOpen, setDropdownOpen] = useState(false)
-    const [searchQuery, setSearchQuery] = useState("")
     const dropdownRef = useRef<HTMLDivElement>(null)
 
     // Detect if we're returning from OAuth (Google Auth redirect)
@@ -55,17 +51,6 @@ export default function Login() {
         const timeout = setTimeout(() => setIsOAuthCallback(false), 8000)
         return () => clearTimeout(timeout)
     }, [isOAuthCallback])
-
-    // Close dropdown on outside click
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-                setDropdownOpen(false)
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside)
-        return () => document.removeEventListener("mousedown", handleClickOutside)
-    }, [])
 
     // Handle Supabase OAuth / Auth Errors from URL
     useEffect(() => {
@@ -93,7 +78,7 @@ export default function Login() {
     const handleMagicLink = async () => {
         const username = form.getValues("username")
         if (!username) {
-            toast.error("Сначала выберите пользователя или введите email")
+            toast.error("Введите email")
             return
         }
 
@@ -116,7 +101,7 @@ export default function Login() {
     const handleForgotPassword = async () => {
         const username = form.getValues("username")
         if (!username) {
-            toast.error("Сначала выберите пользователя или введите email")
+            toast.error("Введите email")
             return
         }
 
@@ -143,41 +128,17 @@ export default function Login() {
         if (error) toast.error(error.message)
     }
 
-    useEffect(() => {
-        const fetchUsers = async () => {
-            try {
-                const res = await fetch("/api/public/users")
-                if (res.ok) {
-                    const data = await res.json()
-                    setPublicUsers(data)
-                }
-            } catch (e) {
-                console.error("Ошибка при получении пользователей", e)
-            }
-        }
-        fetchUsers()
-    }, [])
-
     const form = useForm<z.infer<typeof loginSchema>>({
         resolver: zodResolver(loginSchema),
         defaultValues: { username: "", password: "" },
     })
 
-    useEffect(() => {
-        if (selectedUser) {
-            form.setValue("username", selectedUser.username)
-        }
-    }, [selectedUser, form])
-
     async function onSubmit(values: z.infer<typeof loginSchema>) {
         setError("")
         try {
-            // Priority: selectedUser.email -> custom input with domain -> username@yamazumi.id
-            const email = selectedUser?.email
-                ? selectedUser.email
-                : values.username.includes('@')
-                    ? values.username
-                    : `${values.username}@yamazumi.id`
+            const email = values.username.includes('@')
+                ? values.username
+                : `${values.username}@yamazumi.id`
 
             console.log(`[DEBUG] Attempting login with email: ${email}`);
 
@@ -187,7 +148,6 @@ export default function Login() {
             })
 
             if (!error && data.user && data.session) {
-                // Explicitly sync session with backend
                 const loginRes = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -198,7 +158,6 @@ export default function Login() {
                 });
                 const loginData = await loginRes.json();
 
-                // Immediately set auth data in cache so ProtectedRoute sees the user
                 if (loginData.success && loginData.user) {
                     queryClient.setQueryData(['authUser'], loginData.user);
                 }
@@ -211,12 +170,6 @@ export default function Login() {
             setError("Ошибка сети")
         }
     }
-
-    const filteredUsers = publicUsers.filter(u =>
-        u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.role_name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
 
     return (
         <>
@@ -232,78 +185,37 @@ export default function Login() {
                         <div className="w-full max-w-sm">
 
                             {/* Header */}
-                            <div className="text-center mb-8">
-                                <h1 className="text-3xl font-semibold text-slate-900 mt-2">Yamazumi</h1>
+                            <div className="text-center mb-10">
+                                <h1 className="text-4xl font-bold tracking-tight text-slate-900 mt-2">Yamazumi</h1>
+                                <p className="text-slate-500 mt-2">Введите данные для входа в систему</p>
                             </div>
 
                             <Form {...form}>
-                                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-                                    {/* User selection with FloatingInput */}
-                                    <div className="space-y-2 relative" ref={dropdownRef}>
-                                        <div className="relative">
-                                            <FloatingInput
-                                                label="Выберите пользователя"
-                                                value={selectedUser ? selectedUser.full_name : searchQuery}
-                                                onChange={(e) => {
-                                                    setSearchQuery(e.target.value)
-                                                    if (selectedUser) setSelectedUser(null)
-                                                    setDropdownOpen(true)
-                                                }}
-                                                onFocus={() => setDropdownOpen(true)}
-                                                className="pr-12 h-[52px] rounded-xl text-lg px-4"
-                                                containerClassName="mt-0"
-                                            />
-                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none flex items-center gap-2">
-                                                {selectedUser ? (
-                                                    <CheckCircle2 className="w-5 h-5 text-blue-500" />
-                                                ) : (
-                                                    <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {dropdownOpen && (
-                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                                                <div className="max-h-60 overflow-y-auto py-1">
-                                                    {filteredUsers.length > 0 ? (
-                                                        filteredUsers.map((u) => (
-                                                            <button
-                                                                key={u.username}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setSelectedUser(u)
-                                                                    setDropdownOpen(false)
-                                                                    setSearchQuery("")
-                                                                }}
-                                                                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors text-left ${selectedUser?.username === u.username ? "bg-blue-50" : ""
-                                                                    }`}
-                                                            >
-                                                                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
-                                                                    {u.avatar_url ? (
-                                                                        <img src={u.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-                                                                    ) : (
-                                                                        <User className="w-5 h-5 text-slate-400" />
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="font-medium text-slate-900 text-sm truncate">{u.full_name}</div>
-                                                                    <div className="text-xs text-blue-600 font-medium truncate">{u.email}</div>
-                                                                </div>
-                                                                {selectedUser?.username === u.username && (
-                                                                    <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                                                                )}
-                                                            </button>
-                                                        ))
-                                                    ) : (
-                                                        <div className="py-8 text-center text-sm text-slate-400">
-                                                            {publicUsers.length === 0 ? "Загрузка..." : "Ничего не найдено"}
+                                    {/* Email field */}
+                                    <FormField
+                                        control={form.control}
+                                        name="username"
+                                        render={({ field }) => (
+                                            <FormItem className="space-y-0">
+                                                <FormControl>
+                                                    <div className="relative">
+                                                        <FloatingInput
+                                                            label="Email или логин"
+                                                            {...field}
+                                                            className="pr-12 h-[56px] rounded-xl text-lg px-4"
+                                                            error={!!form.formState.errors.username}
+                                                        />
+                                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                            <Mail className="w-5 h-5 text-slate-400" />
                                                         </div>
-                                                    )}
-                                                </div>
-                                            </div>
+                                                    </div>
+                                                </FormControl>
+                                                <FormMessage className="mt-1" />
+                                            </FormItem>
                                         )}
-                                    </div>
+                                    />
 
                                     {/* Password field */}
                                     <FormField
@@ -317,7 +229,7 @@ export default function Login() {
                                                             type={showPassword ? "text" : "password"}
                                                             label="Пароль"
                                                             {...field}
-                                                            className="pr-12 h-[52px] rounded-xl text-lg px-4"
+                                                            className="pr-12 h-[56px] rounded-xl text-lg px-4"
                                                             error={!!form.formState.errors.password}
                                                             onKeyDown={(e) => {
                                                                 if (e.key === 'Enter') {
