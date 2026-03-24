@@ -254,11 +254,11 @@ export default function Login() {
                                                 className="pr-12 h-[52px] rounded-xl text-lg px-4"
                                                 containerClassName="mt-0"
                                             />
-                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none flex items-center gap-2">
                                                 {selectedUser ? (
                                                     <CheckCircle2 className="w-5 h-5 text-blue-500" />
                                                 ) : (
-                                                    <User className="w-5 h-5 text-slate-400" />
+                                                    <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
                                                 )}
                                             </div>
                                         </div>
