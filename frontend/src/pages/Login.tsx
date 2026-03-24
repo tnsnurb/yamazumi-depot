@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
-import { Eye, EyeOff, User, ChevronDown, CheckCircle2, Loader2, Mail } from "lucide-react"
+import { Eye, EyeOff, Loader2, Mail } from "lucide-react"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -24,20 +24,13 @@ const loginSchema = z.object({
     password: z.string().min(1, "Введите пароль"),
 })
 
-interface PublicUser {
-    username: string;
-    full_name: string;
-    role_name: string;
-    avatar_url?: string;
-    email?: string;
-}
+// removed PublicUser interface
 
 export default function Login() {
     const queryClient = useQueryClient()
     const navigate = useNavigate()
     const [error, setError] = useState("")
     const [showPassword, setShowPassword] = useState(false)
-    const dropdownRef = useRef<HTMLDivElement>(null)
 
     // Detect if we're returning from OAuth (Google Auth redirect)
     const [isOAuthCallback, setIsOAuthCallback] = useState(() => {
@@ -272,8 +265,8 @@ export default function Login() {
 
                                     <Button
                                         type="submit"
-                                        disabled={form.formState.isSubmitting || !selectedUser}
-                                        className="w-full h-[52px] rounded-xl text-lg font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2"
+                                        disabled={form.formState.isSubmitting}
+                                        className="w-full h-[56px] rounded-xl text-lg font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2"
                                     >
                                         {form.formState.isSubmitting ? (
                                             <>
