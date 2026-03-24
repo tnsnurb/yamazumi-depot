@@ -16,7 +16,7 @@ import {
     FormMessage,
 } from "@/components/ui/form"
 import { FloatingInput } from "@/components/ui/FloatingInput"
-import { cn } from "@/lib/utils"
+// removed unused cn import
 // removed static import of html5-qrcode
 
 const loginSchema = z.object({
