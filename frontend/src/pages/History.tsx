@@ -91,7 +91,7 @@ export default function History() {
             return {
                 label: 'Добавлены замечания',
                 icon: <MessageSquarePlus className="w-4 h-4" />,
-                color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+                color: 'text-blue-600 bg-blue-50 border-blue-100',
                 content: <div className="mt-1 font-medium">{action.split(': ').slice(1).join(': ')}</div>
             }
         }
@@ -150,7 +150,7 @@ export default function History() {
                         <div>
                             <div className="flex items-center gap-2">
                                 <Train className="w-6 h-6 text-slate-400" />
-                                <h2 className="text-2xl font-black tracking-tight text-slate-900">
+                                <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
                                     История локомотива #{number}
                                 </h2>
                             </div>
@@ -219,7 +219,7 @@ export default function History() {
 
                                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
                                                     <div>
-                                                        <Badge variant="outline" className={cn("rounded-full font-bold px-3 py-0.5 text-[10px] uppercase tracking-wider", details.color)}>
+                                                        <Badge variant="outline" className={cn("rounded-full font-semibold px-3 py-0.5 text-[10px] uppercase tracking-wider", details.color)}>
                                                             {details.label}
                                                         </Badge>
                                                         <div className="text-[11px] text-slate-400 font-mono mt-1 flex items-center gap-1.5">
@@ -241,22 +241,22 @@ export default function History() {
                                                     {(m.from_track || m.to_track) && (
                                                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
                                                             <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mb-1">Откуда</div>
+                                                                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-tight mb-1">Откуда</div>
                                                                 <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
                                                                     {m.from_track ? (
                                                                         <>
-                                                                            <span className="w-5 h-5 rounded bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-[10px]">{m.from_track}</span>
+                                                                            <span className="w-5 h-5 rounded bg-slate-200 text-slate-600 flex items-center justify-center font-semibold text-[10px]">{m.from_track}</span>
                                                                             <span>Слот {m.from_position}</span>
                                                                         </>
                                                                     ) : "Вне путей"}
                                                                 </div>
                                                             </div>
-                                                            <div className="p-2.5 bg-indigo-50/50 rounded-xl border border-indigo-100">
-                                                                <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-tight mb-1">Куда</div>
-                                                                <div className="flex items-center gap-2 text-xs font-medium text-indigo-700">
+                                                            <div className="p-2.5 bg-blue-50/50 rounded-xl border border-blue-100">
+                                                                <div className="text-[10px] text-blue-400 font-semibold uppercase tracking-tight mb-1">Куда</div>
+                                                                <div className="flex items-center gap-2 text-xs font-medium text-blue-700">
                                                                     {m.to_track ? (
                                                                         <>
-                                                                            <span className="w-5 h-5 rounded bg-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-[10px]">{m.to_track}</span>
+                                                                            <span className="w-5 h-5 rounded bg-blue-200 text-blue-700 flex items-center justify-center font-semibold text-[10px]">{m.to_track}</span>
                                                                             <span>Слот {m.to_position}</span>
                                                                         </>
                                                                     ) : "Убран"}

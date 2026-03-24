@@ -4,13 +4,13 @@ import { Cloud, Thermometer, Wind } from "lucide-react"
 export function WeatherStatus() {
     // Mock weather for depot location
     return (
-        <Card className="border-none bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-3xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
+        <Card className="border-none bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-3xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
             <CardContent className="p-6">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex flex-col gap-1">
                         <span className="text-sm font-medium text-blue-100 italic">Текущая погода</span>
                         <div className="flex items-end gap-2">
-                            <span className="text-4xl font-black tabular-nums">-4°C</span>
+                            <span className="text-4xl font-semibold tabular-nums">-4°C</span>
                             <span className="text-sm font-medium text-blue-100 pb-1">Облачно</span>
                         </div>
                     </div>

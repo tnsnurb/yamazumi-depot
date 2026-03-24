@@ -53,7 +53,7 @@ export const statusColors: Record<string, string> = {
     active: 'bg-slate-900',
     repair: 'bg-rose-500',
     waiting: 'bg-amber-500',
-    completed: 'bg-indigo-600',
+    completed: 'bg-blue-600',
 };
 
 export const statusLabels: Record<string, string> = {

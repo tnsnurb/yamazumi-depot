@@ -116,7 +116,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                             {remark.is_completed && remark.completed_by && (
                                 <>
                                     <span>•</span>
-                                    <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                                    <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] font-semibold">
                                         <User className="w-3 h-3" />
                                         Выполнил: {remark.completed_by.full_name || remark.completed_by.username}
                                     </span>
@@ -145,10 +145,10 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                         </div>
                         <div>
                             <div className="flex items-center gap-3 mb-1">
-                                <h2 className="text-3xl font-bold text-slate-900 tracking-tight uppercase">
+                                <h2 className="text-3xl font-semibold text-slate-900 tracking-tight">
                                     {locomotive.series} {locomotive.number}
                                 </h2>
-                                <Badge className={cn("text-white border-none text-[10px] font-bold uppercase px-3 h-6 tracking-widest rounded-full shadow-sm", statusColors[locomotive.status] || 'bg-slate-400')}>
+                                <Badge className={cn("text-white border-none text-[10px] font-semibold uppercase px-3 h-6 tracking-widest rounded-full shadow-sm", statusColors[locomotive.status] || 'bg-slate-400')}>
                                     {statusLabels[locomotive.status] || locomotive.status}
                                 </Badge>
                             </div>
@@ -165,9 +165,9 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
 
                     <div className="flex gap-4">
                         <div className="flex flex-col items-end">
-                            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Манометры</div>
+                            <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Манометры</div>
                             <div className="flex items-center gap-2">
-                                <span className="text-2xl font-bold text-slate-900">{gauges.length}</span>
+                                <span className="text-2xl font-semibold text-slate-900">{gauges.length}</span>
                                 {defectiveGauges.length > 0 && (
                                     <Badge variant="destructive" className="h-5 px-1.5 text-[10px] bg-rose-100 text-rose-700 hover:bg-rose-100 border-none">
                                         {defectiveGauges.length} брак
@@ -177,9 +177,9 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                         </div>
                         <div className="w-px bg-slate-200" />
                         <div className="flex flex-col items-end">
-                            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Замечания</div>
+                            <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Замечания</div>
                             <div className="flex items-center gap-2">
-                                <span className="text-2xl font-bold text-slate-900">{activeRemarks.length}</span>
+                                <span className="text-2xl font-semibold text-slate-900">{activeRemarks.length}</span>
                                 {activeRemarks.length > 0 && (
                                     <Badge variant="destructive" className="h-5 px-1.5 text-[10px] bg-amber-100 text-amber-700 hover:bg-amber-100 border-none">
                                         Активны
@@ -215,7 +215,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 <Card className="border-slate-100 shadow-sm">
                                     <CardHeader className="pb-3">
-                                        <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                        <CardTitle className="text-base font-semibold text-slate-800 flex items-center gap-2">
                                             <Wrench className="w-4 h-4 text-slate-400" />
                                             Статус ремонта
                                         </CardTitle>
@@ -238,7 +238,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
 
                                 <Card className="border-slate-100 shadow-sm bg-gradient-to-br from-slate-50 to-white">
                                     <CardHeader className="pb-3">
-                                        <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                        <CardTitle className="text-base font-semibold text-slate-800 flex items-center gap-2">
                                             <Navigation className="w-4 h-4 text-slate-400" />
                                             Последнее действие
                                         </CardTitle>
@@ -268,12 +268,12 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                 <Card className="border-slate-100 shadow-sm relative overflow-hidden">
                                     <div className={cn("absolute top-0 left-0 w-1 h-full", progressColorClass)} />
                                     <CardHeader className="pb-3 pl-6">
-                                        <CardTitle className="text-base font-bold text-slate-800 flex items-center justify-between">
+                                        <CardTitle className="text-base font-semibold text-slate-800 flex items-center justify-between">
                                             <div className="flex items-center gap-2">
                                                 <Timer className="w-4 h-4 text-slate-400" />
                                                 Плановое ТО (90 дн.)
                                             </div>
-                                            <span className={cn("text-xs font-bold px-2 py-1 rounded-full",
+                                            <span className={cn("text-xs font-semibold px-2 py-1 rounded-full",
                                                 progressColorClass.replace('bg-', 'text-').replace('500', '700'),
                                                 progressColorClass.replace('bg-', 'bg-').replace('500', '100')
                                             )}>
@@ -311,7 +311,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                         <TabsContent value="gauges" className="p-4 md:p-6 outline-none">
                             <div className="space-y-6">
                                 <div>
-                                    <h3 className="font-bold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400 px-1">Установленные манометры</h3>
+                                    <h3 className="font-semibold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400 px-1">Установленные манометры</h3>
                                     {isLoadingGauges ? (
                                         <div className="space-y-3">
                                             <Skeleton className="h-16 w-full rounded-xl" />
@@ -327,11 +327,11 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                             {gauges.map((gauge: any) => (
                                                 <div key={gauge.id} className="p-4 border border-slate-200 rounded-xl bg-white shadow-sm flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs uppercase shadow-sm">
+                                                        <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-semibold text-xs uppercase shadow-sm">
                                                             {gauge.installation_side || 'N/A'}
                                                         </div>
                                                         <div>
-                                                            <div className="font-bold text-sm text-slate-900">{gauge.type?.name || 'Манометр'}</div>
+                                                            <div className="font-semibold text-sm text-slate-900">{gauge.type?.name || 'Манометр'}</div>
                                                             <div className="text-xs text-slate-500 font-mono mt-0.5">S/N: {gauge.serial_number}</div>
                                                         </div>
                                                     </div>
@@ -345,7 +345,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                 </div>
 
                                 <div className="pt-2">
-                                    <h3 className="font-bold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400 px-1">История изменений</h3>
+                                    <h3 className="font-semibold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400 px-1">История изменений</h3>
                                     {isLoadingGaugeHistory ? (
                                         <div className="space-y-3">
                                             <Skeleton className="h-16 w-full rounded-xl" />
@@ -367,7 +367,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                                         </div>
                                                         <div className="text-sm font-medium text-slate-900 mt-1">{item.details || item.action}</div>
                                                         <div className="text-xs flex items-center gap-1.5 text-slate-500 mt-2">
-                                                            <div className="w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-600">
+                                                            <div className="w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-semibold text-slate-600">
                                                                 {(item.user?.full_name || item.user?.username || '?')[0]}
                                                             </div>
                                                             {item.user?.full_name || item.user?.username || 'Система'}
@@ -400,7 +400,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                     {/* Активные */}
                                     {activeRemarks.length > 0 && (
                                         <div>
-                                            <h3 className="font-bold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400">В работе (Текущие)</h3>
+                                            <h3 className="font-semibold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400">В работе (Текущие)</h3>
                                             <div className="space-y-3">
                                                 {activeRemarks.map(renderRemarkCard)}
                                             </div>
@@ -424,7 +424,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                             <>
                                                 {sessionsWithRemarks.length > 0 && (
                                                     <div className="pt-2">
-                                                        <h3 className="font-bold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400">По ремонтам</h3>
+                                                        <h3 className="font-semibold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400">По ремонтам</h3>
                                                         <div className="w-full space-y-4">
                                                             {sessionsWithRemarks.map((session: any) => (
                                                                 <Link
@@ -439,7 +439,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                                                                 <Wrench className="w-5 h-5" />
                                                                             </div>
                                                                             <div>
-                                                                                <div className="font-bold text-slate-900 text-base">{session.repair_type || session.type || 'Плановый ремонт'} <span className="text-slate-400 ml-1">{formatWO(session.id, locomotive.number)}</span></div>
+                                                                                <div className="font-semibold text-slate-900 text-base">{session.repair_type || session.type || 'Плановый ремонт'} <span className="text-slate-400 ml-1">{formatWO(session.id, locomotive.number)}</span></div>
                                                                                 <div className="text-sm text-slate-500 font-medium mt-0.5">
                                                                                     {new Date(session.end_date || session.start_date || new Date()).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                                                                                 </div>
@@ -460,7 +460,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                                 {/* Внеплановые */}
                                                 {unmappedCompletedRemarks.length > 0 && (
                                                     <div className="pt-4 mt-6 border-t border-slate-100">
-                                                        <h3 className="font-bold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400">Прочие (Без привязки к ремонту)</h3>
+                                                        <h3 className="font-semibold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400">Прочие (Без привязки к ремонту)</h3>
                                                         <div className="space-y-3">
                                                             {unmappedCompletedRemarks.map(renderRemarkCard)}
                                                         </div>
@@ -496,7 +496,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                             {/* Card */}
                                             <div className="w-[calc(100%-2rem)] md:w-[calc(50%-1.5rem)] bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <div className="flex items-center justify-between mb-1">
-                                                    <div className="font-bold text-slate-900 text-sm">{item.action}</div>
+                                                    <div className="font-semibold text-slate-900 text-sm">{item.action}</div>
                                                     <div className="text-[10px] text-slate-400 font-mono">{new Date(item.moved_at).toLocaleDateString('ru-RU')}</div>
                                                 </div>
                                                 <div className="text-xs text-slate-500">
@@ -520,29 +520,29 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                 {/* Текущий активный чек-лист */}
                                 {activeSessions.length > 0 ? (
                                     <div>
-                                        <h3 className="font-bold text-slate-800 mb-4 text-xs uppercase tracking-widest text-slate-400 px-4 sm:px-0 pt-4 sm:pt-0">Текущий в работе</h3>
+                                        <h3 className="font-semibold text-slate-800 mb-4 text-xs uppercase tracking-widest text-slate-400 px-4 sm:px-0 pt-4 sm:pt-0">Текущий в работе</h3>
                                         <div className="w-full space-y-4 px-4 sm:px-0">
                                             {activeSessions.map((session: any) => (
                                                 <Link
                                                     key={session.id}
                                                     to={`/history/session/${session.id}/checklists`}
                                                     state={{ session }}
-                                                    className="block bg-white border border-indigo-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md hover:border-indigo-400 transition-all cursor-pointer ring-1 ring-indigo-50"
+                                                    className="block bg-white border border-blue-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md hover:border-blue-400 transition-all cursor-pointer ring-1 ring-blue-50"
                                                 >
-                                                    <div className="flex items-center justify-between px-6 py-4 bg-indigo-50/30">
+                                                    <div className="flex items-center justify-between px-6 py-4 bg-blue-50/30">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 shadow-inner">
+                                                            <div className="w-10 h-10 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-700 shadow-inner">
                                                                 <ClipboardCheck className="w-5 h-5" />
                                                             </div>
                                                             <div>
-                                                                <div className="font-bold text-slate-900 text-base">{session.repair_type || session.type || 'Текущий ремонт'} <span className="text-indigo-600 ml-1">{formatWO(session.id, locomotive.number)}</span></div>
+                                                                <div className="font-semibold text-slate-900 text-base">{session.repair_type || session.type || 'Текущий ремонт'} <span className="text-blue-600 ml-1">{formatWO(session.id, locomotive.number)}</span></div>
                                                                 <div className="text-sm text-slate-500 font-medium mt-0.5">
                                                                     Начат: {new Date(session.start_date || new Date()).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                                                                 </div>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
-                                                            <Badge variant="default" className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-3 py-1 shadow-sm">
+                                                            <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-1 shadow-sm">
                                                                 Перейти к чек-листу
                                                             </Badge>
                                                         </div>
@@ -553,12 +553,12 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                     </div >
                                 ) : (
                                     <div>
-                                        <h3 className="font-bold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400 px-4 sm:px-0 pt-4 sm:pt-0">Текущий в работе</h3>
+                                        <h3 className="font-semibold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400 px-4 sm:px-0 pt-4 sm:pt-0">Текущий в работе</h3>
                                         <div className="bg-white sm:rounded-xl sm:border border-slate-200 p-0 sm:p-4">
                                             <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
                                                 <ClipboardCheck className="w-8 h-8 text-slate-300 mx-auto mb-3" />
                                                 <p className="text-slate-500 font-medium mb-4">В данный момент нет активных заездов</p>
-                                                <Link to={`/locomotive/${locomotive.id}/checklist`} className="text-indigo-600 font-semibold hover:underline">
+                                                <Link to={`/locomotive/${locomotive.id}/checklist`} className="text-blue-600 font-semibold hover:underline">
                                                     Перейти к общему чек-листу локомотива
                                                 </Link>
                                             </div>
@@ -570,7 +570,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                 {
                                     historySessions.filter((s: any) => s.checklists && s.checklists.length > 0).length > 0 && (
                                         <div className="pt-6 border-t border-slate-100">
-                                            <h3 className="font-bold text-slate-800 mb-4 text-xs uppercase tracking-widest text-slate-400 px-4 sm:px-0">Архив чек-листов</h3>
+                                            <h3 className="font-semibold text-slate-800 mb-4 text-xs uppercase tracking-widest text-slate-400 px-4 sm:px-0">Архив чек-листов</h3>
                                             <div className="w-full space-y-4 px-4 sm:px-0">
                                                 {historySessions.filter((s: any) => s.checklists && s.checklists.length > 0).map((session: any) => (
                                                     <Link
@@ -585,7 +585,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                                                                     <ClipboardCheck className="w-5 h-5" />
                                                                 </div>
                                                                 <div>
-                                                                    <div className="font-bold text-slate-900 text-base">{session.repair_type || session.type || 'Плановый ремонт'} <span className="text-slate-400 ml-1">{formatWO(session.id, locomotive.number)}</span></div>
+                                                                    <div className="font-semibold text-slate-900 text-base">{session.repair_type || session.type || 'Плановый ремонт'} <span className="text-slate-400 ml-1">{formatWO(session.id, locomotive.number)}</span></div>
                                                                     <div className="text-sm text-slate-500 font-medium mt-0.5">
                                                                         {new Date(session.end_date || session.start_date || new Date()).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                                                                     </div>

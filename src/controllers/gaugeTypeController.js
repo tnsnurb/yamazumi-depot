@@ -22,10 +22,10 @@ const gaugeTypeController = {
     },
 
     create: async (req, res) => {
-        const { part_number, description, image_url } = req.body;
+        const { part_number, description, image_url, accuracy_class, pressure_range, thread_type } = req.body;
         const query = supabase
             .from('gauge_types')
-            .insert([{ part_number, description, image_url }])
+            .insert([{ part_number, description, image_url, accuracy_class, pressure_range, thread_type }])
             .select()
             .single();
         await executeQuery(query, res, 'Failed to create gauge type');
@@ -33,10 +33,10 @@ const gaugeTypeController = {
 
     update: async (req, res) => {
         const { id } = req.params;
-        const { part_number, description, image_url } = req.body;
+        const { part_number, description, image_url, accuracy_class, pressure_range, thread_type } = req.body;
         const query = supabase
             .from('gauge_types')
-            .update({ part_number, description, image_url })
+            .update({ part_number, description, image_url, accuracy_class, pressure_range, thread_type })
             .eq('id', id)
             .select()
             .single();

@@ -34,7 +34,7 @@ const StatusBadge = ({ status, label, value, onChange, x, y, align = 'left' }: {
                 "flex flex-col gap-0.5",
                 align === 'right' ? "items-end text-right" : "items-start text-left"
             )}>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter whitespace-nowrap">
+                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-tighter whitespace-nowrap">
                     {label}
                 </span>
                 <div className="flex items-center gap-1.5">
@@ -43,14 +43,14 @@ const StatusBadge = ({ status, label, value, onChange, x, y, align = 'left' }: {
                         value={value ?? ""}
                         onChange={e => onChange?.(e.target.value === "" ? undefined : parseFloat(e.target.value))}
                         className={cn(
-                            "w-[65px] px-2 py-0.5 rounded-md text-[13px] font-black border tabular-nums shadow-sm outline-none transition-all focus:ring-2",
+                            "w-[65px] px-2 py-0.5 rounded-md text-[13px] font-semibold border tabular-nums shadow-sm outline-none transition-all focus:ring-2",
                             isError ? "bg-red-50 text-red-700 border-red-200 focus:ring-red-200" :
                                 isWarning ? "bg-amber-50 text-amber-700 border-amber-200 focus:ring-amber-200" :
                                     "bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-emerald-200"
                         )}
                     />
                     <div className={cn(
-                        "flex items-center gap-1 px-2 py-0.5 rounded-md text-[8px] font-black uppercase text-white shadow-sm",
+                        "flex items-center gap-1 px-2 py-0.5 rounded-md text-[8px] font-semibold uppercase text-white shadow-sm",
                         isError ? "bg-red-600" :
                             isWarning ? "bg-amber-500" :
                                 "bg-emerald-600"
@@ -186,7 +186,7 @@ export const WheelProfileSVG: React.FC<WheelProfileSVGProps> = ({
                     <path d={`M ${centerX - tireWidthIdx / 2 - 33} ${topTreadY + 5} L ${centerX - tireWidthIdx / 2 - 30} ${topTreadY} L ${centerX - tireWidthIdx / 2 - 27} ${topTreadY + 5}`} fill="none" stroke="currentColor" />
                 </g>
 
-                <g className="opacity-60 text-indigo-400">
+                <g className="opacity-60 text-blue-400">
                     {/* Flange Thickness Line (Horizontal) */}
                     <line x1={centerX - tireWidthIdx / 2} y1={topTreadY + 20} x2={centerX - tireWidthIdx / 2 + sFlangeWidth * scale} y2={topTreadY + 20} stroke="currentColor" strokeWidth="1.5" />
                     <circle cx={centerX - tireWidthIdx / 2} cy={topTreadY + 20} r="2" fill="currentColor" />
@@ -249,7 +249,7 @@ export const WheelProfileSVG: React.FC<WheelProfileSVGProps> = ({
                     align="right"
                 />
 
-                <text x={centerX} y={25} textAnchor="middle" className="text-[10px] font-black fill-slate-300 uppercase tracking-widest">
+                <text x={centerX} y={25} textAnchor="middle" className="text-[10px] font-semibold fill-slate-300 uppercase tracking-widest">
                     Технический разрез профиля
                 </text>
             </svg>

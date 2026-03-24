@@ -86,18 +86,13 @@ export default function ActiveLocosList() {
         <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/30">
             <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-4 py-4 md:px-8">
                 <div className="max-w-5xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-indigo-600 p-2 rounded-xl shadow-indigo-100 shadow-lg">
-                            <Train className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight leading-none">
-                                Активные ремонты
-                            </h1>
-                            <p className="text-[10px] md:text-xs text-slate-400 font-medium tracking-wide mt-1 uppercase tracking-widest">
-                                {sessions?.length || 0} локомотивов в депо
-                            </p>
-                        </div>
+                    <div className="flex flex-col">
+                        <h1 className="text-lg md:text-xl font-semibold text-slate-900 tracking-tight leading-none">
+                            Активные ремонты
+                        </h1>
+                        <p className="text-[10px] md:text-xs text-slate-400 font-medium tracking-wide mt-1 uppercase tracking-widest">
+                            {sessions?.length || 0} локомотивов в депо
+                        </p>
                     </div>
                 </div>
             </header>
@@ -118,7 +113,7 @@ export default function ActiveLocosList() {
                                         <div className="font-bold text-slate-900 flex items-center gap-2 text-base md:text-lg">
                                             {formatWO(session.id, session.locomotive?.number)}
                                             <span className="text-slate-300 mx-1 md:mx-2">•</span>
-                                            <div className="flex items-center gap-1.5 text-indigo-600">
+                                            <div className="flex items-center gap-1.5 text-blue-600">
                                                 <Train className="w-4 h-4 md:w-5 md:h-5" />
                                                 {session.locomotive?.series}-{session.locomotive?.number}
                                             </div>
@@ -132,8 +127,8 @@ export default function ActiveLocosList() {
                                                 ОТ: <span className="font-semibold text-slate-700">{formatDate(session.start_date)}</span>
                                             </div>
                                             {session.locomotive?.repair_type && (
-                                                <div className="bg-indigo-50 text-indigo-700 px-2 py-1.5 rounded-md font-bold uppercase tracking-wider text-[10px] flex items-center gap-1">
-                                                    <span className="text-[8px] text-indigo-400 font-medium">ТИП:</span>
+                                                <div className="bg-blue-50 text-blue-700 px-2 py-1.5 rounded-md font-bold uppercase tracking-wider text-[10px] flex items-center gap-1">
+                                                    <span className="text-[8px] text-blue-400 font-medium">ТИП:</span>
                                                     {session.locomotive.repair_type}
                                                 </div>
                                             )}
@@ -143,7 +138,7 @@ export default function ActiveLocosList() {
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                                         <div className="flex items-center gap-4 text-sm mr-2 md:mr-6">
                                             <div className="flex items-center gap-2 text-slate-600">
-                                                <Wrench className="w-4 h-4 text-indigo-400" />
+                                                <Wrench className="w-4 h-4 text-blue-400" />
                                                 <span className="font-medium">{session.remarks?.length || 0}</span>
                                                 <span className="hidden lg:inline text-xs text-slate-400 uppercase tracking-wider">зам.</span>
                                             </div>
@@ -156,16 +151,16 @@ export default function ActiveLocosList() {
 
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" className="w-full sm:w-auto border-dashed hover:border-solid bg-indigo-50/50 hover:bg-indigo-100 transition-all font-medium text-indigo-700">
+                                                <Button variant="outline" className="w-full sm:w-auto border-dashed hover:border-solid bg-blue-50/50 hover:bg-blue-100 transition-all font-medium text-blue-700">
                                                     Действия <MoreHorizontal className="w-4 h-4 ml-2 opacity-50" />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end" className="w-56 font-medium">
                                                 <DropdownMenuLabel className="text-xs text-slate-400 font-bold uppercase tracking-widest px-2 pb-1">Управление</DropdownMenuLabel>
 
-                                                <DropdownMenuItem asChild className="cursor-pointer py-2.5 hover:bg-indigo-50 focus:bg-indigo-50 focus:text-indigo-900 group">
+                                                <DropdownMenuItem asChild className="cursor-pointer py-2.5 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-900 group">
                                                     <Link to={`/locomotive/${session.locomotive?.id}/remarks`}>
-                                                        <Wrench className="w-4 h-4 mr-3 text-indigo-500 group-hover:scale-110 transition-transform" />
+                                                        <Wrench className="w-4 h-4 mr-3 text-blue-500 group-hover:scale-110 transition-transform" />
                                                         <span>Замечания</span>
                                                         <Badge variant="secondary" className="ml-auto bg-white/50">{session.remarks?.length || 0}</Badge>
                                                     </Link>
@@ -181,7 +176,7 @@ export default function ActiveLocosList() {
                                                 <DropdownMenuSeparator />
 
                                                 <DropdownMenuItem
-                                                    className="cursor-pointer py-2.5 hover:bg-indigo-50 focus:bg-indigo-50 text-indigo-700 group"
+                                                    className="cursor-pointer py-2.5 hover:bg-blue-50 focus:bg-blue-50 text-blue-700 group"
                                                     onClick={() => setSelectedLocoForWheelset(session.locomotive)}
                                                 >
                                                     <Scale className="w-4 h-4 mr-3 text-amber-500 group-hover:scale-110 transition-transform" />
@@ -189,10 +184,10 @@ export default function ActiveLocosList() {
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
-                                                    className="cursor-pointer py-2.5 hover:bg-indigo-50 focus:bg-indigo-50 text-indigo-700 group"
+                                                    className="cursor-pointer py-2.5 hover:bg-blue-50 focus:bg-blue-50 text-blue-700 group"
                                                     onClick={() => setSelectedLocoForQr(session.locomotive)}
                                                 >
-                                                    <QrCode className="w-4 h-4 mr-3 text-indigo-500 group-hover:scale-110 transition-transform" />
+                                                    <QrCode className="w-4 h-4 mr-3 text-blue-500 group-hover:scale-110 transition-transform" />
                                                     <span>QR код</span>
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
@@ -209,17 +204,17 @@ export default function ActiveLocosList() {
             <Dialog open={!!selectedLocoForQr} onOpenChange={(open) => !open && setSelectedLocoForQr(null)}>
                 <DialogContent className="max-w-xs sm:max-w-sm p-0 overflow-hidden border-none shadow-2xl rounded-3xl">
                     <div className="bg-slate-900 pt-8 pb-12 px-6 text-center relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
                         <div className="relative z-10 flex flex-col items-center">
                             <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-4 border border-white/20">
                                 <QrCode className="w-8 h-8 text-white" />
                             </div>
-                            <h2 className="text-xl font-black text-white uppercase tracking-tight">QR Код Локомотива</h2>
-                            <p className="text-indigo-200 text-sm font-bold mt-1 uppercase tracking-widest">
+                            <h2 className="text-xl font-semibold text-white tracking-tight">QR код локомотива</h2>
+                            <p className="text-blue-200 text-sm font-bold mt-1 uppercase tracking-widest">
                                 {selectedLocoForQr?.series} {selectedLocoForQr?.number}
                             </p>
                         </div>
-                        <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl" />
+                        <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl" />
                         <div className="absolute -top-12 -left-12 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl" />
                     </div>
 

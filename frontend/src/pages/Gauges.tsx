@@ -11,19 +11,23 @@ import {
   Calendar, 
   Settings2, 
   QrCode,
-  FileDown,
-  Wrench,
-  Printer,
   Trash2,
   Camera,
   AlertTriangle,
   ScanLine,
-  X
+  FileText,
+  History,
+  Download,
+  Eye,
+  Upload
 } from "lucide-react"
+import ExcelJS from 'exceljs'
 import { format, differenceInDays, parseISO, addYears } from "date-fns"
 import { toast } from "sonner"
+import imageCompression from 'browser-image-compression'
+import { cn } from "@/lib/utils"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -41,7 +45,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import {
   Select as UISelect,
@@ -52,6 +55,78 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { useSearchParams } from "react-router-dom"
+import { Skeleton } from "@/components/ui/skeleton"
+
+const GaugeHistoryDialog = ({ gauge, open, onOpenChange }: { gauge: Gauge | null, open: boolean, onOpenChange: (open: boolean) => void }) => {
+  const { data: history = [], isLoading } = useQuery({
+    queryKey: ['gauge-history', gauge?.id],
+    queryFn: () => gauge ? gaugeService.getHistory(gauge.id) : Promise.resolve([]),
+    enabled: !!gauge && open
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[600px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
+        <DialogHeader className="p-8 pb-4 bg-slate-50">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
+              <History className="w-6 h-6" />
+            </div>
+            <div>
+              <DialogTitle className="text-2xl font-semibold text-slate-900">История жизненного цикла</DialogTitle>
+              <DialogDescription className="text-slate-500 font-medium">
+                Манометр: <span className="text-blue-600 font-semibold">{gauge?.serial_number}</span>
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+        <div className="p-8 pt-6 bg-white">
+          <div className="max-h-[400px] overflow-y-auto pr-2 space-y-4">
+            {isLoading ? (
+               <div className="space-y-4">
+                 {[1,2,3].map(i => <div key={i} className="h-20 bg-slate-50 animate-pulse rounded-2xl" />)}
+               </div>
+            ) : history.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 italic">История перемещений пуста</div>
+            ) : (
+              <div className="relative border-l-2 border-slate-100 ml-3 pl-6 space-y-8">
+                {history.map((item: any) => (
+                  <div key={item.id} className="relative">
+                    <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full border-2 border-white bg-blue-500 shadow-sm" />
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 transition-all hover:shadow-md">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="font-semibold text-slate-900 text-sm tracking-tight">{item.action}</span>
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase">{format(parseISO(item.created_at), 'dd.MM.yyyy HH:mm')}</span>
+                      </div>
+                      <p className="text-sm text-slate-600 leading-relaxed">{item.details}</p>
+                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                         <span className="text-[10px] font-semibold text-blue-600 uppercase tracking-widest">
+                           {item.locomotive ? `${item.locomotive.series} ${item.locomotive.number}` : 'Склад'}
+                         </span>
+                         <span className="text-[10px] font-semibold text-slate-400">
+                           {item.user?.full_name || item.user?.username || 'Система'}
+                         </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mt-8 flex justify-end">
+            <Button 
+              variant="outline" 
+              onClick={() => onOpenChange(false)}
+              className="h-12 px-8 rounded-xl font-semibold border-slate-200 text-slate-600"
+            >
+              Закрыть
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 const Gauges = () => {
   const [searchParams] = useSearchParams()
@@ -63,7 +138,16 @@ const Gauges = () => {
   const [selectedGaugeForQR, setSelectedGaugeForQR] = useState<Gauge | null>(null)
   
   const [isManageTypesOpen, setIsManageTypesOpen] = useState(false)
-  const [newGaugeType, setNewGaugeType] = useState({ part_number: "", description: "" })
+  const [newGaugeType, setNewGaugeType] = useState({ 
+    part_number: "", 
+    description: "",
+    accuracy_class: "",
+    pressure_range: "",
+    thread_type: ""
+  })
+  
+  const [selectedGaugeForHistory, setSelectedGaugeForHistory] = useState<Gauge | null>(null)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false)
   const [selectedGaugeForInstall, setSelectedGaugeForInstall] = useState<Gauge | null>(null)
@@ -73,13 +157,9 @@ const Gauges = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingGauge, setEditingGauge] = useState<Partial<Gauge> | null>(null)
 
-  // Фильтр по статусу
   const [statusFilter, setStatusFilter] = useState<string>('all')
-
-  // Диалог возврата просроченного
   const [returnDialogGauge, setReturnDialogGauge] = useState<Gauge | null>(null)
 
-  // QR Сканер
   const [isScannerOpen, setIsScannerOpen] = useState(false)
   const [scanResult, setScanResult] = useState<string | null>(null)
   const scannerRef = useRef<Html5Qrcode | null>(null)
@@ -89,14 +169,11 @@ const Gauges = () => {
     if (initialSerial) setSearchTerm(initialSerial)
   }, [initialSerial])
 
-  // QR Scanner lifecycle
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
       try {
         const state = scannerRef.current.getState();
-        if (state === 2) { // SCANNING
-          await scannerRef.current.stop();
-        }
+        if (state === 2) await scannerRef.current.stop();
       } catch (e) { /* ignore */ }
       scannerRef.current = null;
     }
@@ -104,11 +181,9 @@ const Gauges = () => {
 
   useEffect(() => {
     if (!isScannerOpen) return;
-    
     const timer = setTimeout(async () => {
       const container = document.getElementById(scannerContainerId);
       if (!container) return;
-      
       try {
         const scanner = new Html5Qrcode(scannerContainerId);
         scannerRef.current = scanner;
@@ -116,11 +191,10 @@ const Gauges = () => {
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 250, height: 250 } },
           (decodedText) => {
-            // Успешное сканирование
             setScanResult(decodedText);
             stopScanner();
           },
-          () => { /* ignore errors during scanning */ }
+          () => { /* ignore */ }
         );
       } catch (err) {
         console.error('Ошибка камеры:', err);
@@ -128,11 +202,7 @@ const Gauges = () => {
         setIsScannerOpen(false);
       }
     }, 300);
-    
-    return () => {
-      clearTimeout(timer);
-      stopScanner();
-    };
+    return () => { clearTimeout(timer); stopScanner(); };
   }, [isScannerOpen, stopScanner]);
 
   const [newGauge, setNewGauge] = useState<Partial<Gauge>>({
@@ -145,7 +215,6 @@ const Gauges = () => {
     installation_side: null
   })
 
-  // Автоматический расчет следующей поверки (+1 год)
   const handleLastVerificationChange = (dateStr: string) => {
     try {
       const date = parseISO(dateStr);
@@ -159,9 +228,7 @@ const Gauges = () => {
       } else {
         setNewGauge(prev => ({...prev, last_verification: dateStr}));
       }
-    } catch (e) {
-      setNewGauge(prev => ({...prev, last_verification: dateStr}));
-    }
+    } catch (e) { setNewGauge(prev => ({...prev, last_verification: dateStr})); }
   }
 
   const { data: gauges = [], isLoading } = useQuery({
@@ -169,56 +236,39 @@ const Gauges = () => {
     queryFn: gaugeService.getAll
   })
 
-  // Обработка результата сканирования (после загрузки gauges)
-  const handleScanResult = useCallback(() => {
-    if (!scanResult || !Array.isArray(gauges)) return;
-    
-    const serial = scanResult.startsWith('gauge:') 
-      ? scanResult.replace('gauge:', '').trim() 
-      : scanResult.trim();
-    
-    const found = gauges.find((g: Gauge) => 
-      g.serial_number.toLowerCase() === serial.toLowerCase()
-    );
-    
-    if (found) {
-      toast.success(`Найден: ${found.serial_number}`);
-      setIsScannerOpen(false);
-      setScanResult(null);
-      
-      if (found.status === 'На складе') {
-        setSelectedGaugeForInstall(found);
-        setIsInstallDialogOpen(true);
+  useEffect(() => {
+    if (scanResult && Array.isArray(gauges)) {
+      const serial = scanResult.startsWith('gauge:') ? scanResult.replace('gauge:', '').trim() : scanResult.trim();
+      const found = gauges.find((g: Gauge) => g.serial_number.toLowerCase() === serial.toLowerCase());
+      if (found) {
+        toast.success(`Найден: ${found.serial_number}`);
+        setIsScannerOpen(false);
+        setScanResult(null);
+        if (found.status === 'На складе') {
+          setSelectedGaugeForInstall(found);
+          setIsInstallDialogOpen(true);
+        } else {
+          setSearchTerm(found.serial_number);
+          setStatusFilter('all');
+        }
       } else {
-        setSearchTerm(found.serial_number);
-        setStatusFilter('all');
+        toast.error(`Манометр "${serial}" не найден в системе`);
+        setScanResult(null);
       }
-    } else {
-      toast.error(`Манометр "${serial}" не найден в системе`);
-      setScanResult(null);
     }
   }, [scanResult, gauges]);
-
-  useEffect(() => {
-    if (scanResult) handleScanResult();
-  }, [scanResult, handleScanResult]);
 
   const { data: locomotives = [] } = useQuery({
     queryKey: ['locomotives-list'],
     queryFn: () => locomotiveApi.getAll().then(res => res || [])
   })
 
-  // Фильтрация локомотивов: ТЭ33А/АС/П
   const filteredLocomotivesList = useMemo(() => {
     if (!Array.isArray(locomotives)) return [];
     return locomotives
       .filter((l: any) => {
         const series = String(l.series || "").toUpperCase();
-        const numStr = String(l.number || "").toUpperCase();
-        
-        // Включаем ТЭ33А, ТЭ33АС и ТЭП33А
-        const isEvolution = series.includes("ТЭ33") || series.includes("ТЭП33") || numStr.includes("ТЭ33") || numStr.includes("ТЭП33");
-        return isEvolution;
+        return series.includes("ТЭ33") || series.includes("ТЭП33");
       })
       .sort((a: any, b: any) => (a.number || "").localeCompare(b.number || "", undefined, { numeric: true }));
   }, [locomotives]);
@@ -232,23 +282,25 @@ const Gauges = () => {
     mutationFn: (data: Partial<GaugeType>) => gaugeTypeService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gauge-types'] })
-      setNewGaugeType({ part_number: "", description: "" })
-      toast.success("Новая модель успешно добавлена в справочник")
+      setNewGaugeType({ 
+        part_number: "", 
+        description: "",
+        accuracy_class: "",
+        pressure_range: "",
+        thread_type: ""
+      })
+      toast.success("Новая модель добавлена")
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || err.message)
-    }
+    onError: (err: any) => toast.error(err.message)
   })
 
   const deleteTypeMutation = useMutation({
     mutationFn: (id: string) => gaugeTypeService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gauge-types'] })
-      toast.success("Модель удалена из справочника")
+      toast.success("Модель удалена")
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || err.message || "Ошибка при удалении")
-    }
+    onError: (err: any) => toast.error(err.message)
   })
 
   const createMutation = useMutation({
@@ -256,8 +308,7 @@ const Gauges = () => {
     onSuccess: (createdGauge: any) => {
       queryClient.invalidateQueries({ queryKey: ['gauges'] })
       setIsAddDialogOpen(false)
-      toast.success("Манометр успешно добавлен")
-      // Авто-показ QR для печати этикетки
+      toast.success("Манометр добавлен")
       setSelectedGaugeForQR(createdGauge)
       setNewGauge({
         serial_number: "",
@@ -268,29 +319,8 @@ const Gauges = () => {
         locomotive_id: null
       })
     },
-    onError: (err: any) => {
-      toast.error(err.message || "Ошибка при добавлении")
-    }
+    onError: (err: any) => toast.error(err.message)
   })
-
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    createMutation.mutate(newGauge)
-  }
-
-  const handleEditSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (editingGauge && editingGauge.id) {
-      updateMutation.mutate({
-        id: editingGauge.id,
-        ...editingGauge
-      }, {
-        onSuccess: () => {
-          setIsEditDialogOpen(false)
-        }
-      })
-    }
-  }
 
   const updateMutation = useMutation({
     mutationFn: ({id, ...data}: Partial<Gauge> & {id: string}) => gaugeService.update(id, data),
@@ -298,46 +328,82 @@ const Gauges = () => {
       queryClient.invalidateQueries({ queryKey: ['gauges'] })
       toast.success("Данные обновлены")
     },
-    onError: (err: any) => {
-      toast.error(err.message || "Ошибка при обновлении")
-    }
-  })
-
-  const uploadPhotoMutation = useMutation({
-    mutationFn: ({id, file}: {id: string, file: File}) => {
-      const formData = new FormData()
-      formData.append('photo', file)
-      return gaugeService.uploadPhoto(id, formData)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gauges'] })
-      toast.success("Фотография успешно загружена")
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Ошибка при загрузке фото")
-    }
+    onError: (err: any) => toast.error(err.message)
   })
 
   const uploadTypeImageMutation = useMutation({
-    mutationFn: ({id, file}: {id: string, file: File}) => {
+    mutationFn: async ({id, file}: {id: string, file: File}) => {
+      const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true }
+      const compressedFile = await imageCompression(file, options)
       const formData = new FormData()
-      formData.append('photo', file)
+      formData.append('photo', compressedFile, compressedFile.name)
       return gaugeTypeService.uploadPhoto(id, formData)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gauge-types'] })
       queryClient.invalidateQueries({ queryKey: ['gauges'] })
-      toast.success("Изображение модели обновлено")
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Ошибка при загрузке изображения")
+      toast.success("Изображение обновлено")
     }
   })
+
+  const uploadCertificateMutation = useMutation({
+    mutationFn: async ({id, file}: {id: string, file: File}) => {
+      const formData = new FormData()
+      formData.append('certificate', file, file.name)
+      return gaugeService.uploadCertificate(id, formData)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gauges'] })
+      toast.success("Сертификат загружен")
+    }
+  })
+
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Журнал манометров');
+    worksheet.columns = [
+      { header: '№', key: 'index', width: 5 },
+      { header: 'Серийный номер', key: 'serial', width: 20 },
+      { header: 'Парт-номер', key: 'part', width: 15 },
+      { header: 'Описание', key: 'desc', width: 25 },
+      { header: 'Класс точности', key: 'class', width: 10 },
+      { header: 'Диапазон', key: 'range', width: 15 },
+      { header: 'Резьба', key: 'thread', width: 15 },
+      { header: 'Последняя поверка', key: 'last', width: 15 },
+      { header: 'Следующая поверка', key: 'next', width: 15 },
+      { header: 'Статус', key: 'status', width: 15 },
+      { header: 'Локомотив', key: 'loco', width: 15 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    filteredGauges.forEach((g, idx) => {
+      worksheet.addRow({
+        index: idx + 1,
+        serial: g.serial_number,
+        part: g.part_number || '-',
+        desc: g.description || '-',
+        class: g.accuracy_class || '-',
+        range: g.pressure_range || '-',
+        thread: g.thread_type || '-',
+        last: g.last_verification ? format(parseISO(g.last_verification), 'dd.MM.yyyy') : '-',
+        next: g.next_verification ? format(parseISO(g.next_verification), 'dd.MM.yyyy') : '-',
+        status: g.status,
+        loco: g.locomotive ? `${g.locomotive.series} ${g.locomotive.number}` : 'Склад'
+      });
+    });
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `Gauge_Journal_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+    toast.success("Журнал экспортирован");
+  };
 
   const handleVerify = (gauge: Gauge) => {
     const today = new Date();
     const nextYear = addYears(today, 1);
-    
     updateMutation.mutate({
       id: gauge.id,
       last_verification: format(today, 'yyyy-MM-dd'),
@@ -347,85 +413,48 @@ const Gauges = () => {
 
   const handleInstall = () => {
     if (!selectedGaugeForInstall || !installToLocoId) return;
-
     updateMutation.mutate({
       id: selectedGaugeForInstall.id,
       status: 'На локомотиве',
       locomotive_id: installToLocoId,
       installation_side: installSide
-    }, {
-      onSuccess: () => {
-        setIsInstallDialogOpen(false);
-        setSelectedGaugeForInstall(null);
-        setInstallToLocoId(null);
-        setInstallSide('K1');
-      }
-    });
+    }, { onSuccess: () => { setIsInstallDialogOpen(false); setSelectedGaugeForInstall(null); } });
   }
 
   const handleUninstall = (gauge: Gauge) => {
     const daysLeft = differenceInDays(parseISO(gauge.next_verification), new Date())
-    if (daysLeft < 0) {
-      // Просрочен — показать диалог выбора
-      setReturnDialogGauge(gauge)
-    } else {
-      // Обычный возврат
-      updateMutation.mutate({
-        id: gauge.id,
-        status: 'На складе',
-        locomotive_id: null,
-        installation_side: null
-      });
-    }
+    if (daysLeft < 0) setReturnDialogGauge(gauge);
+    else updateMutation.mutate({ id: gauge.id, status: 'На складе', locomotive_id: null, installation_side: null });
   }
 
   const handleReturnExpired = (action: 'warehouse' | 'verification' | 'decommission') => {
     if (!returnDialogGauge) return;
-    const updates: any = {
-      id: returnDialogGauge.id,
-      locomotive_id: null,
-      installation_side: null
-    };
-    if (action === 'verification') {
-      updates.status = 'На поверке';
-    } else if (action === 'decommission') {
-      updates.status = 'Списан';
-      updates.is_defective = true;
-    } else {
-      updates.status = 'На складе';
-    }
-    updateMutation.mutate(updates, {
-      onSuccess: () => setReturnDialogGauge(null)
-    });
+    const updates: any = { id: returnDialogGauge.id, locomotive_id: null, installation_side: null };
+    if (action === 'verification') updates.status = 'На поверке';
+    else if (action === 'decommission') { updates.status = 'Списан'; updates.is_defective = true; }
+    else updates.status = 'На складе';
+    updateMutation.mutate(updates, { onSuccess: () => setReturnDialogGauge(null) });
   }
 
   const getStatusColor = (gauge: Gauge) => {
     if (gauge.is_defective) return "bg-red-100 text-red-700 border-red-200"
-    
-    const daysLeft = differenceInDays(parseISO(gauge.next_verification), new Date())
-    
-    if (daysLeft < 0) return "bg-red-500 text-white animate-pulse"
-    if (daysLeft < 30) return "bg-amber-100 text-amber-700 border-amber-200"
+    const d = differenceInDays(parseISO(gauge.next_verification), new Date())
+    if (d < 0) return "bg-red-500 text-white animate-pulse"
+    if (d < 30) return "bg-amber-100 text-amber-700 border-amber-200"
     return "bg-emerald-50 text-emerald-700 border-emerald-200"
   }
 
-  const getDaysLeft = (dateStr: string) => {
-    return differenceInDays(parseISO(dateStr), new Date())
-  }
-
-  // Фильтрация
   const filteredGauges = useMemo(() => {
     if (!Array.isArray(gauges)) return [];
     return gauges.filter((g: Gauge) => {
-      // Текстовый поиск
-      const matchesSearch = g.serial_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        g.part_number?.toLowerCase().includes(searchTerm.toLowerCase());
-      if (!matchesSearch) return false;
-      // Фильтр по статусу
+      const matchS = g.serial_number.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                     g.part_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                     (g.locomotive?.number || "").includes(searchTerm);
+      if (!matchS) return false;
       if (statusFilter === 'all') return true;
-      if (statusFilter === 'expired') return getDaysLeft(g.next_verification) < 0;
+      if (statusFilter === 'expired') return differenceInDays(parseISO(g.next_verification), new Date()) < 0;
       if (statusFilter === 'expiring') {
-        const d = getDaysLeft(g.next_verification);
+        const d = differenceInDays(parseISO(g.next_verification), new Date());
         return d >= 0 && d < 30;
       }
       return g.status === statusFilter;
@@ -436,895 +465,383 @@ const Gauges = () => {
     <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <Wrench className="w-8 h-8 text-blue-600" />
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
             Метрология
           </h1>
-          <p className="text-slate-500 mt-1">
-            Учет манометров и контроль сроков поверки
-          </p>
+          <p className="text-slate-500 mt-1">Учет манометров и контроль сроков поверки</p>
         </div>
-        
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            className="gap-2 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 font-bold"
-            onClick={() => { setScanResult(null); setIsScannerOpen(true); }}
-          >
-            <ScanLine className="w-4 h-4" />
-            Сканировать
+          <Button variant="outline" className="gap-2 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 font-semibold" onClick={() => setIsScannerOpen(true)}>
+            <ScanLine className="w-4 h-4" /> Сканировать
           </Button>
-          <Button variant="outline" className="gap-2">
-            <FileDown className="w-4 h-4" />
-            Экспорт
+          <Button variant="outline" className="gap-2" onClick={exportToExcel}>
+            <Download className="w-4 h-4" /> Экспорт
           </Button>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 bg-blue-600 hover:bg-blue-700 shadow-md">
-                <Plus className="w-4 h-4" />
-                Добавить прибор
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Добавление манометра</DialogTitle>
-                <DialogDescription>
-                  Введите данные нового прибора для учета в системе.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleAddSubmit} className="space-y-6 pt-4">
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="serial" className="text-slate-600 font-bold">Serial Number</Label>
-                    <Input 
-                      id="serial"
-                      required 
-                      placeholder="Напр. KSK0140" 
-                      value={newGauge.serial_number}
-                      onChange={e => setNewGauge({...newGauge, serial_number: e.target.value})}
-                      className="h-11 border-slate-200 focus:ring-blue-500 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Модель (Part Number)</Label>
-                    <div className="flex gap-2">
-                      <UISelect 
-                        value={newGauge.type_id || ""}
-                        onValueChange={val => setNewGauge({...newGauge, type_id: val})}
-                      >
-                        <UISelectTrigger className="h-11 border-slate-200 rounded-xl">
-                          <UISelectValue placeholder="Модель..." />
-                        </UISelectTrigger>
-                        <UISelectContent>
-                          {Array.isArray(gaugeTypes) && gaugeTypes.map(t => (
-                            <UISelectItem key={t.id} value={t.id}>{t.part_number} — {t.description}</UISelectItem>
-                          ))}
-                        </UISelectContent>
-                      </UISelect>
-                      <Button type="button" variant="outline" className="h-11 w-11 p-0 rounded-xl" onClick={() => setIsManageTypesOpen(true)} title="Справочник моделей">
-                        <Settings2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Последняя поверка</Label>
-                    <Input 
-                      type="date" 
-                      value={newGauge.last_verification}
-                      onChange={e => handleLastVerificationChange(e.target.value)}
-                      className="h-11 border-slate-200 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Следующая поверка</Label>
-                    <Input 
-                      type="date" 
-                      value={newGauge.next_verification}
-                      onChange={e => setNewGauge({...newGauge, next_verification: e.target.value})}
-                      className="h-11 border-slate-200 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Статус</Label>
-                    <UISelect 
-                       value={newGauge.status}
-                       onValueChange={val => setNewGauge({...newGauge, status: val as any, locomotive_id: val !== 'На локомотиве' ? null : newGauge.locomotive_id})}
-                    >
-                      <UISelectTrigger className="h-11 border-slate-200 rounded-xl">
-                        <UISelectValue />
-                      </UISelectTrigger>
-                      <UISelectContent>
-                        <UISelectItem value="На складе">На складе</UISelectItem>
-                        <UISelectItem value="На локомотиве">На локомотиве</UISelectItem>
-                        <UISelectItem value="На поверке">На поверке</UISelectItem>
-                      </UISelectContent>
-                    </UISelect>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Локомотив</Label>
-                    <UISelect 
-                      value={newGauge.locomotive_id?.toString() || ""}
-                      onValueChange={val => setNewGauge({
-                        ...newGauge, 
-                        locomotive_id: val ? parseInt(val) : null, 
-                        status: val ? 'На локомотиве' : 'На складе'
-                      })}
-                    >
-                      <UISelectTrigger className="h-11 border-slate-200 rounded-xl">
-                        <UISelectValue placeholder="Номер..." />
-                      </UISelectTrigger>
-                      <UISelectContent>
-                        <UISelectItem value="no">Нет (На складе)</UISelectItem>
-                        {filteredLocomotivesList.map((l: any) => (
-                          <UISelectItem key={l.id} value={l.id.toString()}>{l.number}</UISelectItem>
-                        ))}
-                      </UISelectContent>
-                    </UISelect>
-                  </div>
-                </div>
-
-                {newGauge.status === 'На локомотиве' && (
-                  <div className="space-y-2 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
-                    <Label className="text-blue-700 font-black uppercase text-[10px] tracking-wider">Сторона установки (Кабина)</Label>
-                    <div className="flex gap-2">
-                      {['K1', 'K2'].map((side) => (
-                        <button
-                          key={side}
-                          type="button"
-                          onClick={() => setNewGauge({...newGauge, installation_side: side as any})}
-                          className={`flex-1 py-3 rounded-xl border text-sm font-black transition-all ${
-                            newGauge.installation_side === side 
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200' 
-                              : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                          }`}
-                        >
-                          Cabin {side}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-2">
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    onClick={() => setIsAddDialogOpen(false)}
-                    className="flex-1 h-12 rounded-xl text-slate-500 font-bold hover:bg-slate-100"
-                  >
-                    Отмена
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={createMutation.isPending}
-                    className="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black shadow-lg shadow-blue-200 transition-all active:scale-95"
-                  >
-                    {createMutation.isPending ? "Сохранение..." : "Добавить прибор"}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button className="gap-2 bg-blue-600 hover:bg-blue-700 shadow-md" onClick={() => setIsAddDialogOpen(true)}>
+             <Plus className="w-4 h-4" /> Добавить прибор
+          </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className={`border-slate-200 shadow-sm cursor-pointer transition-all hover:shadow-md ${statusFilter === 'all' ? 'ring-2 ring-blue-400 bg-blue-50' : 'bg-white'}`} onClick={() => setStatusFilter('all')}>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase font-semibold text-slate-400">Всего приборов</CardDescription>
-            <CardTitle className="text-2xl font-bold text-slate-900">{gauges.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className={`border-red-100 shadow-sm cursor-pointer transition-all hover:shadow-md ${statusFilter === 'expired' ? 'ring-2 ring-red-400' : ''} bg-red-50`} onClick={() => setStatusFilter(statusFilter === 'expired' ? 'all' : 'expired')}>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase font-semibold text-red-400">Просрочено</CardDescription>
-            <CardTitle className="text-2xl font-bold text-red-600">
-              {(gauges as Gauge[]).filter((g: Gauge) => getDaysLeft(g.next_verification) < 0).length}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className={`border-amber-100 shadow-sm cursor-pointer transition-all hover:shadow-md ${statusFilter === 'expiring' ? 'ring-2 ring-amber-400' : ''} bg-amber-50`} onClick={() => setStatusFilter(statusFilter === 'expiring' ? 'all' : 'expiring')}>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase font-semibold text-amber-500">Срок истекает</CardDescription>
-            <CardTitle className="text-2xl font-bold text-amber-600">
-              {(gauges as Gauge[]).filter((g: Gauge) => {
-                const d = getDaysLeft(g.next_verification)
-                return d >= 0 && d < 30
-              }).length}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className={`border-emerald-100 shadow-sm cursor-pointer transition-all hover:shadow-md ${statusFilter === 'all' && 'opacity-80'} bg-emerald-50`} onClick={() => setStatusFilter('all')}>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase font-semibold text-emerald-500">В норме</CardDescription>
-            <CardTitle className="text-2xl font-bold text-emerald-600">
-              {(gauges as Gauge[]).filter((g: Gauge) => getDaysLeft(g.next_verification) >= 30).length}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+        <StatCard label="Всего" value={gauges.length} color="slate" active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
+        <StatCard label="Просрочено" value={gauges.filter(g => differenceInDays(parseISO(g.next_verification), new Date()) < 0).length} color="red" active={statusFilter === 'expired'} onClick={() => setStatusFilter('expired')} />
+        <StatCard label="Срок истекает" value={gauges.filter(g => { const d = differenceInDays(parseISO(g.next_verification), new Date()); return d >= 0 && d < 30; }).length} color="amber" active={statusFilter === 'expiring'} onClick={() => setStatusFilter('expiring')} />
+        <StatCard label="В норме" value={gauges.filter(g => differenceInDays(parseISO(g.next_verification), new Date()) >= 30).length} color="emerald" active={false} onClick={() => setStatusFilter('all')} />
       </div>
 
-      {/* Фильтры по статусу */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          { key: 'all', label: 'Все', color: 'bg-slate-100 text-slate-700' },
-          { key: 'На складе', label: 'На складе', color: 'bg-slate-100 text-slate-700' },
-          { key: 'На локомотиве', label: 'На локомотиве', color: 'bg-blue-100 text-blue-700' },
-          { key: 'На поверке', label: 'На поверке', color: 'bg-amber-100 text-amber-700' },
-          { key: 'expired', label: 'Просрочено', color: 'bg-red-100 text-red-700' },
-          { key: 'Списан', label: 'Списан', color: 'bg-gray-100 text-gray-700' },
-        ].map(f => (
-          <button
-            key={f.key}
-            onClick={() => setStatusFilter(f.key)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
-              statusFilter === f.key
-                ? `${f.color} ring-2 ring-offset-1 ring-blue-400 shadow-sm`
-                : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <Input 
+            placeholder="Поиск по серийному номеру, модели или локомотиву..." 
+            className="pl-12 h-14 bg-white border-slate-200 rounded-2xl text-lg shadow-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {['all', 'На складе', 'На локомотиве', 'На поверке', 'Списан'].map(f => (
+            <button key={f} onClick={() => setStatusFilter(f)} className={cn(
+              "px-4 py-2 rounded-xl text-xs font-semibold transition-all border",
+              statusFilter === f ? "bg-blue-50 text-blue-700 border-blue-200 ring-2 ring-blue-400" : "bg-white text-slate-500 border-slate-200"
+            )}>
+              {f === 'all' ? 'Все' : f}
+            </button>
+          ))}
+          <Button variant="ghost" className="h-10 rounded-xl font-semibold" onClick={() => setIsManageTypesOpen(true)}>
+            <Settings2 className="w-4 h-4 mr-2" /> Справочник моделей
+          </Button>
+        </div>
       </div>
 
       <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input 
-                placeholder="Поиск по серийному номеру или артикулу..." 
-                className="pl-10 bg-white border-slate-200 focus:border-blue-400 focus:ring-blue-400"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-200">
-                Всего: {filteredGauges.length}
-              </Badge>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="font-semibold text-slate-700">Serial Number</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Part Number</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Description</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Последняя поверка</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Следующая поверка</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Фото</TableHead>
-                  <TableHead className="font-semibold text-slate-700 text-right">Осталось дней</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Статус</TableHead>
-                  <TableHead className="w-[120px]"></TableHead>
+        <Table>
+          <TableHeader className="bg-slate-50/50">
+            <TableRow>
+              <TableHead className="font-semibold pl-6">Прибор</TableHead>
+              <TableHead className="font-semibold">Поверка</TableHead>
+              <TableHead className="font-semibold">Характеристики</TableHead>
+              <TableHead className="font-semibold">Статус</TableHead>
+              <TableHead className="text-right pr-6 w-[200px]">Действия</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <GaugeTableSkeleton />
+            ) : filteredGauges.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="h-32 text-center text-slate-400 italic">Приборы не найдены</TableCell></TableRow>
+            ) : filteredGauges.map((gauge: Gauge) => {
+              const d = differenceInDays(parseISO(gauge.next_verification), new Date())
+              return (
+                <TableRow key={gauge.id} className="hover:bg-slate-50/50 transition-colors">
+                  <TableCell className="pl-6 py-4">
+                    <div className="flex flex-col">
+                      <span className="text-slate-900 font-semibold text-lg">{gauge.serial_number}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-slate-400 font-semibold text-xs uppercase">{gauge.part_number}</span>
+                        {gauge.certificate_url && (
+                          <a href={gauge.certificate_url} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700"><FileText className="w-3.5 h-3.5" /></a>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col group">
+                      <span className="text-slate-700 font-semibold tabular-nums">{format(parseISO(gauge.next_verification), 'dd.MM.yyyy')}</span>
+                      <span className={cn("text-[10px] font-semibold uppercase tracking-tighter", d < 0 ? "text-red-500" : d < 30 ? "text-amber-500" : "text-emerald-500")}>
+                        {d < 0 ? 'Просрочен' : d < 30 ? `Через ${d} дн` : 'В норме'}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col text-[10px] font-semibold text-slate-400 uppercase tracking-widest leading-tight">
+                      <span>Кл: {gauge.accuracy_class || '-'}</span>
+                      <span>Диап: {gauge.pressure_range || '-'}</span>
+                      <span>Резьба: {gauge.thread_type || '-'}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <Badge className={cn("w-fit", getStatusColor(gauge))}>
+                         {gauge.status === 'На локомотиве' ? `${gauge.locomotive?.series} ${gauge.locomotive?.number}` : gauge.status}
+                      </Badge>
+                      {gauge.installation_side && <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-1.5 rounded uppercase w-fit">Cabin {gauge.installation_side}</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right pr-6">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-green-600" onClick={() => handleVerify(gauge)} title="Поверка +1 год"><Calendar className="w-4 h-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => { setSelectedGaugeForHistory(gauge); setIsHistoryOpen(true); }} title="История"><History className="w-4 h-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => setSelectedGaugeForQR(gauge)} title="QR Код"><QrCode className="w-4 h-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => { setEditingGauge(gauge); setIsEditDialogOpen(true); }} title="Правка"><Settings2 className="w-4 h-4" /></Button>
+                      
+                      {gauge.status === 'На складе' ? (
+                        <Button size="sm" className="h-8 bg-blue-600 font-semibold ml-2" onClick={() => { setSelectedGaugeForInstall(gauge); setIsInstallDialogOpen(true); }}>Выдать</Button>
+                      ) : gauge.status === 'На локомотиве' ? (
+                        <Button size="sm" variant="outline" className="h-8 text-red-600 border-red-200 font-semibold ml-2" onClick={() => { if(confirm('Снять прибор?')) handleUninstall(gauge); }}>Снять</Button>
+                      ) : null}
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={8} className="animate-pulse bg-slate-50/50 h-12" />
-                    </TableRow>
-                  ))
-                ) : filteredGauges.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-48 text-center text-slate-500">
-                      Манометры не найдены
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredGauges.map((gauge: Gauge) => {
-                    const daysLeft = getDaysLeft(gauge.next_verification)
-                    return (
-                      <TableRow key={gauge.id} className="hover:bg-slate-50/50 transition-colors">
-                        <TableCell className="font-medium text-slate-900">
-                          <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-bold border border-slate-200">
-                            {gauge.serial_number}
-                          </code>
-                        </TableCell>
-                        <TableCell className="text-slate-600 text-xs font-mono">
-                          {gauge.part_number}
-                        </TableCell>
-                        <TableCell className="text-slate-600 max-w-[200px] truncate">
-                          {gauge.description}
-                        </TableCell>
-                        <TableCell className="text-slate-500 text-sm">
-                          {gauge.last_verification ? format(parseISO(gauge.last_verification), 'dd.MM.yyyy') : '-'}
-                        </TableCell>
-                        <TableCell>
-                           <div className="flex items-center gap-2">
-                             <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                             <span className={daysLeft < 0 ? "text-red-600 font-bold" : "text-slate-700"}>
-                               {gauge.next_verification ? format(parseISO(gauge.next_verification), 'dd.MM.yyyy') : '-'}
-                             </span>
-                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex -space-x-2">
-                            {gauge.photo_url ? (
-                              <div className="w-10 h-10 rounded-lg border-2 border-white shadow-sm overflow-hidden group relative cursor-pointer" onClick={() => window.open(gauge.photo_url, '_blank')}>
-                                <img src={gauge.photo_url} alt="Instance" className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                  <Search className="w-4 h-4 text-white" />
-                                </div>
-                              </div>
-                            ) : (
-                               <div className="w-10 h-10 rounded-lg bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center text-slate-300">
-                                 <Camera className="w-4 h-4" />
-                               </div>
-                            )}
-                            {gauge.model_image_url && (
-                              <div className="w-10 h-10 rounded-lg border-2 border-white shadow-sm overflow-hidden group relative cursor-pointer translate-x-2" title="Фото модели" onClick={() => window.open(gauge.model_image_url, '_blank')}>
-                                <img src={gauge.model_image_url} alt="Model" className="w-full h-full object-cover opacity-80" />
-                                <div className="absolute inset-0 bg-blue-600/20" />
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="outline" className={`font-bold ${getStatusColor(gauge)}`}>
-                            {daysLeft} дн.
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {gauge.status === 'На складе' && <Badge className="bg-slate-200 text-slate-700 hover:bg-slate-200">Склад</Badge>}
-                            {gauge.status === 'На локомотиве' && (
-                              <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200 gap-1">
-                                {gauge.locomotive?.series || 'Лок.'} {gauge.locomotive?.number}
-                                {gauge.installation_side && (
-                                  <span className="ml-1 px-1 py-0.5 bg-blue-600 text-white rounded text-[10px]">
-                                    {gauge.installation_side}
-                                  </span>
-                                )}
-                              </Badge>
-                            )}
-                            {gauge.status === 'На поверке' && <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">Поверка</Badge>}
-                            {gauge.status === 'Списан' && <Badge className="bg-gray-200 text-gray-600 hover:bg-gray-200">Списан</Badge>}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                           <div className="flex items-center justify-end gap-1">
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-8 w-8 text-slate-400 hover:text-green-600" 
-                                title="Провести поверку (+1 год)"
-                                onClick={() => handleVerify(gauge)}
-                              >
-                                <Calendar className="w-4 h-4" />
-                              </Button>
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-8 w-8 text-slate-400 hover:text-blue-600" 
-                                title="QR Код"
-                                onClick={() => setSelectedGaugeForQR(gauge)}
-                              >
-                                <QrCode className="w-4 h-4" />
-                              </Button>
-                               <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-8 w-8 text-slate-400 hover:text-blue-600 relative overflow-hidden" 
-                                title="Загрузить фото"
-                              >
-                                <Camera className="w-4 h-4" />
-                                <input 
-                                  type="file" 
-                                  className="absolute inset-0 opacity-0 cursor-pointer" 
-                                  accept="image/*"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0]
-                                    if (file) uploadPhotoMutation.mutate({ id: gauge.id, file })
-                                  }}
-                                />
-                              </Button>
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-8 w-8 text-slate-400 hover:text-blue-600" 
-                                title="Редактировать"
-                                onClick={() => {
-                                  setEditingGauge(gauge);
-                                  setIsEditDialogOpen(true);
-                                }}
-                              >
-                                <Settings2 className="w-4 h-4" />
-                              </Button>
-                              {gauge.status === 'На складе' ? (
-                                <Button 
-                                  size="sm" 
-                                  className="h-8 bg-blue-600 hover:bg-blue-700 text-white font-bold ml-2 px-3"
-                                  onClick={() => {
-                                    setSelectedGaugeForInstall(gauge);
-                                    setIsInstallDialogOpen(true);
-                                  }}
-                                >
-                                  Выдать
-                                </Button>
-                              ) : gauge.status === 'На локомотиве' ? (
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 font-bold ml-2 px-3"
-                                  onClick={() => {
-                                    if (window.confirm(`Снять манометр ${gauge.serial_number} с локомотива?`)) {
-                                      handleUninstall(gauge);
-                                    }
-                                  }}
-                                >
-                                  Снять
-                                </Button>
-                              ) : null}
-                           </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
+              )
+            })}
+          </TableBody>
+        </Table>
       </Card>
 
+      {/* Dialogs */}
+      <GaugeHistoryDialog 
+        gauge={selectedGaugeForHistory} 
+        open={isHistoryOpen} 
+        onOpenChange={setIsHistoryOpen} 
+      />
+
+      {/* Manage Types Dialog */}
       <Dialog open={isManageTypesOpen} onOpenChange={setIsManageTypesOpen}>
-        <DialogContent className="sm:max-w-[700px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-8 pb-0 bg-white">
-            <DialogTitle className="text-2xl font-black text-slate-900">Справочник моделей</DialogTitle>
-            <DialogDescription className="text-slate-500">
-              Управление типами манометров (Part Numbers).
-            </DialogDescription>
+        <DialogContent className="sm:max-w-[750px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="p-8 pb-4 bg-slate-50">
+            <DialogTitle className="text-2xl font-semibold">Справочник моделей</DialogTitle>
           </DialogHeader>
-          <div className="p-8 pt-6 bg-white space-y-6">
-            <div className="flex gap-4 items-end bg-slate-50 p-6 rounded-2xl border border-slate-100">
-              <div className="flex-1 space-y-2">
-                <Label className="text-slate-600 font-bold text-xs uppercase tracking-wider">Part Number</Label>
-                <Input 
-                  placeholder="Напр. 84A2341" 
-                  value={newGaugeType.part_number} 
-                  onChange={e => setNewGaugeType(prev => ({...prev, part_number: e.target.value}))} 
-                  className="h-11 border-slate-200 rounded-xl"
-                />
+          <div className="p-8 space-y-6">
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1"><Label className="text-[10px] uppercase font-semibold text-slate-400">Part Number</Label><Input value={newGaugeType.part_number} onChange={e => setNewGaugeType({...newGaugeType, part_number: e.target.value})} className="h-10 rounded-xl" /></div>
+                <div className="space-y-1"><Label className="text-[10px] uppercase font-semibold text-slate-400">Описание</Label><Input value={newGaugeType.description} onChange={e => setNewGaugeType({...newGaugeType, description: e.target.value})} className="h-10 rounded-xl" /></div>
               </div>
-              <div className="flex-1 space-y-2">
-                <Label className="text-slate-600 font-bold text-xs uppercase tracking-wider">Описание</Label>
-                <Input 
-                  placeholder="Напр. Pressure Gauge" 
-                  value={newGaugeType.description} 
-                  onChange={e => setNewGaugeType(prev => ({...prev, description: e.target.value}))} 
-                  className="h-11 border-slate-200 rounded-xl"
-                />
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1"><Label className="text-[10px] uppercase font-semibold text-slate-400">Класс точности</Label><Input value={newGaugeType.accuracy_class} onChange={e => setNewGaugeType({...newGaugeType, accuracy_class: e.target.value})} className="h-10 rounded-xl" /></div>
+                <div className="space-y-1"><Label className="text-[10px] uppercase font-semibold text-slate-400">Диапазон</Label><Input value={newGaugeType.pressure_range} onChange={e => setNewGaugeType({...newGaugeType, pressure_range: e.target.value})} className="h-10 rounded-xl" /></div>
+                <div className="space-y-1"><Label className="text-[10px] uppercase font-semibold text-slate-400">Резьба</Label><Input value={newGaugeType.thread_type} onChange={e => setNewGaugeType({...newGaugeType, thread_type: e.target.value})} className="h-10 rounded-xl" /></div>
               </div>
-              <Button 
-                onClick={() => {
-                  if (newGaugeType.part_number) createTypeMutation.mutate(newGaugeType)
-                }}
-                disabled={!newGaugeType.part_number || createTypeMutation.isPending}
-                className="h-11 px-6 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-95"
-              >
-                <Plus className="w-4 h-4 mr-2" /> Добавить
-              </Button>
+              <Button className="w-full h-12 bg-slate-900 font-semibold rounded-xl" onClick={() => createTypeMutation.mutate(newGaugeType)}>Добавить модель</Button>
             </div>
-            
-            <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-              <div className="max-h-[350px] overflow-y-auto w-full">
-                <Table>
-                  <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-sm z-10">
-                    <TableRow className="hover:bg-transparent border-slate-100">
-                      <TableHead className="font-bold text-slate-400 uppercase text-[10px] tracking-widest pl-6">Part Number</TableHead>
-                      <TableHead className="font-bold text-slate-400 uppercase text-[10px] tracking-widest">Описание</TableHead>
-                      <TableHead className="w-[100px]"></TableHead>
+
+            <div className="border border-slate-100 rounded-2xl overflow-hidden max-h-[300px] overflow-y-auto">
+              <Table>
+                <TableHeader className="bg-slate-50 sticky top-0">
+                  <TableRow><TableHead className="pl-6 text-[11px] font-semibold">Модель</TableHead><TableHead className="pl-6 text-[11px] font-semibold">Характеристики</TableHead><TableHead /></TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gaugeTypes.map(t => (
+                    <TableRow key={t.id}>
+                      <TableCell className="pl-6 font-semibold">{t.part_number}</TableCell>
+                      <TableCell className="text-[10px] text-slate-500">Кл: {t.accuracy_class} | {t.pressure_range}</TableCell>
+                      <TableCell className="pr-6 text-right space-x-2">
+                        <div className="inline-block relative h-8 w-8 rounded-lg overflow-hidden border border-slate-200">
+                           {t.image_url ? <img src={t.image_url} className="w-full h-full object-cover" /> : <Camera className="w-4 h-4 m-2 text-slate-300" />}
+                           <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => e.target.files?.[0] && uploadTypeImageMutation.mutate({id: t.id, file: e.target.files[0]})} />
+                        </div>
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400" onClick={() => deleteTypeMutation.mutate(t.id)}><Trash2 className="w-4 h-4" /></Button>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {!Array.isArray(gaugeTypes) || gaugeTypes.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center text-slate-400 h-32 italic">Справочник пуст</TableCell>
-                      </TableRow>
-                    ) : (
-                      gaugeTypes.map(t => (
-                        <TableRow key={t.id} className="hover:bg-slate-50/50 transition-colors border-slate-50">
-                          <TableCell className="font-bold text-slate-900 pl-6">{t.part_number}</TableCell>
-                          <TableCell className="text-slate-600 text-sm font-medium">{t.description}</TableCell>
-                          <TableCell className="p-2 pr-6 flex items-center gap-2 justify-end">
-                            <div className="relative h-9 w-9 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 cursor-pointer overflow-hidden transition-all hover:shadow-md group" title="Загрузить фото модели">
-                              {t.image_url ? (
-                                <img src={t.image_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-                              ) : (
-                                <Camera className="w-4 h-4" />
-                              )}
-                              <input 
-                                type="file" 
-                                className="absolute inset-0 opacity-0 cursor-pointer" 
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0]
-                                  if (file) uploadTypeImageMutation.mutate({ id: t.id, file })
-                                }}
-                              />
-                            </div>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="text-slate-300 hover:bg-red-50 hover:text-red-600 w-9 h-9 rounded-xl transition-colors" 
-                              onClick={() => {
-                                if (window.confirm('Удалить эту модель из справочника?')) deleteTypeMutation.mutate(t.id)
-                              }}
-                              disabled={deleteTypeMutation.isPending}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-            
-            <div className="flex justify-end pt-2">
-               <Button 
-                 variant="ghost" 
-                 onClick={() => setIsManageTypesOpen(false)}
-                 className="h-12 px-8 rounded-xl text-slate-500 font-bold hover:bg-slate-50"
-               >
-                 Закрыть
-               </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-8 pb-0 bg-white">
-            <DialogTitle className="text-2xl font-black text-slate-900">Редактирование прибора</DialogTitle>
-            <DialogDescription className="text-slate-500">
-              Обновите данные манометра {editingGauge?.serial_number}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="p-8 pt-6 bg-white">
-            {editingGauge && (
-              <form onSubmit={handleEditSubmit} className="space-y-6">
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Serial Number</Label>
-                    <Input 
-                      required 
-                      value={editingGauge.serial_number}
-                      onChange={e => setEditingGauge({...editingGauge, serial_number: e.target.value})}
-                      className="h-11 border-slate-200 focus:ring-blue-500 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Модель (Part Number)</Label>
-                    <UISelect 
-                      value={editingGauge.type_id || ""}
-                      onValueChange={val => setEditingGauge({...editingGauge, type_id: val})}
-                    >
-                      <UISelectTrigger className="h-11 border-slate-200 rounded-xl">
-                        <UISelectValue placeholder="Модель..." />
-                      </UISelectTrigger>
-                      <UISelectContent>
-                        {Array.isArray(gaugeTypes) && gaugeTypes.map(t => (
-                          <UISelectItem key={t.id} value={t.id}>{t.part_number} — {t.description}</UISelectItem>
-                        ))}
-                      </UISelectContent>
-                    </UISelect>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Последняя поверка</Label>
-                    <Input 
-                      type="date" 
-                      value={editingGauge.last_verification}
-                      onChange={e => {
-                        const date = parseISO(e.target.value);
-                        if (!isNaN(date.getTime())) {
-                          const nextDate = addYears(date, 1);
-                          setEditingGauge({...editingGauge, last_verification: e.target.value, next_verification: format(nextDate, 'yyyy-MM-dd')});
-                        } else {
-                          setEditingGauge({...editingGauge, last_verification: e.target.value});
-                        }
-                      }}
-                      className="h-11 border-slate-200 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Следующая поверка</Label>
-                    <Input 
-                      type="date" 
-                      value={editingGauge.next_verification}
-                      onChange={e => setEditingGauge({...editingGauge, next_verification: e.target.value})}
-                      className="h-11 border-slate-200 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Статус</Label>
-                    <UISelect 
-                       value={editingGauge.status}
-                       onValueChange={val => setEditingGauge({...editingGauge, status: val as any, locomotive_id: val !== 'На локомотиве' ? null : editingGauge.locomotive_id})}
-                    >
-                      <UISelectTrigger className="h-11 border-slate-200 rounded-xl">
-                        <UISelectValue />
-                      </UISelectTrigger>
-                      <UISelectContent>
-                        <UISelectItem value="На складе">На складе</UISelectItem>
-                        <UISelectItem value="На локомотиве">На локомотиве</UISelectItem>
-                        <UISelectItem value="На поверке">На поверке</UISelectItem>
-                        <UISelectItem value="Списан">Списан</UISelectItem>
-                      </UISelectContent>
-                    </UISelect>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-slate-600 font-bold">Локомотив</Label>
-                    <UISelect 
-                      value={editingGauge.locomotive_id?.toString() || "no"}
-                      onValueChange={val => setEditingGauge({
-                        ...editingGauge, 
-                        locomotive_id: val === "no" ? null : parseInt(val), 
-                        status: val === "no" ? 'На складе' : 'На локомотиве'
-                      })}
-                    >
-                      <UISelectTrigger className="h-11 border-slate-200 rounded-xl">
-                        <UISelectValue placeholder="Номер..." />
-                      </UISelectTrigger>
-                      <UISelectContent>
-                        <UISelectItem value="no">Нет (На складе)</UISelectItem>
-                        {filteredLocomotivesList.map((l: any) => (
-                          <UISelectItem key={l.id} value={l.id.toString()}>{l.number}</UISelectItem>
-                        ))}
-                      </UISelectContent>
-                    </UISelect>
-                  </div>
-                </div>
-
-                {editingGauge.status === 'На локомотиве' && (
-                  <div className="space-y-2 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
-                    <Label className="text-blue-700 font-black uppercase text-[10px] tracking-wider">Сторона установки (Кабина)</Label>
-                    <div className="flex gap-2">
-                      {['K1', 'K2'].map((side) => (
-                        <button
-                          key={side}
-                          type="button"
-                          onClick={() => setEditingGauge({...editingGauge, installation_side: side as any})}
-                          className={`flex-1 py-3 rounded-xl border text-sm font-black transition-all ${
-                            editingGauge.installation_side === side 
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200' 
-                              : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                          }`}
-                        >
-                          Cabin {side}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-4">
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    onClick={() => setIsEditDialogOpen(false)}
-                    className="flex-1 h-12 rounded-xl text-slate-500 font-bold"
-                  >
-                    Отмена
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={updateMutation.isPending}
-                    className="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black shadow-lg shadow-blue-200"
-                  >
-                    {updateMutation.isPending ? "Сохранение..." : "Сохранить изменения"}
-                  </Button>
-                </div>
-              </form>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isInstallDialogOpen} onOpenChange={setIsInstallDialogOpen}>
-        <DialogContent className="sm:max-w-[450px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-8 pb-0 bg-white">
-            <DialogTitle className="text-2xl font-black text-slate-900">Выдача на локомотив</DialogTitle>
-            <DialogDescription className="text-slate-500">
-              Манометр <span className="text-blue-600 font-bold">{selectedGaugeForInstall?.serial_number}</span> будет прикреплен к локомотиву.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="p-8 pt-6 bg-white space-y-6">
-            <div className="space-y-2">
-              <Label className="text-slate-600 font-bold">Выберите локомотив</Label>
-              <UISelect 
-                value={installToLocoId?.toString() || ""}
-                onValueChange={(val) => setInstallToLocoId(val ? parseInt(val) : null)}
-              >
-                <UISelectTrigger className="h-12 border-slate-200 rounded-xl bg-slate-50/30">
-                  <UISelectValue placeholder="Номер локомотива..." />
-                </UISelectTrigger>
-                <UISelectContent>
-                  {filteredLocomotivesList.map((l: any) => (
-                    <UISelectItem key={l.id} value={l.id.toString()}>{l.number}</UISelectItem>
                   ))}
-                </UISelectContent>
-              </UISelect>
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-slate-600 font-bold uppercase text-[10px] tracking-widest">Сторона установки</Label>
-              <div className="flex gap-2">
-                {['K1', 'K2'].map((side) => (
-                  <button
-                    key={side}
-                    type="button"
-                    onClick={() => setInstallSide(side as 'K1' | 'K2')}
-                    className={`flex-1 py-4 rounded-2xl border text-sm font-black transition-all ${
-                      installSide === side 
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100' 
-                        : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'
-                    }`}
-                  >
-                    Cabin {side}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {(selectedGaugeForInstall?.photo_url || selectedGaugeForInstall?.model_image_url) && (
-              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex justify-center group overflow-hidden">
-                 <img 
-                   src={selectedGaugeForInstall.photo_url || selectedGaugeForInstall.model_image_url || ""} 
-                   className="h-32 w-auto object-contain rounded-xl shadow-sm group-hover:scale-105 transition-transform"
-                   alt="Preview"
-                 />
-              </div>
-            )}
-
-            <div className="flex gap-3 pt-2">
-              <Button 
-                variant="ghost" 
-                className="flex-1 h-12 rounded-xl text-slate-500 font-bold"
-                onClick={() => {
-                  setIsInstallDialogOpen(false);
-                  setSelectedGaugeForInstall(null);
-                  setInstallToLocoId(null);
-                }}
-              >
-                Отмена
-              </Button>
-              <Button 
-                className="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black shadow-lg shadow-blue-200 transition-all active:scale-95"
-                disabled={!installToLocoId || updateMutation.isPending}
-                onClick={handleInstall}
-              >
-                {updateMutation.isPending ? "Выполняется..." : "Выдать прибор"}
-              </Button>
+                </TableBody>
+              </Table>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!selectedGaugeForQR} onOpenChange={(open) => !open && setSelectedGaugeForQR(null)}>
-        <DialogContent className="sm:max-w-[400px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-8 pb-0 bg-white">
-            <DialogTitle className="text-2xl font-black text-slate-900">QR Код прибора</DialogTitle>
-            <DialogDescription className="text-slate-500">
-              Код для быстрого сканирования.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col items-center justify-center p-8 space-y-6 bg-white">
-            <div className="p-6 bg-white rounded-[2rem] shadow-xl shadow-slate-200 border border-slate-100">
-              {selectedGaugeForQR && (
-                <QRCodeSVG 
-                  value={`gauge:${selectedGaugeForQR.serial_number}`} 
-                  size={220}
-                  level="H"
-                  includeMargin={true}
-                />
-              )}
-            </div>
-            <div className="text-center space-y-1">
-              <p className="text-xl font-black text-slate-900 tracking-tight">{selectedGaugeForQR?.serial_number}</p>
-              <p className="text-sm font-medium text-slate-400 uppercase tracking-widest">{selectedGaugeForQR?.part_number}</p>
-            </div>
-            <div className="flex gap-3 w-full pt-2">
-              <Button className="flex-1 h-12 rounded-xl gap-2 font-bold" variant="outline">
-                <Printer className="w-4 h-4" />
-                Печать
-              </Button>
-              <Button className="flex-1 h-12 rounded-xl font-bold bg-slate-900 hover:bg-slate-800 text-white" onClick={() => setSelectedGaugeForQR(null)}>
-                Закрыть
-              </Button>
-            </div>
-          </div>
+      {/* Add Gauge Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] rounded-3xl p-8 space-y-6">
+           <DialogHeader><DialogTitle className="text-2xl font-semibold">Новый прибор</DialogTitle></DialogHeader>
+           <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(newGauge); }} className="space-y-4">
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1"><Label>Серийный номер</Label><Input required value={newGauge.serial_number} onChange={e => setNewGauge({...newGauge, serial_number: e.target.value})} className="h-10 rounded-xl" /></div>
+               <div className="space-y-1">
+                 <Label>Модель</Label>
+                 <UISelect value={newGauge.type_id} onValueChange={v => setNewGauge({...newGauge, type_id: v})}>
+                   <UISelectTrigger className="h-10 rounded-xl"><UISelectValue placeholder="..." /></UISelectTrigger>
+                   <UISelectContent>{gaugeTypes.map(t => <UISelectItem key={t.id} value={t.id}>{t.part_number}</UISelectItem>)}</UISelectContent>
+                 </UISelect>
+               </div>
+             </div>
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1"><Label>Поверка от</Label><Input type="date" value={newGauge.last_verification} onChange={e => handleLastVerificationChange(e.target.value)} className="h-10 rounded-xl" /></div>
+               <div className="space-y-1"><Label>Следующая</Label><Input type="date" value={newGauge.next_verification} onChange={e => setNewGauge({...newGauge, next_verification: e.target.value})} className="h-10 rounded-xl" /></div>
+             </div>
+             <div className="flex gap-3 pt-4">
+               <Button type="button" variant="ghost" onClick={() => setIsAddDialogOpen(false)} className="flex-1">Отмена</Button>
+               <Button type="submit" className="flex-1 bg-blue-600 font-semibold">Добавить</Button>
+             </div>
+           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Диалог возврата просроченного манометра */}
-      <Dialog open={!!returnDialogGauge} onOpenChange={(open) => !open && setReturnDialogGauge(null)}>
-        <DialogContent className="sm:max-w-[450px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-8 pb-4 bg-red-50">
-            <DialogTitle className="text-xl font-black text-red-700 flex items-center gap-2">
+      {/* Edit Gauge Dialog (includes Cert upload) */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] rounded-3xl p-8">
+           <DialogHeader><DialogTitle className="text-2xl font-semibold">Редактирование</DialogTitle></DialogHeader>
+           {editingGauge && (
+             <div className="space-y-6 pt-4">
+               <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-1"><Label>Серийный номер</Label><Input value={editingGauge.serial_number} onChange={e => setEditingGauge({...editingGauge, serial_number: e.target.value})} /></div>
+                 <div className="space-y-1"><Label>Статус</Label>
+                   <UISelect value={editingGauge.status} onValueChange={v => setEditingGauge({...editingGauge, status: v as any})}>
+                     <UISelectTrigger className="h-10 rounded-xl"><UISelectValue /></UISelectTrigger>
+                     <UISelectContent><UISelectItem value="На складе">На складе</UISelectItem><UISelectItem value="На поверке">На поверке</UISelectItem><UISelectItem value="Списан">Списан</UISelectItem></UISelectContent>
+                   </UISelect>
+                 </div>
+               </div>
+               
+               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                 <Label className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Сертификат поверки (Scan/PDF)</Label>
+                 <div className="flex items-center gap-3">
+                   {editingGauge.certificate_url ? (
+                     <div className="flex-1 flex justify-between items-center bg-white p-3 rounded-xl border border-blue-100">
+                        <span className="text-xs font-semibold text-blue-600 truncate max-w-[150px]">Certificate Uploaded</span>
+                        <a href={editingGauge.certificate_url} target="_blank" rel="noreferrer" className="text-blue-500 hover:scale-110"><Eye className="w-4 h-4" /></a>
+                     </div>
+                   ) : <div className="flex-1 text-xs text-slate-400 italic">Документ не загружен</div>}
+                   <label className="h-11 px-4 bg-slate-900 text-white rounded-xl flex items-center gap-2 cursor-pointer font-semibold hover:bg-black transition-all">
+                     <Upload className="w-4 h-4" /> Загрузить
+                     <input type="file" className="hidden" accept=".pdf,image/*" onChange={(e) => e.target.files?.[0] && uploadCertificateMutation.mutate({id: editingGauge.id!, file: e.target.files[0]})} />
+                   </label>
+                 </div>
+               </div>
+
+               <div className="flex gap-3">
+                 <Button variant="ghost" onClick={() => setIsEditDialogOpen(false)} className="flex-1">Отмена</Button>
+                 <Button className="flex-1 bg-blue-600 font-semibold" onClick={() => { updateMutation.mutate(editingGauge as any); setIsEditDialogOpen(false); }}>Сохранить</Button>
+               </div>
+             </div>
+           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Other small dialogs (QR, Install, Return Expired, Scanner) remain simple */}
+      <QRDialog gauge={selectedGaugeForQR} open={!!selectedGaugeForQR} onOpenChange={(v: boolean) => !v && setSelectedGaugeForQR(null)} />
+      {/* ... keeping the rest of the UI structure ... */}
+      <Dialog open={isInstallDialogOpen} onOpenChange={setIsInstallDialogOpen}>
+        <DialogContent className="sm:max-w-[450px] rounded-3xl p-8 space-y-6">
+           <DialogHeader><DialogTitle className="text-xl font-semibold">Выдача: {selectedGaugeForInstall?.serial_number}</DialogTitle></DialogHeader>
+           <div className="space-y-4">
+             <div className="space-y-2">
+               <Label>Выберите локомотив</Label>
+               <UISelect onValueChange={(v) => setInstallToLocoId(parseInt(v))}>
+                 <UISelectTrigger><UISelectValue placeholder="..." /></UISelectTrigger>
+                 <UISelectContent>{filteredLocomotivesList.map(l => <UISelectItem key={l.id} value={l.id.toString()}>{l.number}</UISelectItem>)}</UISelectContent>
+               </UISelect>
+             </div>
+             <div className="flex gap-2">
+               {['K1', 'K2'].map(s => <Button key={s} variant={installSide === s ? 'default' : 'outline'} className="flex-1 font-semibold" onClick={() => setInstallSide(s as any)}>Cabin {s}</Button>)}
+             </div>
+             <Button className="w-full bg-blue-600 font-semibold h-12" disabled={!installToLocoId} onClick={handleInstall}>Выдать прибор</Button>
+           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!returnDialogGauge} onOpenChange={(v) => !v && setReturnDialogGauge(null)}>
+        <DialogContent className="sm:max-w-[400px] rounded-3xl p-8 space-y-4 text-center">
+           <DialogHeader className="p-8 pb-4 bg-red-50 text-center">
+            <DialogTitle className="text-xl font-semibold text-red-700 flex items-center justify-center gap-2">
               <AlertTriangle className="w-6 h-6" />
-              Срок поверки истёк!
+              Просрочен!
             </DialogTitle>
             <DialogDescription className="text-red-600">
-              Манометр <span className="font-bold">{returnDialogGauge?.serial_number}</span> просрочен.
-              Выберите действие:
+              Манометр <span className="font-semibold">{returnDialogGauge?.serial_number}</span> требует поверки.
             </DialogDescription>
           </DialogHeader>
-          <div className="p-8 pt-4 bg-white space-y-3">
-            <Button
-              className="w-full h-14 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-base shadow-lg shadow-amber-100 transition-all active:scale-95"
-              onClick={() => handleReturnExpired('verification')}
-              disabled={updateMutation.isPending}
-            >
-              Отправить на поверку
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full h-14 rounded-xl font-bold text-base border-slate-200"
-              onClick={() => handleReturnExpired('warehouse')}
-              disabled={updateMutation.isPending}
-            >
-              Вернуть на склад (как есть)
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full h-14 rounded-xl font-bold text-base text-red-600 border-red-200 hover:bg-red-50"
-              onClick={() => handleReturnExpired('decommission')}
-              disabled={updateMutation.isPending}
-            >
-              Списать
-            </Button>
-          </div>
+           <Button className="w-full bg-amber-500 font-semibold" onClick={() => handleReturnExpired('verification')}>На поверку</Button>
+           <Button variant="outline" className="w-full font-semibold" onClick={() => handleReturnExpired('warehouse')}>Просто склад</Button>
+           <Button variant="outline" className="w-full text-red-600 font-semibold" onClick={() => handleReturnExpired('decommission')}>Списать</Button>
         </DialogContent>
       </Dialog>
 
-      {/* QR Сканер */}
-      <Dialog open={isScannerOpen} onOpenChange={(open) => { if (!open) { stopScanner(); setIsScannerOpen(false); setScanResult(null); } }}>
-        <DialogContent className="sm:max-w-[450px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-6 pb-2 bg-emerald-50">
-            <DialogTitle className="text-xl font-black text-emerald-800 flex items-center gap-2">
-              <ScanLine className="w-6 h-6" />
-              Сканирование QR
-            </DialogTitle>
-            <DialogDescription className="text-emerald-600">
-              Наведите камеру на QR-код манометра
+      <Dialog open={isScannerOpen} onOpenChange={setIsScannerOpen}>
+        <DialogContent className="sm:max-w-[450px] rounded-[2rem] p-6 space-y-4">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold">Сканирование QR</DialogTitle>
+            <DialogDescription>
+              Наведите камеру на QR-код манометра для автоматического распознавания.
             </DialogDescription>
           </DialogHeader>
-          <div className="p-6 pt-3 bg-white space-y-4">
-            <div className="rounded-2xl overflow-hidden bg-black aspect-square relative">
-              <div id={scannerContainerId} className="w-full h-full" />
-              {!scanResult && (
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                  <div className="w-64 h-64 border-2 border-emerald-400/50 rounded-2xl" />
-                </div>
-              )}
-            </div>
-            <Button
-              variant="outline"
-              className="w-full h-12 rounded-xl font-bold"
-              onClick={() => { stopScanner(); setIsScannerOpen(false); setScanResult(null); }}
-            >
-              <X className="w-4 h-4 mr-2" />
-              Закрыть
-            </Button>
-          </div>
+          <div id={scannerContainerId} className="w-full aspect-square bg-black rounded-2xl overflow-hidden shadow-2xl border-4 border-emerald-500/20" />
+           <Button variant="outline" className="w-full rounded-xl font-semibold" onClick={() => setIsScannerOpen(false)}>Отмена</Button>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }
+
+const StatCard = ({ label, value, color, active, onClick }: any) => {
+  const colors: any = {
+    slate: "border-slate-200 bg-white",
+    red: "border-red-100 bg-red-50 text-red-600",
+    amber: "border-amber-100 bg-amber-50 text-amber-600",
+    emerald: "border-emerald-100 bg-emerald-50 text-emerald-600"
+  }
+  return (
+    <Card className={cn("cursor-pointer transition-all hover:shadow-md", colors[color], active && "ring-2 ring-blue-400")} onClick={onClick}>
+      <CardHeader className="p-4">
+        <CardDescription className="text-[10px] font-semibold uppercase tracking-widest">{label}</CardDescription>
+        <CardTitle className="text-2xl font-semibold">{value}</CardTitle>
+      </CardHeader>
+    </Card>
+  )
+}
+
+const QRDialog = ({ gauge, open, onOpenChange }: any) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="sm:max-w-[350px] rounded-3xl p-8 flex flex-col items-center">
+      <DialogHeader className="text-center w-full">
+        <DialogTitle className="text-xl font-semibold mb-1">QR Код</DialogTitle>
+        <DialogDescription>
+          Серийный номер: {gauge?.serial_number}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="p-4 bg-white rounded-2xl border shadow-sm my-4">
+        {gauge && <QRCodeSVG value={`gauge:${gauge.serial_number}`} size={200} level="H" />}
+      </div>
+      <p className="font-semibold text-lg">{gauge?.serial_number}</p>
+      <Button className="w-full mt-4 bg-slate-900 font-semibold rounded-xl" onClick={() => onOpenChange(false)}>Закрыть</Button>
+    </DialogContent>
+  </Dialog>
+)
+
+const GaugeTableSkeleton = () => (
+  <>
+    {[1, 2, 3, 4, 5].map((i) => (
+      <TableRow key={i}>
+        <TableCell className="pl-6 py-4">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </TableCell>
+        <TableCell>
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+        </TableCell>
+        <TableCell>
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+        </TableCell>
+        <TableCell>
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-6 w-28 rounded-full" />
+            <Skeleton className="h-3 w-12" />
+          </div>
+        </TableCell>
+        <TableCell className="text-right pr-6">
+          <div className="flex items-center justify-end gap-2">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <Skeleton className="h-8 w-16 rounded-lg" />
+          </div>
+        </TableCell>
+      </TableRow>
+    ))}
+  </>
+)
 
 export default Gauges

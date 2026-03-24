@@ -9,7 +9,7 @@ const gaugeController = {
         .select(`
           *,
           locomotive:locomotives(number, series),
-          type:gauge_types(part_number, description, image_url)
+          type:gauge_types(part_number, description, image_url, accuracy_class, pressure_range, thread_type)
         `)
         .order('next_verification', { ascending: true });
 
@@ -19,7 +19,9 @@ const gaugeController = {
         ...g,
         part_number: g.type?.part_number,
         description: g.type?.description,
-        model_image_url: g.type?.image_url,
+        accuracy_class: g.type?.accuracy_class,
+        pressure_range: g.type?.pressure_range,
+        thread_type: g.type?.thread_type,
         type: undefined // remove the nested object after mapping
       }));
       
@@ -39,7 +41,7 @@ const gaugeController = {
         .select(`
           *,
           locomotive:locomotives(number, series),
-          type:gauge_types(part_number, description, image_url)
+          type:gauge_types(part_number, description, image_url, accuracy_class, pressure_range, thread_type)
         `)
         .eq('serial_number', serial)
         .single();
@@ -50,7 +52,9 @@ const gaugeController = {
         ...data,
         part_number: data.type?.part_number,
         description: data.type?.description,
-        model_image_url: data.type?.image_url,
+        accuracy_class: data.type?.accuracy_class,
+        pressure_range: data.type?.pressure_range,
+        thread_type: data.type?.thread_type,
         type: undefined
       };
       
@@ -85,7 +89,8 @@ const gaugeController = {
           is_defective,
           status,
           locomotive_id,
-          photo_url
+          photo_url,
+          certificate_url
         }])
         .select()
         .single();
@@ -219,7 +224,7 @@ const gaugeController = {
     }
   },
 
-  // Получение истории манометров локомотива
+  // Получение истории всех манометров локомотива
   getGaugeHistoryByLocomotive: async (req, res) => {
     try {
       const { locomotiveId } = req.params;
@@ -227,8 +232,8 @@ const gaugeController = {
         .from('gauge_history')
         .select(`
           *,
-          gauge:gauges(serial_number, type:gauge_types(part_number, description)),
-          user:users!gauge_history_created_by_fkey(username, full_name)
+          user:users!gauge_history_created_by_fkey(username, full_name),
+          gauge:gauges(serial_number, type:gauge_types(part_number))
         `)
         .eq('locomotive_id', locomotiveId)
         .order('created_at', { ascending: false });
@@ -236,8 +241,63 @@ const gaugeController = {
       if (error) throw error;
       res.json(data);
     } catch (error) {
+      console.error('Error fetching locomotive gauge history:', error);
+      res.status(500).json({ error: 'Ошибка при получении истории манометров локомотива' });
+    }
+  },
+
+  // Получение истории конкретного манометра
+  getGaugeHistory: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { data, error } = await supabase
+        .from('gauge_history')
+        .select(`
+          *,
+          user:users!gauge_history_created_by_fkey(username, full_name),
+          locomotive:locomotives(number, series)
+        `)
+        .eq('gauge_id', id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      res.json(data);
+    } catch (error) {
       console.error('Error fetching gauge history:', error);
-      res.status(500).json({ error: 'Ошибка при получении истории манометров' });
+      res.status(500).json({ error: 'Ошибка при получении истории манометра' });
+    }
+  },
+
+  // Загрузка сертификата поверки (PDF или Image)
+  uploadCertificate: async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Нет файла' });
+    const { id } = req.params;
+
+    try {
+      const fileExt = req.file.originalname.split('.').pop();
+      const fileName = `${Date.now()}_cert.${fileExt}`;
+      const filePath = `gauge_certificates/${id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('remark_attachments')
+        .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicData } = supabase.storage.from('remark_attachments').getPublicUrl(filePath);
+
+      const { data, error } = await supabase
+        .from('gauges')
+        .update({ certificate_url: publicData.publicUrl })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json(data);
+    } catch (error) {
+      console.error('Error uploading certificate:', error);
+      res.status(500).json({ error: error.message });
     }
   },
 

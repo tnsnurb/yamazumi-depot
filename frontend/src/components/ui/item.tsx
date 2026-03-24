@@ -130,7 +130,7 @@ const ItemHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
     <div
         ref={ref}
-        className={cn("mb-1 text-[0.7rem] font-bold uppercase tracking-wider text-muted-foreground", className)}
+        className={cn("mb-1 text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground", className)}
         {...props}
     />
 ))

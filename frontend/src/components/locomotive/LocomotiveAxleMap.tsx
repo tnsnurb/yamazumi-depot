@@ -62,7 +62,7 @@ export const LocomotiveAxleMap: React.FC<LocomotiveAxleMapProps> = ({
                 )}
             >
                 <span className={cn(
-                    "text-xs font-black tracking-tighter",
+                    "text-xs font-semibold tracking-tighter",
                     isSelected ? "text-blue-400" : "text-slate-400",
                     status === 'error' && "text-red-400",
                     status === 'warning' && "text-amber-400",
@@ -81,7 +81,7 @@ export const LocomotiveAxleMap: React.FC<LocomotiveAxleMapProps> = ({
     return (
         <div className={cn("bg-slate-900 p-6 rounded-3xl shadow-2xl flex flex-col gap-6 select-none border border-slate-800", className)}>
             <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">СХЕМА (CO-CO)</span>
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">СХЕМА (CO-CO)</span>
             </div>
 
             {/* Vertical Axle Layout */}
@@ -96,7 +96,7 @@ export const LocomotiveAxleMap: React.FC<LocomotiveAxleMapProps> = ({
                         {/* Connecting Axle Line */}
                         <div className="flex-1 h-0.5 bg-slate-800 mx-4 relative">
                             {getAxleDiff(axle) > 0 && (
-                                <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-bold text-slate-500 bg-slate-900 px-1">
+                                <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-semibold text-slate-500 bg-slate-900 px-1">
                                     Δ {getAxleDiff(axle).toFixed(1)}
                                 </div>
                             )}

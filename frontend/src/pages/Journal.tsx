@@ -31,7 +31,7 @@ export default function Journal() {
                     {selectedLoco ? (
                         <div className="flex items-center gap-2">
                             <Train className="w-5 h-5 text-blue-600" />
-                            <span className="font-bold text-slate-800">{selectedLoco.series} {selectedLoco.number}</span>
+                            <span className="font-semibold text-slate-800">{selectedLoco.series} {selectedLoco.number}</span>
                         </div>
                     ) : (
                         <span className="text-slate-400 font-normal">Выберите или введите номер локомотива...</span>
@@ -64,7 +64,7 @@ export default function Journal() {
                                         )}
                                     />
                                     <div className="flex flex-col">
-                                        <span className="font-bold text-slate-900 text-base">{loco.series} {loco.number}</span>
+                                        <span className="font-semibold text-slate-900 text-base">{loco.series} {loco.number}</span>
                                         <span className="text-xs text-slate-500 font-medium">
                                             {loco.is_on_map ? `На пути ${loco.track}` : 'Вне депо'}
                                         </span>
@@ -90,8 +90,8 @@ export default function Journal() {
                             <Combobox className="rounded-2xl shadow-md border-blue-200" />
                         </div>
                         <div className="space-y-3">
-                            <h2 className="text-4xl font-black tracking-tight text-slate-900">
-                                Паспорт Локомотива
+                            <h2 className="text-4xl font-semibold tracking-tight text-slate-900">
+                                Паспорт локомотива
                             </h2>
                             <p className="text-slate-500 text-lg max-w-md mx-auto leading-relaxed">
                                 Единый хаб. Введите серию или номер локомотива для просмотра статуса, замечаний, метрологии и истории.

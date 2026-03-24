@@ -172,14 +172,14 @@ export default function Profile() {
         <div className="flex-1 flex flex-col items-center overflow-auto bg-slate-50/50">
             <main className="flex-1 w-full p-4 md:p-8 flex flex-col items-center">
                 <div className="w-full max-w-2xl space-y-6">
-                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Профиль</h2>
+                    <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Профиль</h2>
 
                     {/* User info */}
                     <Card>
                         <CardHeader className="flex flex-row items-center gap-4">
                             <div className="relative group cursor-pointer 
                                           w-16 h-16 rounded-full flex items-center justify-center shrink-0
-                                          bg-indigo-100 hover:bg-indigo-200 transition-colors"
+                                          bg-blue-100 hover:bg-blue-200 transition-colors"
                             >
                                 <Label htmlFor="avatar-upload" className="cursor-pointer">
                                     {user?.avatar_url ? (
@@ -189,7 +189,7 @@ export default function Profile() {
                                             className="w-16 h-16 rounded-full object-cover"
                                         />
                                     ) : (
-                                        <UserCircle className="w-8 h-8 text-indigo-600" />
+                                        <UserCircle className="w-8 h-8 text-blue-600" />
                                     )}
                                     {/* Upload overlay */}
                                     <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -208,12 +208,12 @@ export default function Profile() {
                             <div>
                                 <CardTitle className="text-xl">{user?.full_name || user?.username}</CardTitle>
                                 <div className="flex flex-wrap gap-2 mt-1.5">
-                                    <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 border-indigo-100 text-[10px] font-bold uppercase">
+                                    <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 text-[10px] font-semibold uppercase">
                                         <Shield className="w-3 h-3 mr-1" />
                                         {user?.role === 'admin' ? 'Администратор' : 'Сотрудник'}
                                     </Badge>
                                     {user?.specialization && (
-                                        <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-100 text-[10px] font-bold uppercase">
+                                        <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-100 text-[10px] font-semibold uppercase">
                                             {user.specialization}
                                         </Badge>
                                     )}
@@ -232,11 +232,11 @@ export default function Profile() {
                                 </div>
                                 <div className="flex flex-col gap-1">
                                     <span className="text-slate-500 text-xs">Специализация</span>
-                                    <span className="font-semibold text-indigo-600">{user?.specialization || 'Не указана'}</span>
+                                    <span className="font-semibold text-blue-600">{user?.specialization || 'Не указана'}</span>
                                 </div>
-                                <div className="flex flex-col gap-1 p-2 bg-indigo-50 rounded-lg border border-indigo-100">
-                                    <span className="text-indigo-600 text-[10px] font-bold uppercase">Мои баллы</span>
-                                    <span className="text-lg font-black text-indigo-700 leading-none">{user?.total_points || 0}</span>
+                                <div className="flex flex-col gap-1 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                                    <span className="text-blue-600 text-[10px] font-semibold uppercase">Мои баллы</span>
+                                    <span className="text-lg font-semibold text-blue-700 leading-none">{user?.total_points || 0}</span>
                                 </div>
                             </div>
                         </CardContent>
@@ -246,7 +246,7 @@ export default function Profile() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-lg flex items-center gap-2">
-                                <Key className="w-5 h-5 text-indigo-500" />
+                                <Key className="w-5 h-5 text-blue-500" />
                                 Пин-код (для входа по бейджу)
                             </CardTitle>
                             <CardDescription>
@@ -264,7 +264,7 @@ export default function Profile() {
                                 placeholder="Например: 1234"
                             />
                             <p className="text-xs text-slate-500 -mt-2">Оставьте пустым, чтобы удалить текущий пин-код</p>
-                            <Button onClick={handleChangePinCode} disabled={loadingPin} className="w-full bg-indigo-600 hover:bg-indigo-700">
+                            <Button onClick={handleChangePinCode} disabled={loadingPin} className="w-full bg-blue-600 hover:bg-blue-700">
                                 {loadingPin ? 'Сохранение...' : 'Сохранить пин-код'}
                             </Button>
                         </CardContent>

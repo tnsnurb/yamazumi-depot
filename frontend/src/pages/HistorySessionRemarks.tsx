@@ -36,11 +36,11 @@ export default function HistorySessionRemarks() {
                             <ChevronLeft className="w-5 h-5" />
                         </Button>
                         <div className="flex items-center gap-3">
-                            <div className="bg-indigo-600 p-2 rounded-xl shadow-indigo-100 shadow-lg">
+                            <div className="bg-blue-600 p-2 rounded-xl shadow-blue-100 shadow-lg">
                                 <Wrench className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">
+                                <h1 className="text-lg font-semibold text-slate-900 tracking-tight leading-none">
                                     Замечания: {id ? formatWO(id, session.locomotive?.number) : ''}
                                 </h1>
                                 <div className="flex items-center gap-2 mt-1.5 text-[10px] md:text-xs font-medium text-slate-400">

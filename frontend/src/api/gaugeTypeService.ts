@@ -5,6 +5,9 @@ export interface GaugeType {
     part_number: string;
     description: string;
     image_url?: string;
+    accuracy_class?: string;
+    pressure_range?: string;
+    thread_type?: string;
     created_at?: string;
 }
 

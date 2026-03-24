@@ -60,7 +60,7 @@ export default function ActiveRemarks() {
                 <div className="max-w-7xl w-full mx-auto">
                     <div className="mb-6 md:mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-8">
                         <div>
-                            <h1 className="text-xl md:text-2xl font-black text-slate-900 border-l-4 border-indigo-600 pl-4 tracking-tight uppercase">
+                            <h1 className="text-xl md:text-2xl font-semibold text-slate-900 tracking-tight">
                                 Активные замечания
                             </h1>
                             <p className="text-slate-500 text-[11px] md:text-sm mt-1 font-medium">Прогресс устранения неисправностей</p>
@@ -72,7 +72,7 @@ export default function ActiveRemarks() {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder="Поиск по номеру или серии..."
-                                className="w-full pl-11 pr-4 h-12 md:h-11 bg-white rounded-xl border border-slate-200 shadow-sm text-sm md:text-base focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all focus:shadow-md"
+                                className="w-full pl-11 pr-4 h-12 md:h-11 bg-white rounded-xl border border-slate-200 shadow-sm text-sm md:text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all focus:shadow-md"
                             />
                         </div>
                     </div>
@@ -98,7 +98,7 @@ export default function ActiveRemarks() {
                             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
                                 <MessageSquare className="w-10 h-10 text-slate-300" />
                             </div>
-                            <h3 className="text-xl font-bold text-slate-900 mb-2">Активных замечаний нет</h3>
+                            <h3 className="text-xl font-semibold text-slate-900 mb-2">Активных замечаний нет</h3>
                             <p className="text-slate-500 font-medium">Для выбранного депо не зафиксировано активных неисправностей.</p>
                         </div>
                     ) : (
@@ -106,34 +106,34 @@ export default function ActiveRemarks() {
                             {filtered.map(s => {
                                 const progress = s.total_remarks > 0 ? (s.completed_remarks / s.total_remarks) * 100 : 0;
                                 return (
-                                    <Item key={s.locomotive.id} variant="outline" size="default" asChild className="bg-white border-slate-200 shadow-sm hover:border-indigo-400 hover:bg-slate-50/50 transition-all cursor-pointer group px-4 py-4 rounded-2xl">
+                                    <Item key={s.locomotive.id} variant="outline" size="default" asChild className="bg-white border-slate-200 shadow-sm hover:border-blue-400 hover:bg-slate-50/50 transition-all cursor-pointer group px-4 py-4 rounded-2xl">
                                         <Link to={`/locomotive/${s.locomotive.id}/remarks`}>
-                                            <ItemMedia variant="icon" className="size-14 bg-slate-900 text-white rounded-2xl text-xl font-bold group-hover:bg-indigo-600 transition-colors shrink-0 shadow-lg shadow-slate-200">
+                                            <ItemMedia variant="icon" className="size-14 bg-slate-900 text-white rounded-2xl text-xl font-semibold group-hover:bg-blue-600 transition-colors shrink-0 shadow-lg shadow-slate-200">
                                                 <Train className="w-7 h-7" />
                                             </ItemMedia>
                                             <ItemContent className="gap-0">
                                                 <div className="flex items-center gap-3 mb-1">
-                                                    <ItemTitle className="text-lg text-slate-900 font-bold tracking-tight">
+                                                    <ItemTitle className="text-lg text-slate-900 font-semibold tracking-tight">
                                                         {s.locomotive.series} {s.locomotive.number}
                                                     </ItemTitle>
-                                                    <Badge className={`${progress === 100 ? 'bg-emerald-500' : 'bg-indigo-500'} text-white border-none text-[10px] font-black uppercase py-0 px-2 h-5 tracking-wider`}>
+                                                    <Badge className={`${progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'} text-white border-none text-[10px] font-semibold uppercase py-0 px-2 h-5 tracking-wider`}>
                                                         В ремонте
                                                     </Badge>
                                                 </div>
-                                                <ItemDescription className="text-slate-500 font-bold text-xs uppercase tracking-wide mb-3">
+                                                <ItemDescription className="text-slate-500 font-semibold text-xs uppercase tracking-wide mb-3">
                                                     Ремонтная позиция
                                                 </ItemDescription>
 
                                                 <div className="space-y-1.5">
-                                                    <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider">
+                                                    <div className="flex justify-between text-[11px] font-semibold uppercase tracking-wider">
                                                         <span className="text-slate-400">Прогресс устранения</span>
-                                                        <span className="text-indigo-600">{s.completed_remarks} / {s.total_remarks} ({Math.round(progress)}%)</span>
+                                                        <span className="text-blue-600">{s.completed_remarks} / {s.total_remarks} ({Math.round(progress)}%)</span>
                                                     </div>
-                                                    <Progress value={progress} className="h-2 bg-slate-100" indicatorClassName={progress === 100 ? "bg-emerald-500" : "bg-indigo-600"} />
+                                                    <Progress value={progress} className="h-2 bg-slate-100" indicatorClassName={progress === 100 ? "bg-emerald-500" : "bg-blue-600"} />
                                                 </div>
                                             </ItemContent>
                                             <ItemActions>
-                                                <div className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
+                                                <div className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
                                                     <ChevronRight className="w-6 h-6" />
                                                 </div>
                                             </ItemActions>

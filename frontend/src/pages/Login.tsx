@@ -225,7 +225,7 @@ export default function Login() {
                 <div className="w-full lg:w-1/2 bg-white flex flex-col items-center justify-center p-8 shadow-2xl z-10">
                     {isOAuthCallback ? (
                         <div className="flex flex-col items-center justify-center gap-4">
-                            <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+                            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
                             <p className="text-slate-500 text-lg font-medium">Авторизация через Google...</p>
                         </div>
                     ) : (
@@ -233,7 +233,7 @@ export default function Login() {
 
                             {/* Header */}
                             <div className="text-center mb-8">
-                                <h1 className="text-3xl font-bold text-slate-900 mt-2">Yamazumi</h1>
+                                <h1 className="text-3xl font-semibold text-slate-900 mt-2">Yamazumi</h1>
                             </div>
 
                             <Form {...form}>
@@ -246,7 +246,7 @@ export default function Login() {
                                                 type="button"
                                                 onClick={() => setDropdownOpen(!dropdownOpen)}
                                                 className={`w-full flex items-center gap-3 px-4 py-3 h-[52px] rounded-xl border text-left transition-all relative group ${dropdownOpen
-                                                    ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-white"
+                                                    ? "border-blue-500 ring-2 ring-blue-500/20 bg-white"
                                                     : "border-slate-200 bg-white hover:border-slate-300"
                                                     }`}
                                             >
@@ -254,7 +254,7 @@ export default function Login() {
                                                 <span className={cn(
                                                     "absolute left-3 transition-all duration-200 pointer-events-none bg-white px-2 z-10",
                                                     (selectedUser || dropdownOpen)
-                                                        ? "-top-2.5 text-xs text-indigo-600 font-medium scale-90"
+                                                        ? "-top-2.5 text-xs text-blue-600 font-medium scale-90"
                                                         : "top-[14px] text-base text-slate-400 scale-100"
                                                 )}>
                                                     Выберите пользователя
@@ -271,9 +271,9 @@ export default function Login() {
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <div className="font-medium text-slate-900 text-sm truncate">{selectedUser.full_name}</div>
-                                                            <div className="text-xs text-indigo-600 font-medium truncate">{selectedUser.email}</div>
+                                                            <div className="text-xs text-blue-600 font-medium truncate">{selectedUser.email}</div>
                                                         </div>
-                                                        <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                                                        <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
                                                     </>
                                                 ) : (
                                                     <>
@@ -299,7 +299,7 @@ export default function Login() {
                                                             placeholder="Поиск..."
                                                             value={searchQuery}
                                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                                            className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 transition-all placeholder-slate-400"
+                                                            className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all placeholder-slate-400"
                                                         />
                                                     </div>
 
@@ -315,7 +315,7 @@ export default function Login() {
                                                                         setDropdownOpen(false)
                                                                         setSearchQuery("")
                                                                     }}
-                                                                    className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-indigo-50 transition-colors text-left ${selectedUser?.username === u.username ? "bg-indigo-50" : ""
+                                                                    className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 transition-colors text-left ${selectedUser?.username === u.username ? "bg-blue-50" : ""
                                                                         }`}
                                                                 >
                                                                     <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden">
@@ -327,10 +327,10 @@ export default function Login() {
                                                                     </div>
                                                                     <div className="flex-1 min-w-0">
                                                                         <div className="font-medium text-slate-900 text-sm truncate">{u.full_name}</div>
-                                                                        <div className="text-xs text-indigo-600 font-medium truncate">{u.email}</div>
+                                                                        <div className="text-xs text-blue-600 font-medium truncate">{u.email}</div>
                                                                     </div>
                                                                     {selectedUser?.username === u.username && (
-                                                                        <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                                                                        <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
                                                                     )}
                                                                 </button>
                                                             ))
@@ -383,7 +383,7 @@ export default function Login() {
                                                     <button
                                                         type="button"
                                                         onClick={handleForgotPassword}
-                                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                                                        className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
                                                     >
                                                         Забыли пароль?
                                                     </button>
@@ -401,7 +401,7 @@ export default function Login() {
                                     <Button
                                         type="submit"
                                         disabled={form.formState.isSubmitting || !selectedUser}
-                                        className="w-full h-[52px] rounded-xl text-lg font-bold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2"
+                                        className="w-full h-[52px] rounded-xl text-lg font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2"
                                     >
                                         {form.formState.isSubmitting ? (
                                             <>
@@ -440,7 +440,7 @@ export default function Login() {
                                             type="button"
                                             variant="outline"
                                             onClick={handleMagicLink}
-                                            className="h-[48px] rounded-xl text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 transition-all flex items-center justify-center gap-2"
+                                            className="h-[48px] rounded-xl text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-center gap-2"
                                         >
                                             <Mail className="w-5 h-5" />
                                             Magic Link
@@ -471,7 +471,7 @@ export default function Login() {
                                 Журнал
                             </div>
                             <div className="flex items-center gap-2 bg-white/15 backdrop-blur-md text-white px-3 py-2 rounded-lg border border-white/20">
-                                <div className="w-2 h-2 rounded-full bg-indigo-400" />
+                                <div className="w-2 h-2 rounded-full bg-blue-400" />
                                 Управление
                             </div>
                         </div>

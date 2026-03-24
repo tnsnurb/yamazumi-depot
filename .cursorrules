@@ -1,0 +1,49 @@
+# Yamazumi Depot: AI Design & Typography Guidelines
+
+To maintain a premium and consistent "Yamazumi Style," strictly adhere to these rules:
+
+## 1. Typography (Inter Focus)
+
+- **Primary Font**: Always use 'Inter' (sans-serif).
+- **Font Stack**: `font-sans` is the default.
+- **Heading Weights**:
+  - DO NOT use weights higher than **SemiBold (600)** for headings.
+  - Preferred heading class: `font-semibold` (600).
+- **Body Text**: Use `font-normal` (400) or `font-medium` (500).
+- **Casing Rules**:
+  - Always use **Sentence case** for all headings, titles, and buttons (e.g., `Паспорт локомотива`, `Карта депо`, `Выдача`).
+  - DO NOT use `ALL CAPS` (uppercase) for headings or buttons.
+  - DO NOT use `Title Case` (where every word is capitalized). Only the first word should start with a Capital letter.
+  - **Tailwind**: DO NOT apply the `uppercase` class to headings via CSS. Apply casing to the text content directly.
+  - **Exception**: Only tiny secondary labels (text-9px) can use `uppercase tracking-widest text-slate-400`.
+- **Minimalist Headings**:
+  - DO NOT place large decorative icons (e.g., Lucide icons in colored boxes) next to main page headings.
+  - Exception: Small functional icons (like a back button or an edit pencil) are allowed if they have specific utility.
+
+## 2. Standard Color Palette
+
+- **Primary / General**: Use `blue-600` (HEX: `#2563eb`) for all main actions, buttons, and active states throughout the whole application. This is our unified brand color.
+- **Success / Archive**: Use `emerald-600` for completed repairs, "on-stock" status, and success messages.
+- **Alert / Critical**: Use `rose-600` for defects, overdue verifications, or urgent warnings.
+- **Warning / Neutral**: Use `amber-500` for waiting states. Use `slate-500` for subtitles and `slate-900` for main headings.
+- **Backgrounds**: Use `slate-50/30` or `white/80` with `backdrop-blur` for page headers and containers.
+- **Vibrancy**: Avoid generic colors. Use Tailwind's default palette (blue, emerald, rose, amber, slate) and keep it consistent across the app.
+
+## 2. Component Aesthetics
+
+- **Rounded Corners**: Use `rounded-2xl` (1rem) or `rounded-3xl` (1.5rem) for cards and dialogs.
+- **Borders**: Subtle borders (`border-slate-100` or `border-border`).
+- **Glassmorphism**: Use `backdrop-blur-md` and semi-transparent backgrounds for floating elements (nav, headers).
+- **Shadows**: Use `shadow-sm` or custom soft shadows. Avoid deep, dark shadows.
+
+## 3. Interaction
+
+- **Hover States**: Add subtle scale or background shifts (`hover:bg-slate-50`, `transition-all`).
+- **Buttons**: Rounded, prominent, with clear weight (`font-semibold`).
+
+## 4. UI Library Integration (Shadcn/UI)
+
+- Always use the predefined Tailwind variables (`--primary`, `--background`, etc.) from `index.css`.
+- Customize components (like Dialog, Card) by wrapping them in these style rules rather than overriding them with arbitrary values.
+
+Maintain this "light, airy, and professional" aesthetic in all future components.

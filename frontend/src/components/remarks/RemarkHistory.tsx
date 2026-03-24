@@ -19,7 +19,7 @@ export function RemarkHistory({ remarkId }: RemarkHistoryProps) {
         <div className="space-y-4">
             <div className="flex items-center gap-2 text-slate-400 mb-2">
                 <History className="w-4 h-4" />
-                <span className="text-xs font-bold uppercase tracking-wider">История изменений</span>
+                <span className="text-xs font-semibold uppercase tracking-wider">История изменений</span>
             </div>
 
             {isLoading ? (
@@ -30,14 +30,14 @@ export function RemarkHistory({ remarkId }: RemarkHistoryProps) {
                 </div>
             ) : history.length === 0 ? (
                 <div className="py-10 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">История пуста</p>
+                    <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">История пуста</p>
                 </div>
             ) : (
                 <div className="space-y-2">
                     {history.map((event) => (
                         <div key={event.id} className="p-3 bg-white rounded-xl border border-slate-100">
                             <div className="flex justify-between items-start mb-1">
-                                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest flex items-center gap-1.5">
+                                <span className="text-[10px] font-semibold text-blue-600 uppercase tracking-widest flex items-center gap-1.5">
                                     <GitCommit className="w-3 h-3" />
                                     {event.user_id?.full_name || "Система"}
                                 </span>
@@ -46,7 +46,7 @@ export function RemarkHistory({ remarkId }: RemarkHistoryProps) {
                                 </span>
                             </div>
                             <div className="space-y-0.5">
-                                <p className="text-[10px] font-bold text-slate-700 uppercase tracking-tight">{event.action}</p>
+                                <p className="text-[10px] font-semibold text-slate-700 uppercase tracking-tight">{event.action}</p>
                                 <p className="text-xs text-slate-500 leading-snug">{event.details}</p>
                             </div>
                         </div>

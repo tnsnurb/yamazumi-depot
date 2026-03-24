@@ -30,7 +30,7 @@ export function RecentActivity({ activities }: RecentActivityProps) {
         <Card className="h-full border-none bg-white/50 backdrop-blur-sm rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                 <CardTitle className="text-xl font-bold text-slate-800">Живая лента</CardTitle>
-                <Activity className="h-5 w-5 text-indigo-500 animate-pulse" />
+                <Activity className="h-5 w-5 text-blue-500 animate-pulse" />
             </CardHeader>
             <CardContent>
                 <ScrollArea className="h-[400px] pr-4">
@@ -42,12 +42,12 @@ export function RecentActivity({ activities }: RecentActivityProps) {
                         ) : (
                             activities.map((item) => (
                                 <div key={item.id} className="relative flex gap-4 pb-2 group">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 group-hover:bg-indigo-50 transition-colors duration-300">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 group-hover:bg-blue-50 transition-colors duration-300">
                                         {getActionIcon(item.action)}
                                     </div>
                                     <div className="flex flex-col gap-1 min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <Badge variant="outline" className="rounded-lg bg-indigo-50/50 text-indigo-700 border-indigo-100 shrink-0">
+                                            <Badge variant="outline" className="rounded-lg bg-blue-50/50 text-blue-700 border-blue-100 shrink-0">
                                                 {item.locomotive_number}
                                             </Badge>
                                             <span className="text-xs text-slate-400 whitespace-nowrap">

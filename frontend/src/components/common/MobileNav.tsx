@@ -106,8 +106,8 @@ export function MobileNav() {
                                     <UserIcon className="w-7 h-7" />
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                    <p className="font-black text-slate-800 dark:text-white leading-none mb-1 truncate">{user?.full_name}</p>
-                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{user?.role === 'admin' ? 'Администратор' : 'Сотрудник'}</p>
+                                    <p className="font-semibold text-slate-800 dark:text-white leading-none mb-1 truncate">{user?.full_name}</p>
+                                    <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest">{user?.role === 'admin' ? 'Администратор' : 'Сотрудник'}</p>
                                 </div>
                                 <button 
                                     onClick={handleSignOut}
@@ -122,7 +122,7 @@ export function MobileNav() {
                                 <div className="mb-8">
                                     <div className="flex items-center gap-2 mb-4 px-1">
                                         <Clock className="w-4 h-4 text-blue-500" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Недавние приборы</span>
+                                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Недавние приборы</span>
                                     </div>
                                     <div className="space-y-2">
                                         {recentGauges.map((g, idx) => (
@@ -137,8 +137,8 @@ export function MobileNav() {
                                                     <Wrench className="w-5 h-5" />
                                                 </div>
                                                 <div className="flex-1">
-                                                    <p className="text-sm font-black text-slate-700 dark:text-slate-200">{g.serial_number}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{g.description || 'Прибор'}</p>
+                                                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{g.serial_number}</p>
+                                                    <p className="text-[10px] text-slate-400 font-semibold uppercase">{g.description || 'Прибор'}</p>
                                                 </div>
                                                 <ChevronUp className="w-4 h-4 text-slate-300 rotate-90" />
                                             </Link>
@@ -153,7 +153,7 @@ export function MobileNav() {
                                     className="flex flex-col items-center justify-center gap-3 p-6 bg-emerald-50 dark:bg-emerald-500/10 rounded-3xl border border-emerald-100 dark:border-emerald-500/20 text-emerald-600 active:scale-95 transition-all"
                                 >
                                     <QrCode className="w-8 h-8" />
-                                    <span className="text-sm font-black uppercase tracking-widest">Сканер</span>
+                                    <span className="text-sm font-semibold uppercase tracking-widest">Сканер</span>
                                 </button>
                                 <Link 
                                     to="/global-history" 
@@ -161,7 +161,7 @@ export function MobileNav() {
                                     className="flex flex-col items-center justify-center gap-3 p-6 bg-blue-50 dark:bg-blue-500/10 rounded-3xl border border-blue-100 dark:border-blue-500/20 text-blue-600 active:scale-95 transition-all"
                                 >
                                     <JournalIcon className="w-8 h-8" />
-                                    <span className="text-sm font-black uppercase tracking-widest">История</span>
+                                    <span className="text-sm font-semibold uppercase tracking-widest">История</span>
                                 </Link>
                             </div>
 
@@ -172,12 +172,12 @@ export function MobileNav() {
                                     className="flex items-center gap-4 p-5 bg-slate-900 dark:bg-blue-600 rounded-3xl text-white mb-4 active:scale-95 transition-all shadow-xl shadow-slate-200 dark:shadow-none"
                                 >
                                     <Users className="w-6 h-6" />
-                                    <span className="font-black uppercase tracking-widest text-sm flex-1">Админ Панель</span>
+                                    <span className="font-semibold uppercase tracking-widest text-sm flex-1">Админ Панель</span>
                                     <div className="w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-200 shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
                                 </Link>
                             )}
                             
-                            <p className="text-center text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-4">Yamazumi Depot v2.0</p>
+                            <p className="text-center text-[10px] text-slate-400 font-semibold uppercase tracking-[0.2em] mt-4">Yamazumi Depot v2.0</p>
                         </motion.div>
                     </>
                 )}
@@ -217,7 +217,7 @@ export function MobileNav() {
                             ) : (
                                 <>
                                     <item.icon className={`w-6 h-6 transition-all ${isActive ? 'scale-110' : ''}`} />
-                                    <span className={`text-[9px] font-black uppercase tracking-tighter mt-1 transition-all ${
+                                    <span className={`text-[9px] font-semibold uppercase tracking-tighter mt-1 transition-all ${
                                         isActive ? 'opacity-100' : 'opacity-0 h-0 scale-0'
                                     }`}>
                                         {item.label}

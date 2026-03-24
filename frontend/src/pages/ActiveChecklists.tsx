@@ -124,7 +124,7 @@ export default function ActiveChecklists() {
                 <div className="max-w-5xl w-full mx-auto">
                     <div className="mb-6 md:mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-8">
                         <div>
-                            <h1 className="text-xl md:text-2xl font-black text-slate-900 border-l-4 border-indigo-600 pl-4 tracking-tight uppercase">
+                            <h1 className="text-xl md:text-2xl font-semibold text-slate-900 tracking-tight">
                                 Активные чек-листы
                             </h1>
                             <p className="text-slate-500 text-[11px] md:text-sm mt-1 font-medium">Прогресс выполнения технического обслуживания</p>
@@ -186,7 +186,7 @@ export default function ActiveChecklists() {
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     placeholder="Поиск по номеру..."
-                                    className="w-full pl-11 pr-4 h-11 bg-white rounded-xl border border-slate-200 shadow-sm text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all focus:shadow-md"
+                                    className="w-full pl-11 pr-4 h-11 bg-white rounded-xl border border-slate-200 shadow-sm text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all focus:shadow-md"
                                 />
                             </div>
                         </div>
@@ -235,18 +235,18 @@ export default function ActiveChecklists() {
                                 const progress = cl.total_items > 0 ? (cl.completed_items / cl.total_items) * 100 : 0;
                                 const isSelected = selectedIds.has(cl.id);
                                 return (
-                                    <div key={cl.id} className={`border rounded-2xl bg-white p-5 md:p-6 shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-6 group relative ${isSelected ? 'border-indigo-500 bg-indigo-50/10 ring-1 ring-indigo-500/20' : 'hover:shadow-md hover:border-indigo-300'}`}>
+                                    <div key={cl.id} className={`border rounded-2xl bg-white p-5 md:p-6 shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-6 group relative ${isSelected ? 'border-blue-500 bg-blue-50/10 ring-1 ring-blue-500/20' : 'hover:shadow-md hover:border-blue-300'}`}>
                                         <div className="flex items-center gap-5 flex-1">
                                             <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
                                                 <Checkbox
                                                     checked={isSelected}
                                                     onCheckedChange={() => toggleSelection(cl.id)}
-                                                    className="h-6 w-6 rounded-lg border-slate-300 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600 shadow-sm"
+                                                    className="h-6 w-6 rounded-lg border-slate-300 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 shadow-sm"
                                                 />
                                             </div>
 
                                             <Link to={`/locomotive/${cl.locomotive.id}/checklist`} className="flex-1 flex items-start gap-4 min-w-0">
-                                                <div className="size-12 md:size-14 bg-slate-900 text-white rounded-xl md:rounded-2xl flex items-center justify-center text-xl font-bold group-hover:bg-indigo-600 transition-colors shrink-0 shadow-lg shadow-slate-100">
+                                                <div className="size-12 md:size-14 bg-slate-900 text-white rounded-xl md:rounded-2xl flex items-center justify-center text-xl font-bold group-hover:bg-blue-600 transition-colors shrink-0 shadow-lg shadow-slate-100">
                                                     <Train className="w-6 h-6 md:w-7 md:h-7" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
@@ -258,23 +258,23 @@ export default function ActiveChecklists() {
                                                             {cl.status === 'in_progress' ? 'В работе' : cl.status}
                                                         </Badge>
                                                     </div>
-                                                    <div className="text-slate-500 font-bold text-xs uppercase tracking-wide truncate mb-4">
+                                                    <div className="text-slate-500 font-semibold text-xs tracking-wide truncate mb-4">
                                                         {cl.template.name}
                                                     </div>
 
                                                     <div className="space-y-1.5 max-w-md">
                                                         <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
                                                             <span className="text-slate-400">Прогресс выполнения</span>
-                                                            <span className="text-indigo-600 font-black">{cl.completed_items} / {cl.total_items} ({Math.round(progress)}%)</span>
+                                                            <span className="text-blue-600 font-black">{cl.completed_items} / {cl.total_items} ({Math.round(progress)}%)</span>
                                                         </div>
-                                                        <Progress value={progress} className="h-1.5 bg-slate-100/50 overflow-hidden" indicatorClassName={progress === 100 ? "bg-emerald-500" : "bg-indigo-600"} />
+                                                        <Progress value={progress} className="h-1.5 bg-slate-100/50 overflow-hidden" indicatorClassName={progress === 100 ? "bg-emerald-500" : "bg-blue-600"} />
                                                     </div>
                                                 </div>
                                             </Link>
                                         </div>
 
                                         <div className="flex items-center ml-auto">
-                                            <Link to={`/locomotive/${cl.locomotive.id}/checklist`} className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
+                                            <Link to={`/locomotive/${cl.locomotive.id}/checklist`} className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
                                                 <ChevronRight className="w-6 h-6" />
                                             </Link>
                                         </div>

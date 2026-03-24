@@ -45,11 +45,11 @@ export const LocoCard = React.memo(({
                         <div className="flex-1 h-full bg-gradient-to-r from-red-700 to-red-500 relative flex items-center justify-center overflow-hidden group-hover/loco:brightness-110 transition-all">
                             <div className="absolute top-[20%] w-full h-[2px] bg-yellow-400 opacity-90" />
                             <div className="absolute bottom-[20%] w-full h-[2px] bg-yellow-400 opacity-90" />
-                            <div className="bg-slate-900 px-2 py-0.5 rounded-sm text-white font-mono font-bold text-[10px] leading-tight z-10 shadow-inner border border-slate-700/80 drop-shadow-md flex flex-col items-center min-w-[32px]">
+                            <div className="bg-slate-900 px-2 py-0.5 rounded-sm text-white font-mono font-semibold text-[10px] leading-tight z-10 shadow-inner border border-slate-700/80 drop-shadow-md flex flex-col items-center min-w-[32px]">
                                 {loco.series && <span className="text-[7px] text-slate-400 -mb-0.5">{loco.series}</span>}
                                 <span>{loco.number}</span>
                                 {loco.repair_type && (
-                                    <span className="text-[7px] text-amber-400 border-t border-slate-800 w-full text-center mt-0.5 pt-0.5 font-black uppercase tracking-tighter">
+                                    <span className="text-[7px] text-amber-400 border-t border-slate-800 w-full text-center mt-0.5 pt-0.5 font-semibold uppercase tracking-tighter">
                                         {loco.repair_type}
                                     </span>
                                 )}
@@ -62,7 +62,7 @@ export const LocoCard = React.memo(({
                     </div>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs space-y-0.5">
-                    <p className="font-bold">{loco.number}</p>
+                    <p className="font-semibold">{loco.number}</p>
                     <p>{statusLabels[loco.status]}{loco.repair_type ? ` • ${loco.repair_type}` : ''}</p>
                     <TimeCounter date={loco.created_at} variant="days" />
                     {loco.planned_release && (

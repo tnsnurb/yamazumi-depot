@@ -25,7 +25,7 @@ export function ProtectedRoute({ reqPerm }: ProtectedRouteProps) {
             return (
                 <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50">
                     <div className="text-center p-8 bg-white rounded-xl shadow-sm border border-slate-200">
-                        <h2 className="text-2xl font-bold text-slate-800">Доступ запрещен</h2>
+                        <h2 className="text-2xl font-semibold text-slate-800">Доступ запрещен</h2>
                         <p className="text-slate-500 mt-2">У вас нет прав для просмотра этой страницы</p>
                     </div>
                 </div>

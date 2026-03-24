@@ -25,12 +25,12 @@ export function SectionCards({ data }: SectionCardsProps) {
             <Card className={cardClass}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-semibold text-slate-600">Всего локомотивов</CardTitle>
-                    <TrainFront className="h-4 w-4 text-indigo-500" />
+                    <TrainFront className="h-4 w-4 text-blue-500" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-3xl font-bold text-slate-900">{data.totalLocomotives}</div>
+                    <div className="text-3xl font-semibold text-slate-900">{data.totalLocomotives}</div>
                     <p className="text-xs text-slate-400 mt-1">
-                        <span className="font-bold text-slate-600">{data.onTracks}</span> сейчас на путях
+                        <span className="font-semibold text-slate-600">{data.onTracks}</span> сейчас на путях
                     </p>
                 </CardContent>
             </Card>
@@ -41,7 +41,7 @@ export function SectionCards({ data }: SectionCardsProps) {
                     <MapPin className="h-4 w-4 text-blue-500" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-3xl font-bold text-slate-900">{occupancyPercent}%</div>
+                    <div className="text-3xl font-semibold text-slate-900">{occupancyPercent}%</div>
                     <p className="text-xs text-slate-400 mt-1">
                         {data.onTracks} из {data.totalSlots} мест занято
                     </p>
@@ -60,9 +60,9 @@ export function SectionCards({ data }: SectionCardsProps) {
                     <Activity className="h-4 w-4 text-emerald-500" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-3xl font-bold text-slate-900">{data.movementsToday}</div>
+                    <div className="text-3xl font-semibold text-slate-900">{data.movementsToday}</div>
                     <p className="text-xs text-slate-400 mt-1">
-                        <span className="font-bold text-emerald-600">{data.movementsWeek}</span> за неделю
+                        <span className="font-semibold text-emerald-600">{data.movementsWeek}</span> за неделю
                     </p>
                 </CardContent>
             </Card>
@@ -73,7 +73,7 @@ export function SectionCards({ data }: SectionCardsProps) {
                     <Activity className="h-4 w-4 text-rose-500" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-3xl font-bold text-slate-900">
+                    <div className="text-3xl font-semibold text-slate-900">
                         {data.overdueRepairs || 0}
                     </div>
                     <p className="text-xs text-slate-400 mt-1">
@@ -88,7 +88,7 @@ export function SectionCards({ data }: SectionCardsProps) {
                     <Wrench className={`h-4 w-4 ${data.overdueGauges > 0 ? 'text-amber-500 animate-pulse' : 'text-slate-400'}`} />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-3xl font-bold text-slate-900">
+                    <div className="text-3xl font-semibold text-slate-900">
                         {data.overdueGauges || 0}
                     </div>
                     <p className="text-xs text-slate-400 mt-1">

@@ -270,7 +270,7 @@ export default function MapPage() {
                 {/* Toolbar */}
                 <div className="w-full max-w-6xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full">
-                        <h2 className="hidden text-xl md:text-2xl font-bold tracking-tight text-slate-900 border-b lg:border-none pb-2 lg:pb-0 w-full lg:w-auto">Карта депо</h2>
+                        <h2 className="hidden text-xl md:text-2xl font-semibold tracking-tight text-slate-900 w-full lg:w-auto">Карта депо</h2>
                         <div className="flex flex-wrap gap-2 text-sm sm:ml-4 sm:border-l sm:pl-4">
                             <button
                                 onClick={() => setStatusFilter("all")}
@@ -285,11 +285,11 @@ export default function MapPage() {
                                     <button
                                         key={k}
                                         onClick={() => setStatusFilter(statusFilter === k ? "all" : k)}
-                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${statusFilter === k ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-800'}`}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${statusFilter === k ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-800'}`}
                                     >
                                         <div className={`w-2.5 h-2.5 rounded-full ${statusColors[k as LocoStatus]}`} />
                                         <span>{v}</span>
-                                        <span className="bg-white/50 text-slate-500 font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-current opacity-70 group-hover:opacity-100">{count}</span>
+                                        <span className="bg-white/50 text-slate-500 font-semibold text-[10px] px-1.5 py-0.5 rounded-full border border-current opacity-70 group-hover:opacity-100">{count}</span>
                                     </button>
                                 )
                             })}
@@ -301,7 +301,7 @@ export default function MapPage() {
                             <div className="relative flex-1 lg:w-64 group">
                                 <Search className={cn(
                                     "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
-                                    searchQuery ? "text-indigo-500" : "text-slate-400 group-hover:text-slate-500"
+                                    searchQuery ? "text-blue-500" : "text-slate-400 group-hover:text-slate-500"
                                 )} />
                                 <FloatingInput
                                     label="Поиск..."
@@ -349,9 +349,18 @@ export default function MapPage() {
                                                     const pos = posIdx + 1;
                                                     return (
                                                         <React.Fragment key={posIdx}>
-                                                            <div className={`relative w-24 h-16 border-2 border-dashed border-slate-200 rounded flex flex-col justify-center items-center gap-2 p-1 ${!isInside(pos) ? 'bg-slate-100/30' : 'bg-slate-50/50'}`}>
-                                                                <Skeleton className="h-4 w-12" />
-                                                                <Skeleton className="h-2 w-16" />
+                                                            <div className={`relative w-32 h-16 border border-slate-200 rounded-md flex flex-col justify-center items-center gap-1 p-2 ${!isInside(pos) ? 'bg-slate-100/50' : 'bg-white shadow-sm opacity-50'}`}>
+                                                                <div className="absolute top-1 left-2 text-[10px] text-slate-300 font-mono">{pos}</div>
+                                                                {/* Simulate a potential loco card in some slots */}
+                                                                {(trackNum + pos) % 4 === 0 ? (
+                                                                    <div className="w-[92%] h-[65%] mt-1 rounded-sm bg-slate-100 border border-slate-200 flex items-center justify-center">
+                                                                        <Skeleton className="h-3 w-16 bg-slate-200" />
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="w-5 h-5 rounded-full border border-slate-100 flex items-center justify-center opacity-20">
+                                                                        <Plus className="w-3 h-3 text-slate-300" />
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                             {pos < slotCount && isInside(pos) !== isInside(pos + 1) && (
                                                                 <div className="w-3 h-12 border-x border-dashed border-slate-300 mx-1 shrink-0 opacity-50" />
@@ -380,7 +389,7 @@ export default function MapPage() {
                                                     <div className="w-20 shrink-0" />
                                                     <div className="flex flex-1 items-center gap-4">
                                                         <div className="h-[1px] flex-1 bg-slate-100" />
-                                                        <span className="text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase whitespace-nowrap">
+                                                        <span className="text-[10px] font-semibold tracking-[0.2em] text-slate-400 uppercase whitespace-nowrap">
                                                             {trackLabel}
                                                         </span>
                                                         <div className="h-[1px] flex-[10] bg-slate-100" />
@@ -465,7 +474,7 @@ export default function MapPage() {
                                         <div className="font-medium text-slate-700">{selectedLoco.series || '—'}</div>
 
                                         <div className="text-slate-500">Номер:</div>
-                                        <div className="font-bold text-slate-900">{selectedLoco.number}</div>
+                                        <div className="font-semibold text-slate-900">{selectedLoco.number}</div>
 
                                         <div className="text-slate-500">Статус:</div>
                                         <div>
@@ -516,14 +525,14 @@ export default function MapPage() {
                                         <div className="text-slate-500">Добавлен в депо:</div>
                                         <div>{new Date(selectedLoco.created_at).toLocaleString()}</div>
 
-                                        <div className="text-slate-500 font-semibold text-indigo-700">Время приемки:</div>
+                                        <div className="text-slate-500 font-semibold text-blue-700">Время приемки:</div>
                                         <div className="flex items-center gap-2">
                                             <Input
                                                 disabled={!!selectedLoco.acceptance_time || !(user?.role === 'admin' || user?.permissions?.can_edit_catalog)}
                                                 type="datetime-local"
                                                 className={cn(
                                                     "h-8 w-48 text-sm border-slate-200",
-                                                    selectedLoco.acceptance_time ? "bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed" : "border-indigo-200"
+                                                    selectedLoco.acceptance_time ? "bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed" : "border-blue-200"
                                                 )}
                                                 value={formatToDateTimeLocal(selectedLoco.acceptance_time)}
                                                 onChange={async (e) => {
@@ -538,12 +547,12 @@ export default function MapPage() {
                                                 }}
                                             />
                                             {selectedLoco.acceptance_time && (
-                                                <div className="h-7 bg-slate-900 text-indigo-300 border border-slate-700 shadow-inner rounded flex items-center gap-2 px-2.5 animate-pulse-subtle shrink-0">
+                                                <div className="h-7 bg-slate-900 text-blue-300 border border-slate-700 shadow-inner rounded flex items-center gap-2 px-2.5 animate-pulse-subtle shrink-0">
                                                     <div className="relative flex h-1.5 w-1.5">
-                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                                                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500"></span>
                                                     </div>
-                                                    <span className="font-mono font-bold tracking-tight text-[10px] whitespace-nowrap uppercase">
+                                                    <span className="font-mono font-semibold tracking-tight text-[10px] whitespace-nowrap uppercase">
                                                         <TimeCounter date={selectedLoco.acceptance_time} variant="hours" />
                                                     </span>
                                                 </div>
@@ -634,7 +643,7 @@ export default function MapPage() {
                                         <Button
                                             variant="outline"
                                             onClick={() => setQrLoco(selectedLoco)}
-                                            className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                            className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
                                         >
                                             <QrCode className="w-4 h-4" /> QR код
                                         </Button>
@@ -658,13 +667,13 @@ export default function MapPage() {
             <Dialog open={!!qrLoco} onOpenChange={(open) => !open && setQrLoco(null)}>
                 <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl print:shadow-none">
                     <DialogHeader className="bg-slate-900 px-6 py-6 text-white text-left relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 blur-2xl" />
                         <div className="relative z-10 flex items-center gap-4">
                             <div className="p-2.5 bg-white/10 rounded-xl backdrop-blur-sm border border-white/10 shadow-inner">
-                                <QrCode className="w-6 h-6 text-indigo-400" />
+                                <QrCode className="w-6 h-6 text-blue-400" />
                             </div>
                             <div>
-                                <DialogTitle className="text-xl font-bold tracking-tight">QR код локомотива</DialogTitle>
+                                <DialogTitle className="text-xl font-semibold tracking-tight">QR код локомотива</DialogTitle>
                                 <p className="text-slate-400 text-xs mt-0.5">Для быстрого перехода к замечаниям</p>
                             </div>
                         </div>
@@ -673,15 +682,15 @@ export default function MapPage() {
                     <div className="p-8 flex flex-col items-center">
                         <div className="w-full flex justify-between items-center mb-6">
                             <div className="flex flex-col">
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Серия и номер</span>
-                                <span className="text-2xl font-black text-slate-900 tracking-tighter">
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Серия и номер</span>
+                                <span className="text-2xl font-semibold text-slate-900 tracking-tighter">
                                     {qrLoco?.series} {qrLoco?.number}
                                 </span>
                             </div>
                             <div className="h-10 w-[1px] bg-slate-100" />
                             <div className="flex flex-col items-end">
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Статус</span>
-                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full mt-0.5 ${qrLoco ? statusColors[qrLoco.status as LocoStatus] : ''} text-white`}>
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Статус</span>
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full mt-0.5 ${qrLoco ? statusColors[qrLoco.status as LocoStatus] : ''} text-white`}>
                                     {qrLoco ? statusLabels[qrLoco.status] : ''}
                                 </span>
                             </div>
@@ -707,7 +716,7 @@ export default function MapPage() {
                                     <Printer className="w-4 h-4 text-amber-700" />
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="text-sm font-bold text-amber-900 leading-none">Инструкция</p>
+                                    <p className="text-sm font-semibold text-amber-900 leading-none">Инструкция</p>
                                     <p className="text-xs text-amber-800/80 leading-relaxed">
                                         Распечатайте этот QR код и разместите его в кабине локомотива для быстрого доступа.
                                     </p>
@@ -743,7 +752,7 @@ export default function MapPage() {
                     {pendingMove && (
                         <div className="space-y-4 py-2">
                             <p className="text-sm text-slate-600">
-                                Вы хотите переместить локомотив <span className="font-bold text-slate-900">{pendingMove.locoSeries} {pendingMove.locoNumber}</span>:
+                                Вы хотите переместить локомотив <span className="font-semibold text-slate-900">{pendingMove.locoSeries} {pendingMove.locoNumber}</span>:
                             </p>
                             <div className="flex items-center gap-3 text-sm">
                                 <div className="bg-slate-100 rounded-lg px-4 py-3 flex-1 text-center">
@@ -751,9 +760,9 @@ export default function MapPage() {
                                     <div className="font-semibold">{pendingMove.fromTrack ? `Путь ${pendingMove.fromTrack}, Слот ${pendingMove.fromPos}` : '—'}</div>
                                 </div>
                                 <span className="text-slate-400 text-lg">→</span>
-                                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 flex-1 text-center">
-                                    <div className="text-xs text-indigo-500 mb-1">Куда</div>
-                                    <div className="font-semibold text-indigo-700">Путь {pendingMove.toTrack}, Слот {pendingMove.toPos}</div>
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex-1 text-center">
+                                    <div className="text-xs text-blue-500 mb-1">Куда</div>
+                                    <div className="font-semibold text-blue-700">Путь {pendingMove.toTrack}, Слот {pendingMove.toPos}</div>
                                 </div>
                             </div>
                         </div>
@@ -786,7 +795,7 @@ export default function MapPage() {
                                 <Button
                                     key={reason}
                                     variant={removeReason === reason ? "default" : "outline"}
-                                    className={`justify-start text-left h-auto py-3 ${removeReason === reason ? 'bg-indigo-600 hover:bg-indigo-700' : ''}`}
+                                    className={`justify-start text-left h-auto py-3 ${removeReason === reason ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
                                     onClick={() => setRemoveReason(reason)}
                                 >
                                     {reason}

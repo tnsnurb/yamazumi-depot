@@ -35,18 +35,13 @@ export default function GlobalHistory() {
         <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/30">
             <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-4 py-4 md:px-8">
                 <div className="max-w-5xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-emerald-600 p-2 rounded-xl shadow-emerald-100 shadow-lg">
-                            <Clock className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight leading-none">
-                                Архив ремонтов
-                            </h1>
-                            <p className="text-[10px] md:text-xs text-slate-400 font-medium tracking-wide mt-1">
-                                {sessions?.length} завершенных сессий
-                            </p>
-                        </div>
+                    <div className="flex flex-col">
+                        <h1 className="text-lg md:text-xl font-semibold text-slate-900 tracking-tight leading-none">
+                            Архив ремонтов
+                        </h1>
+                        <p className="text-[10px] md:text-xs text-slate-400 font-medium tracking-wide mt-1">
+                            {sessions?.length} завершенных сессий
+                        </p>
                     </div>
                 </div>
             </header>
@@ -64,7 +59,7 @@ export default function GlobalHistory() {
                             {sessions.map((session: any) => (
                                 <div key={session.id} className="border rounded-xl bg-white p-4 md:p-6 shadow-sm hover:shadow transition-shadow flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div className="flex-1">
-                                        <div className="font-bold text-slate-900 flex items-center gap-2 text-base md:text-lg">
+                                        <div className="font-semibold text-slate-900 flex items-center gap-2 text-base md:text-lg">
                                             {formatWO(session.id, session.locomotive?.number)}
                                             <span className="text-slate-300 mx-1 md:mx-2">•</span>
                                             <div className="flex items-center gap-1.5 text-blue-600">
@@ -83,7 +78,7 @@ export default function GlobalHistory() {
                                                 ДО: <span className="font-semibold text-emerald-800">{formatDate(session.end_date)}</span>
                                             </div>
                                             {session.locomotive?.repair_type && (
-                                                <div className="bg-emerald-50 text-emerald-700 px-2 py-1.5 rounded-md font-bold uppercase tracking-wider text-[10px] flex items-center gap-1">
+                                                <div className="bg-emerald-50 text-emerald-700 px-2 py-1.5 rounded-md font-semibold uppercase tracking-wider text-[10px] flex items-center gap-1">
                                                     <span className="text-[8px] text-emerald-400 font-medium">ТИП:</span>
                                                     {session.locomotive.repair_type}
                                                 </div>
@@ -94,7 +89,7 @@ export default function GlobalHistory() {
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                                         <div className="flex items-center gap-4 text-sm mr-2 md:mr-6">
                                             <div className="flex items-center gap-2 text-slate-600">
-                                                <Wrench className="w-4 h-4 text-indigo-400" />
+                                                <Wrench className="w-4 h-4 text-blue-400" />
                                                 <span className="font-medium">{session.remarks?.length || 0}</span>
                                                 <span className="hidden lg:inline text-xs text-slate-400 uppercase tracking-wider">зам.</span>
                                             </div>
@@ -112,7 +107,7 @@ export default function GlobalHistory() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end" className="w-56 font-medium">
-                                                <DropdownMenuLabel className="text-xs text-slate-400 font-bold uppercase tracking-widest px-2 pb-1">Просмотр</DropdownMenuLabel>
+                                                <DropdownMenuLabel className="text-xs text-slate-400 font-semibold uppercase tracking-widest px-2 pb-1">Просмотр</DropdownMenuLabel>
                                                 <DropdownMenuItem asChild className="cursor-pointer py-2.5 hover:bg-sky-50 focus:bg-sky-50 focus:text-sky-900 group">
                                                     <Link to={`/history/session/${session.id}/checklists`} state={{ session }}>
                                                         <FileText className="w-4 h-4 mr-3 text-sky-500 group-hover:scale-110 transition-transform" />
@@ -120,9 +115,9 @@ export default function GlobalHistory() {
                                                         <Badge variant="secondary" className="ml-auto bg-white/50">{session.checklists?.length || 0}</Badge>
                                                     </Link>
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem asChild className="cursor-pointer py-2.5 hover:bg-indigo-50 focus:bg-indigo-50 focus:text-indigo-900 group">
+                                                <DropdownMenuItem asChild className="cursor-pointer py-2.5 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-900 group">
                                                     <Link to={`/history/session/${session.id}/remarks`} state={{ session }}>
-                                                        <Wrench className="w-4 h-4 mr-3 text-indigo-500 group-hover:scale-110 transition-transform" />
+                                                        <Wrench className="w-4 h-4 mr-3 text-blue-500 group-hover:scale-110 transition-transform" />
                                                         <span>Замечания</span>
                                                         <Badge variant="secondary" className="ml-auto bg-white/50">{session.remarks?.length || 0}</Badge>
                                                     </Link>

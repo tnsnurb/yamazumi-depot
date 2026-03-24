@@ -32,14 +32,20 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
         url += `?${queryParams.toString()}`;
     }
 
+    const isFormData = customConfig.body instanceof FormData;
+    const requestHeaders: Record<string, string> = {
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(headers as Record<string, string>),
+    };
+
     const config: RequestInit = {
         method: customConfig.method || 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            ...headers,
-        },
         ...customConfig,
     };
+
+    if (Object.keys(requestHeaders).length > 0) {
+        config.headers = requestHeaders;
+    }
 
     try {
         const response = await fetch(url, config);
@@ -58,7 +64,13 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
 export const apiClient = {
     get: <T>(url: string, params?: Record<string, any>) => request<T>(url, { method: 'GET', params }),
-    post: <T>(url: string, data: any) => request<T>(url, { method: 'POST', body: JSON.stringify(data) }),
-    put: <T>(url: string, data: any) => request<T>(url, { method: 'PUT', body: JSON.stringify(data) }),
+    post: <T>(url: string, data: any) => request<T>(url, { 
+        method: 'POST', 
+        body: data instanceof FormData ? data : JSON.stringify(data) 
+    }),
+    put: <T>(url: string, data: any) => request<T>(url, { 
+        method: 'PUT', 
+        body: data instanceof FormData ? data : JSON.stringify(data) 
+    }),
     delete: <T>(url: string) => request<T>(url, { method: 'DELETE' }),
 };

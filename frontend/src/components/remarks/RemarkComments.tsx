@@ -40,7 +40,7 @@ export function RemarkComments({ remarkId }: RemarkCommentsProps) {
         <div className="space-y-4">
             <div className="flex items-center gap-2 text-slate-400 mb-2">
                 <MessageSquare className="w-4 h-4" />
-                <span className="text-xs font-bold uppercase tracking-wider">Комментарии ({comments.length})</span>
+                <span className="text-xs font-semibold uppercase tracking-wider">Комментарии ({comments.length})</span>
             </div>
 
             {isLoading ? (
@@ -50,14 +50,14 @@ export function RemarkComments({ remarkId }: RemarkCommentsProps) {
                 </div>
             ) : comments.length === 0 ? (
                 <div className="py-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Нет комментариев</p>
+                    <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Нет комментариев</p>
                 </div>
             ) : (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
                     {comments.map((comment) => (
                         <div key={comment.id} className="p-3 bg-white rounded-xl border border-slate-100">
                             <div className="flex justify-between items-start mb-1">
-                                <span className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">
+                                <span className="text-[10px] font-semibold text-slate-900 uppercase tracking-wider">
                                     {comment.user_id?.full_name || "Система"}
                                 </span>
                                 <span className="text-[9px] text-slate-400 font-medium">

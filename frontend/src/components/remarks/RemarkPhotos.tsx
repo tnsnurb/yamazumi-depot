@@ -53,14 +53,14 @@ export function RemarkPhotos({ remarkId }: RemarkPhotosProps) {
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-slate-400">
                     <Camera className="w-4 h-4" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Фотографии ({photos.length})</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider">Фотографии ({photos.length})</span>
                 </div>
                 <Button
                     variant="outline"
                     size="sm"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploadPhotoMutation.isPending}
-                    className="bg-white border-slate-200 hover:bg-slate-50 rounded-lg gap-2 text-[10px] font-bold uppercase py-1 h-8"
+                    className="bg-white border-slate-200 hover:bg-slate-50 rounded-lg gap-2 text-[10px] font-semibold uppercase py-1 h-8"
                 >
                     {uploadPhotoMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />}
                     Добавить фото
@@ -82,7 +82,7 @@ export function RemarkPhotos({ remarkId }: RemarkPhotosProps) {
                 </div>
             ) : photos.length === 0 ? (
                 <div className="py-10 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Нет прикрепленных фото</p>
+                    <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Нет прикрепленных фото</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -118,7 +118,7 @@ export function RemarkPhotos({ remarkId }: RemarkPhotosProps) {
                     />
                     <Button 
                         variant="link" 
-                        className="absolute top-8 right-8 text-white/50 hover:text-white font-black uppercase tracking-[0.2em] text-[10px]"
+                        className="absolute top-8 right-8 text-white/50 hover:text-white font-semibold uppercase tracking-[0.2em] text-[10px]"
                     >
                         Закрыть (Esc)
                     </Button>

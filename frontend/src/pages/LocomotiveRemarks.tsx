@@ -294,7 +294,7 @@ export default function LocomotiveRemarks() {
                         >
                             <ChevronLeft className="w-4 h-4" /> Назад к списку
                         </button>
-                        <h1 className="text-3xl font-bold text-slate-900">
+                        <h1 className="text-3xl font-semibold text-slate-900">
                             Замечания <span className="text-slate-400 font-normal">#{locomotive?.number || '—'}</span>
                         </h1>
                     </div>
@@ -335,19 +335,19 @@ export default function LocomotiveRemarks() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                     <div className="bg-white border border-slate-200 p-5 rounded-2xl">
                         <div className="text-slate-500 text-xs font-medium mb-1">Всего замечаний</div>
-                        <div className="text-3xl font-bold text-slate-900">{stats.total}</div>
+                        <div className="text-3xl font-semibold text-slate-900">{stats.total}</div>
                     </div>
                     <div className="bg-white border border-slate-200 p-5 rounded-2xl">
                         <div className="text-slate-500 text-xs font-medium mb-1">Выполнено</div>
-                        <div className="text-3xl font-bold text-emerald-600">{stats.done}</div>
+                        <div className="text-3xl font-semibold text-emerald-600">{stats.done}</div>
                     </div>
                     <div className="bg-white border border-slate-200 p-5 rounded-2xl">
                         <div className="text-slate-500 text-xs font-medium mb-1">В работе</div>
-                        <div className="text-3xl font-bold text-amber-600">{stats.pending}</div>
+                        <div className="text-3xl font-semibold text-amber-600">{stats.pending}</div>
                     </div>
                     <div className="bg-white border border-slate-200 p-5 rounded-2xl">
                         <div className="text-slate-500 text-xs font-medium mb-1">Прогресс</div>
-                        <div className="text-3xl font-bold text-slate-900">
+                        <div className="text-3xl font-semibold text-slate-900">
                             {stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0}%
                         </div>
                     </div>
@@ -396,7 +396,7 @@ export default function LocomotiveRemarks() {
                 {/* Gauges Section */}
                 <div className="mb-8 p-6 bg-white border border-slate-200 rounded-3xl shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                             <Wrench className="w-5 h-5 text-blue-600" />
                             Установленные приборы
                         </h3>
@@ -434,17 +434,17 @@ export default function LocomotiveRemarks() {
                                     <div key={gauge.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between group">
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-2">
-                                                <code className="text-xs font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
+                                                <code className="text-xs font-semibold bg-white px-2 py-0.5 rounded border border-slate-200">
                                                     {gauge.serial_number}
                                                 </code>
                                                 {gauge.installation_side && (
-                                                   <Badge className="bg-blue-600 text-white border-blue-600 text-[10px] h-5 px-1 font-black">
+                                                   <Badge className="bg-blue-600 text-white border-blue-600 text-[10px] h-5 px-1 font-semibold">
                                                        {gauge.installation_side}
                                                    </Badge>
                                                 )}
                                                 <span className="text-xs text-slate-500 font-medium">{gauge.part_number}</span>
                                             </div>
-                                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
                                                 Поверка: {format(parseISO(gauge.next_verification), 'dd.MM.yyyy')}
                                             </div>
                                             {gauge.photo_url && (
@@ -460,7 +460,7 @@ export default function LocomotiveRemarks() {
                                             <Badge 
                                                 variant="outline" 
                                                 className={cn(
-                                                    "font-bold text-[10px]",
+                                                    "font-semibold text-[10px]",
                                                     isOverdue ? "bg-red-500 text-white border-red-500 animate-pulse" :
                                                     isExpiring ? "bg-amber-100 text-amber-700 border-amber-200" :
                                                     "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -497,8 +497,8 @@ export default function LocomotiveRemarks() {
                 <div className="space-y-6">
                     {isLoading ? (
                         <div className="flex flex-col items-center py-32 gap-6">
-                            <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
-                            <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">Synchronizing Registry</p>
+                            <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+                            <p className="text-slate-500 text-[10px] font-semibold uppercase tracking-[0.5em]">Synchronizing Registry</p>
                         </div>
                     ) : filteredRemarks.length === 0 ? (
                         <div className="py-20 text-center bg-white border border-slate-200 border-dashed rounded-2xl">
@@ -613,7 +613,7 @@ export default function LocomotiveRemarks() {
                                     )}
                                 >
                                     <div className="space-y-0.5 pr-4 flex-1">
-                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.category || "Общее"}</div>
+                                        <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{t.category || "Общее"}</div>
                                         <div className="text-sm font-medium text-slate-900">{t.text}</div>
                                     </div>
                                     <div className={cn(
@@ -701,7 +701,7 @@ export default function LocomotiveRemarks() {
                     
                     <div className="space-y-6 py-4">
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Серийный номер (на складе)</label>
+                            <label className="text-xs font-semibold text-slate-400 tracking-wider">Серийный номер (на складе)</label>
                             <Select value={selectedWarehouseGaugeId} onValueChange={setSelectedWarehouseGaugeId}>
                                 <SelectTrigger className="bg-slate-50 border-slate-200">
                                     <SelectValue placeholder="Выберите манометр..." />
@@ -721,14 +721,14 @@ export default function LocomotiveRemarks() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Сторона установки</label>
+                            <label className="text-xs font-semibold text-slate-400 tracking-wider">Сторона установки</label>
                             <div className="flex gap-2">
                                 {['K1', 'K2'].map((side) => (
                                 <button
                                     key={side}
                                     type="button"
                                     onClick={() => setInstallSide(side as 'K1' | 'K2')}
-                                    className={`flex-1 py-3 rounded-xl border text-sm font-black transition-all ${
+                                    className={`flex-1 py-3 rounded-xl border text-sm font-semibold transition-all ${
                                     installSide === side 
                                         ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100' 
                                         : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
@@ -755,15 +755,15 @@ export default function LocomotiveRemarks() {
                                         )}
                                     </div>
                                     <div className="space-y-1 py-1">
-                                        <div className="text-xs font-bold text-blue-600 uppercase tracking-tighter">Характеристики</div>
-                                        <div className="text-lg font-bold text-slate-900 leading-tight">
+                                        <div className="text-xs font-semibold text-blue-600 uppercase tracking-tighter">Характеристики</div>
+                                        <div className="text-lg font-semibold text-slate-900 leading-tight">
                                             {selectedWarehouseGauge.part_number}
                                         </div>
                                         <div className="text-xs text-slate-500 font-medium">
                                             {selectedWarehouseGauge.description}
                                         </div>
                                         <div className="pt-2 flex items-center gap-1.5">
-                                            <Badge variant="outline" className="bg-white text-[10px] font-bold">
+                                            <Badge variant="outline" className="bg-white text-[10px] font-semibold">
                                                 Поверка до: {format(parseISO(selectedWarehouseGauge.next_verification), 'dd.MM.yyyy')}
                                             </Badge>
                                         </div>
@@ -775,7 +775,7 @@ export default function LocomotiveRemarks() {
 
                     <DialogFooter>
                         <Button 
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 rounded-xl shadow-lg shadow-blue-200"
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold h-12 rounded-xl shadow-lg shadow-blue-200"
                             disabled={!selectedWarehouseGaugeId || updateGaugeMutation.isPending}
                             onClick={handleInstallGauge}
                         >

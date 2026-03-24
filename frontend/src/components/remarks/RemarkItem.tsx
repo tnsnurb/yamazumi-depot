@@ -105,7 +105,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button className={cn(
-                                "h-7 px-2.5 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5",
+                                "h-7 px-2.5 rounded-lg border text-[10px] font-semibold uppercase tracking-wider transition-colors flex items-center gap-1.5",
                                 priorityColors[remark.priority || "medium"]
                             )}>
                                 <AlertCircle className="w-3 h-3" />
@@ -120,7 +120,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-500 tracking-wider uppercase">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-[10px] font-semibold text-slate-500 tracking-wider uppercase">
                         <Tag className="w-3 h-3" />
                         {remark.category || "Общее"}
                     </div>
@@ -130,7 +130,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     {remark.is_completed ? (
                         <>
                             {remark.is_verified ? (
-                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 rounded-lg py-1 px-3 text-[10px] uppercase font-bold">
+                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 rounded-lg py-1 px-3 text-[10px] uppercase font-semibold">
                                     Принято
                                 </Badge>
                             ) : (
@@ -208,7 +208,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     </Select>
                     
                     {remark.assigned_user && (
-                        <div className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-wider">
+                        <div className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-semibold uppercase tracking-wider">
                             Исполнитель: {remark.assigned_user.username}
                         </div>
                     )}
@@ -218,7 +218,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     <button
                         onClick={() => setExpandedTab(expandedTab === "comments" ? null : "comments")}
                         className={cn(
-                            "flex items-center gap-2 px-3 h-9 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors",
+                            "flex items-center gap-2 px-3 h-9 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
                             expandedTab === "comments" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"
                         )}
                     >
@@ -227,7 +227,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     <button
                         onClick={() => setExpandedTab(expandedTab === "photos" ? null : "photos")}
                         className={cn(
-                            "flex items-center gap-2 px-3 h-9 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors",
+                            "flex items-center gap-2 px-3 h-9 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
                             expandedTab === "photos" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"
                         )}
                     >
@@ -236,7 +236,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     <button
                         onClick={() => setExpandedTab(expandedTab === "history" ? null : "history")}
                         className={cn(
-                            "flex items-center gap-2 px-3 h-9 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors",
+                            "flex items-center gap-2 px-3 h-9 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
                             expandedTab === "history" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"
                         )}
                     >

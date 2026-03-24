@@ -4,7 +4,6 @@ import { gaugeService, type Gauge } from "@/api/gaugeService"
 import { locomotiveApi } from "@/api/locomotiveService"
 import { Html5Qrcode } from "html5-qrcode"
 import { 
-  ScanLine, 
   ArrowLeft, 
   CheckCircle2, 
   AlertCircle, 
@@ -208,7 +207,7 @@ const GaugeTerminal = () => {
             <ArrowLeft className="w-6 h-6" />
           </Button>
         )}
-        <h1 className="text-xl font-black text-slate-900">{title}</h1>
+        <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
       </div>
       <Badge variant="outline" className="text-blue-600 border-blue-200">Терминал</Badge>
     </div>
@@ -219,45 +218,44 @@ const GaugeTerminal = () => {
       {step === 'home' && (
         <div className="space-y-6 pt-4">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 mb-4">
-              <ScanLine className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-black text-slate-900">Терминал Метролога</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">Терминал метролога</h1>
             <p className="text-slate-500">Быстрые операции с манометрами</p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
-            <Card 
-              className="bg-emerald-500 border-none shadow-xl shadow-emerald-100 active:scale-95 transition-all cursor-pointer overflow-hidden p-0"
-              onClick={() => { setMode('issue'); setStep('scanning-gauge'); }}
-            >
-              <CardContent className="p-8 flex items-center justify-between text-white">
-                <div className="space-y-1">
-                  <h2 className="text-3xl font-black">ВЫДАЧА</h2>
-                  <p className="text-emerald-50/80 font-medium">На локомотив</p>
-                </div>
-                <PackageCheck className="w-16 h-16 opacity-30" />
-              </CardContent>
-            </Card>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Card 
+                className="bg-emerald-500 border-none shadow-xl shadow-emerald-100 active:scale-95 transition-all cursor-pointer overflow-hidden p-0"
+                onClick={() => { setMode('issue'); setStep('scanning-gauge'); }}
+              >
+                <CardContent className="p-5 md:p-8 flex flex-col justify-between h-full text-white min-h-[160px]">
+                  <div className="space-y-1">
+                    <h2 className="text-xl md:text-3xl font-semibold">Выдача</h2>
+                    <p className="text-emerald-50/80 text-xs md:text-base font-medium">На локомотив</p>
+                  </div>
+                  <PackageCheck className="w-10 h-10 md:w-16 md:h-16 opacity-30 self-end" />
+                </CardContent>
+              </Card>
+
+              <Card 
+                className="bg-blue-500 border-none shadow-xl shadow-blue-100 active:scale-95 transition-all cursor-pointer overflow-hidden p-0"
+                onClick={() => { setMode('return'); setStep('scanning-gauge'); }}
+              >
+                <CardContent className="p-5 md:p-8 flex flex-col justify-between h-full text-white min-h-[160px]">
+                  <div className="space-y-1">
+                    <h2 className="text-xl md:text-3xl font-semibold">Снятие</h2>
+                    <p className="text-blue-50/80 text-xs md:text-base font-medium">С локомотива</p>
+                  </div>
+                  <PackageMinus className="w-10 h-10 md:w-16 md:h-16 opacity-30 self-end" />
+                </CardContent>
+              </Card>
+            </div>
 
             <Card 
-              className="bg-blue-500 border-none shadow-xl shadow-blue-100 active:scale-95 transition-all cursor-pointer overflow-hidden p-0"
-              onClick={() => { setMode('return'); setStep('scanning-gauge'); }}
-            >
-              <CardContent className="p-8 flex items-center justify-between text-white">
-                <div className="space-y-1">
-                  <h2 className="text-3xl font-black">СНЯТИЕ</h2>
-                  <p className="text-blue-50/80 font-medium">С локомотива</p>
-                </div>
-                <PackageMinus className="w-16 h-16 opacity-30" />
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="bg-white border-slate-200 shadow-sm active:scale-95 transition-all cursor-pointer mt-4"
+              className="bg-white border-slate-200 shadow-sm active:scale-95 transition-all cursor-pointer"
               onClick={() => navigate('/gauges')}
             >
-              <CardContent className="p-6 flex items-center gap-4 text-slate-600 font-bold justify-center">
+              <CardContent className="p-6 flex items-center gap-4 text-slate-600 font-semibold justify-center">
                 <History className="w-6 h-6" />
                 Журнал и контроль
               </CardContent>
@@ -283,7 +281,7 @@ const GaugeTerminal = () => {
                  <p className="text-slate-400 font-medium">Наведите камеру на QR манометра</p>
                  <Button 
                    variant="outline" 
-                   className="w-full h-14 rounded-2xl border-2 border-slate-200 text-slate-600 font-bold"
+                   className="w-full h-14 rounded-2xl border-2 border-slate-200 text-slate-600 font-semibold"
                    onClick={() => setShowManualInput(true)}
                  >
                    <Search className="w-5 h-5 mr-2" />
@@ -297,7 +295,7 @@ const GaugeTerminal = () => {
                 <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                     <History className="w-8 h-8" />
                 </div>
-                <h3 className="text-center text-xl font-black text-slate-800 mb-2">Ручной ввод</h3>
+                <h3 className="text-center text-xl font-semibold text-slate-800 mb-2">Ручной ввод</h3>
                 <p className="text-center text-slate-500 text-sm mb-8">Введите серийный номер манометра с корпуса устройства</p>
                 
                 <div className="space-y-4">
@@ -305,11 +303,11 @@ const GaugeTerminal = () => {
                     value={manualSerial}
                     onChange={(e) => setManualSerial(e.target.value)}
                     placeholder="S/N: 000000"
-                    className="h-16 text-center text-2xl font-black rounded-2xl border-2 border-slate-200 focus:border-blue-500 bg-slate-50 shadow-inner"
+                    className="h-16 text-center text-2xl font-semibold rounded-2xl border-2 border-slate-200 focus:border-blue-500 bg-slate-50 shadow-inner"
                     autoFocus
                   />
                   <Button 
-                    className="w-full h-16 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-lg shadow-lg shadow-blue-100"
+                    className="w-full h-16 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg shadow-lg shadow-blue-100"
                     onClick={() => handleScanSuccess(manualSerial)}
                     disabled={!manualSerial.trim()}
                   >
@@ -317,7 +315,7 @@ const GaugeTerminal = () => {
                   </Button>
                   <Button 
                     variant="ghost" 
-                    className="w-full h-12 rounded-xl text-slate-400 font-bold"
+                    className="w-full h-12 rounded-xl text-slate-400 font-semibold"
                     onClick={() => setShowManualInput(false)}
                   >
                     Вернуться к сканеру
@@ -336,7 +334,7 @@ const GaugeTerminal = () => {
             <div className="relative aspect-video bg-slate-100 flex items-center justify-center overflow-hidden">
               {(selectedGauge.photo_url || (selectedGauge as any).model_image_url) ? (
                 <img 
-                  src={selectedGauge.photo_url || (selectedGauge as any).model_image_url} 
+                  src={(selectedGauge as any).model_image_url || selectedGauge.photo_url} 
                   alt={selectedGauge.serial_number}
                   className="w-full h-full object-cover"
                 />
@@ -346,13 +344,13 @@ const GaugeTerminal = () => {
                 </div>
               )}
               <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full shadow-sm border border-white/20">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Прибор найден</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Прибор найден</span>
               </div>
             </div>
             
             <div className="p-8 space-y-6 text-center">
               <div>
-                <h2 className="text-3xl font-black text-slate-800 mb-1 leading-tight">{selectedGauge.serial_number}</h2>
+                <h2 className="text-3xl font-semibold text-slate-800 mb-1 leading-tight">{selectedGauge.serial_number}</h2>
                 <p className="text-slate-500 font-medium tracking-tight">{(selectedGauge as any).description || 'Манометр технический'}</p>
               </div>
 
@@ -360,13 +358,13 @@ const GaugeTerminal = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center">
                   <Hash className="w-4 h-4 text-slate-400 mb-1" />
-                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Парт-номер</span>
-                  <span className="text-xs font-black text-slate-700 font-mono">{(selectedGauge as any).part_number || 'НЕТ ДАННЫХ'}</span>
+                  <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-widest mb-1">Парт-номер</span>
+                  <span className="text-xs font-semibold text-slate-700 font-mono">{(selectedGauge as any).part_number || 'НЕТ ДАННЫХ'}</span>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center">
                   <Calendar className="w-4 h-4 text-slate-400 mb-1" />
-                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Поверка до</span>
-                  <span className="text-xs font-black text-slate-700 font-mono">
+                  <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-widest mb-1">Поверка до</span>
+                  <span className="text-xs font-semibold text-slate-700 font-mono">
                     {new Date(selectedGauge.next_verification).toLocaleDateString('ru-RU')}
                   </span>
                 </div>
@@ -378,7 +376,7 @@ const GaugeTerminal = () => {
                   <div className={`w-2.5 h-2.5 rounded-full ${
                     selectedGauge.status === 'На складе' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'
                   }`} />
-                  <span className="text-xs font-black text-slate-700 font-mono tracking-tight uppercase tracking-widest">{selectedGauge.status}</span>
+                  <span className="text-xs font-semibold text-slate-700 font-mono tracking-tight">{selectedGauge.status}</span>
                 </div>
                 
                 {(() => {
@@ -393,7 +391,7 @@ const GaugeTerminal = () => {
                   const isWarning = daysLeft <= 90;
                   
                   return (
-                    <div className={`py-2.5 px-6 rounded-2xl border font-black text-xs uppercase tracking-widest ${
+                    <div className={`py-2.5 px-6 rounded-2xl border font-semibold text-xs tracking-widest ${
                       isCritical ? 'bg-red-50 text-red-600 border-red-100' :
                       isWarning ? 'bg-orange-50 text-orange-600 border-orange-100' :
                       'bg-emerald-50 text-emerald-600 border-emerald-100'
@@ -407,7 +405,7 @@ const GaugeTerminal = () => {
               <div className="grid grid-cols-2 gap-3 pt-4">
                 <Button 
                   variant="outline" 
-                  className="h-14 rounded-2xl border-2 border-slate-100 text-slate-500 font-bold"
+                  className="h-14 rounded-2xl border-2 border-slate-100 text-slate-500 font-semibold"
                   onClick={() => {
                     setShowConfirmation(false);
                     setSelectedGauge(null);
@@ -417,7 +415,7 @@ const GaugeTerminal = () => {
                   Отмена
                 </Button>
                 <Button 
-                  className="h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black shadow-lg shadow-blue-200"
+                  className="h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg shadow-blue-200"
                   onClick={handleConfirmGauge}
                 >
                   <Check className="w-5 h-5 mr-1" />
@@ -436,7 +434,7 @@ const GaugeTerminal = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
             <Input 
               placeholder="Номер локомотива..." 
-              className="h-14 pl-12 rounded-2xl bg-white border-slate-200 shadow-sm text-lg font-bold"
+              className="h-14 pl-12 rounded-2xl bg-white border-slate-200 shadow-sm text-lg font-semibold"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               autoFocus
@@ -450,7 +448,7 @@ const GaugeTerminal = () => {
                 onClick={() => { setSelectedLoco(loco); setStep('select-side'); }}
               >
                 <CardContent className="p-5 flex items-center justify-between">
-                  <span className="text-xl font-black text-slate-800">{loco.series} {loco.number}</span>
+                  <span className="text-xl font-semibold text-slate-800">{loco.series} {loco.number}</span>
                   <Badge className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md ${
                     loco.status === 'repair' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-100'
                   }`}>
@@ -469,7 +467,7 @@ const GaugeTerminal = () => {
             {/* Переключатель фильтра */}
             <Button
               variant="ghost"
-              className="mt-2 text-slate-400 hover:text-blue-500 font-bold text-xs uppercase tracking-widest"
+              className="mt-2 text-slate-400 hover:text-blue-500 font-semibold text-xs uppercase tracking-widest"
               onClick={() => setShowOnlyRepair(!showOnlyRepair)}
             >
               {showOnlyRepair ? 'Выбрать другой локомотив (Показать все)' : 'Показать только локомотивы в ремонте'}
@@ -487,25 +485,25 @@ const GaugeTerminal = () => {
                 <Wrench className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Прибор готов к выдаче</p>
-                <p className="text-lg font-black text-slate-800">{selectedGauge?.serial_number}</p>
+                <p className="text-xs text-slate-400 uppercase font-semibold tracking-wider">Прибор готов к выдаче</p>
+                <p className="text-lg font-semibold text-slate-800">{selectedGauge?.serial_number}</p>
               </div>
             </div>
             <div className="text-slate-500 font-medium border-t border-slate-50 pt-2 flex justify-between items-center text-sm">
                <span>Локомотив:</span>
-               <span className="font-bold text-slate-900">{selectedLoco?.series} {selectedLoco?.number}</span>
+               <span className="font-semibold text-slate-900">{selectedLoco?.series} {selectedLoco?.number}</span>
             </div>
           </div>
           
           <div className="grid grid-cols-2 gap-4">
             <Button 
-              className="h-32 rounded-3xl text-4xl font-black bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100"
+              className="h-32 rounded-3xl text-4xl font-semibold bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100"
               onClick={() => handleIssue('K1')}
             >
               K1
             </Button>
             <Button 
-              className="h-32 rounded-3xl text-4xl font-black bg-slate-900 hover:bg-slate-800 shadow-xl shadow-slate-100 text-white"
+              className="h-32 rounded-3xl text-4xl font-semibold bg-slate-900 hover:bg-slate-800 shadow-xl shadow-slate-100 text-white"
               onClick={() => handleIssue('K2')}
             >
               K2
@@ -518,8 +516,8 @@ const GaugeTerminal = () => {
         <div className="space-y-6">
           <Header title="Куда возвращаем?" />
           <div className="p-6 bg-white rounded-3xl border border-slate-100 shadow-sm mb-6 text-center">
-            <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Снимаем прибор</p>
-            <p className="text-2xl font-black text-slate-900 mb-2">{selectedGauge?.serial_number}</p>
+            <p className="text-xs text-slate-400 uppercase font-semibold tracking-wider mb-1">Снимаем прибор</p>
+            <p className="text-2xl font-semibold text-slate-900 mb-2">{selectedGauge?.serial_number}</p>
             {selectedGauge?.locomotive && (
               <Badge variant="outline" className="bg-slate-50 border-slate-200 text-slate-500 py-1 px-3">
                 Был на {selectedGauge.locomotive.series} {selectedGauge.locomotive.number}
@@ -529,21 +527,21 @@ const GaugeTerminal = () => {
 
           <div className="space-y-4">
             <Button
-              className="w-full h-16 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 font-black text-lg justify-start px-6 shadow-sm active:bg-slate-50"
+              className="w-full h-16 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 font-semibold text-lg justify-start px-6 shadow-sm active:bg-slate-50"
               onClick={() => handleReturn('warehouse')}
             >
               <PackageCheck className="w-6 h-6 mr-4 text-emerald-500" />
               На склад (исправен)
             </Button>
             <Button
-              className="w-full h-16 rounded-2xl bg-white border-2 border-amber-200 text-slate-700 font-black text-lg justify-start px-6 shadow-sm active:bg-amber-50"
+              className="w-full h-16 rounded-2xl bg-white border-2 border-amber-200 text-slate-700 font-semibold text-lg justify-start px-6 shadow-sm active:bg-amber-50"
               onClick={() => handleReturn('verification')}
             >
               <AlertCircle className="w-6 h-6 mr-4 text-amber-500" />
               Отправить на поверку
             </Button>
             <Button
-              className="w-full h-16 rounded-2xl bg-white border-2 border-red-200 text-red-600 font-black text-lg justify-start px-6 shadow-sm active:bg-red-50"
+              className="w-full h-16 rounded-2xl bg-white border-2 border-red-200 text-red-600 font-semibold text-lg justify-start px-6 shadow-sm active:bg-red-50"
               onClick={() => handleReturn('decommission')}
             >
               <AlertTriangle className="w-6 h-6 mr-4 text-red-500" />
@@ -559,11 +557,11 @@ const GaugeTerminal = () => {
             <CheckCircle2 className="w-16 h-16" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-3xl font-black text-slate-900">Готово!</h2>
+            <h2 className="text-3xl font-semibold text-slate-900">Готово!</h2>
             <p className="text-slate-500 font-medium">Операция успешно завершена</p>
           </div>
           <Button 
-            className="h-16 px-10 rounded-2xl bg-slate-900 text-white font-black text-lg shadow-xl shadow-slate-200 mt-8"
+            className="h-16 px-10 rounded-2xl bg-slate-900 text-white font-semibold text-lg shadow-xl shadow-slate-200 mt-8"
             onClick={reset}
           >
             К следующему прибору

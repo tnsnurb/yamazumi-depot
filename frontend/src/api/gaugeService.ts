@@ -12,7 +12,11 @@ export interface Gauge {
   status: 'На складе' | 'На локомотиве' | 'На поверке' | 'Списан';
   locomotive_id: number | null;
   photo_url?: string;
+  certificate_url?: string;
   model_image_url?: string;
+  accuracy_class?: string;
+  pressure_range?: string;
+  thread_type?: string;
   installation_side?: 'K1' | 'K2' | null;
   locomotive?: {
     number: string;
@@ -52,6 +56,11 @@ export const gaugeService = {
     return apiClient.get(`/api/gauges/locomotive/${locomotiveId}/history`);
   },
 
+  // Получение истории конкретного манометра
+  getHistory: async (id: string): Promise<any[]> => {
+    return apiClient.get(`/api/gauges/${id}/history`);
+  },
+
   // Удаление
   delete: async (id: string): Promise<void> => {
     return apiClient.delete(`/api/gauges/${id}`);
@@ -60,5 +69,10 @@ export const gaugeService = {
   // Загрузка фото
   uploadPhoto: async (id: string, formData: FormData): Promise<Gauge> => {
     return apiClient.post(`/api/gauges/${id}/photo`, formData);
+  },
+
+  // Загрузка сертификата
+  uploadCertificate: async (id: string, formData: FormData): Promise<Gauge> => {
+    return apiClient.post(`/api/gauges/${id}/certificate`, formData);
   }
 };

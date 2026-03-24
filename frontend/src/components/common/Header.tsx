@@ -94,7 +94,7 @@ export function Header() {
                             </SelectTrigger>
                             <SelectContent>
                                 {user?.is_global_admin && (
-                                    <SelectItem value="all" className="font-bold text-indigo-400">Вся сеть</SelectItem>
+                                    <SelectItem value="all" className="font-bold text-blue-400">Вся сеть</SelectItem>
                                 )}
                                 {locations.map(loc => (
                                     <SelectItem key={loc.id} value={String(loc.id)}>{loc.name}</SelectItem>

@@ -36,7 +36,7 @@ export const TrackSlot = React.memo(({
         <div
             className={`relative w-32 h-16 border rounded-md flex items-center justify-center transition-colors
                 ${draggedId ? 'border-dashed border-2 border-slate-300 hover:border-slate-500 hover:bg-slate-50' : 'border-slate-200'}
-                ${!loco && !draggedId ? 'cursor-pointer hover:bg-indigo-50 hover:border-indigo-300 group' : ''}
+                ${!loco && !draggedId ? 'cursor-pointer hover:bg-blue-50 hover:border-blue-300 group' : ''}
                 ${!isInside(pos) ? 'bg-slate-100/50' : 'bg-white shadow-sm'}
             `}
             onDragOver={(e) => e.preventDefault()}
@@ -54,7 +54,7 @@ export const TrackSlot = React.memo(({
                     onClick={onLocoClick}
                 />
             ) : (
-                <Plus className="w-5 h-5 text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Plus className="w-5 h-5 text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity" />
             )}
         </div>
     );

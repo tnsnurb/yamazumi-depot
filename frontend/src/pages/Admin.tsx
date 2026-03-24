@@ -1003,7 +1003,7 @@ export default function Admin() {
             <main className="flex-1 w-full p-3 md:p-6 flex flex-col items-center">
                 <div className="w-full max-w-6xl space-y-4 md:space-y-6">
                     <div className="flex justify-between items-center">
-                        <h1 className="text-xl md:text-2xl font-bold text-slate-900 border-b-2 border-indigo-500 pb-1 pr-4 inline-block">
+                        <h1 className="text-xl md:text-2xl font-bold text-slate-900">
                             Панель администратора
                         </h1>
                     </div>
@@ -1028,7 +1028,7 @@ export default function Admin() {
                                 <div className="relative flex-1 group">
                                     <Search className={cn(
                                         "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
-                                        usersSearch ? "text-indigo-500" : "text-slate-400"
+                                        usersSearch ? "text-blue-500" : "text-slate-400"
                                     )} />
                                     <FloatingInput
                                         label="Поиск по логину или ФИО..."
@@ -1042,7 +1042,7 @@ export default function Admin() {
                                     <Button variant="outline" onClick={exportUsersToExcel} className="gap-2 h-9 flex-1 sm:flex-none">
                                         <FileDown className="w-4 h-4" /> <span className="hidden xs:inline">Экспорт</span>
                                     </Button>
-                                    <Button onClick={() => setIsAddUserOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 h-9 gap-2 flex-1 sm:flex-none">
+                                    <Button onClick={() => setIsAddUserOpen(true)} className="bg-blue-600 hover:bg-blue-700 h-9 gap-2 flex-1 sm:flex-none">
                                         <Plus className="w-4 h-4" /> <span className="hidden xs:inline">Добавить сотрудника</span><span className="xs:inline sm:hidden lg:inline">Добавить</span><span className="hidden lg:hidden">Добавить</span>
                                     </Button>
                                 </div>
@@ -1090,7 +1090,7 @@ export default function Admin() {
                                                         <TableCell className="font-medium text-slate-900 text-sm px-2 md:px-4 whitespace-nowrap">{u.username}</TableCell>
                                                         <TableCell className="text-slate-600 text-sm px-2 md:px-4 whitespace-nowrap">{u.full_name || '—'}</TableCell>
                                                         <TableCell className="px-2 md:px-4">
-                                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] md:text-xs font-medium border ${u.role === 'admin' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] md:text-xs font-medium border ${u.role === 'admin' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                                                                 {roles.find(r => r.name === u.role)?.description || u.role}
                                                             </span>
                                                             {u.specialization && (
@@ -1102,7 +1102,7 @@ export default function Admin() {
                                                         <TableCell className="font-mono text-[10px] md:text-xs text-slate-500 px-2 md:px-4">{u.barcode || '—'}</TableCell>
                                                         <TableCell className="text-slate-500 text-xs px-2 md:px-4 whitespace-nowrap">{new Date(u.created_at).toLocaleDateString('ru-RU')}</TableCell>
                                                         <TableCell className="text-right px-2 md:px-4 space-x-1 sticky right-0 bg-white/95 backdrop-blur-sm shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50/95">
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50" onClick={() => openEditUserDialog(u)} title="Настройки">
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50" onClick={() => openEditUserDialog(u)} title="Настройки">
                                                                 <Edit className="w-3.5 h-3.5" />
                                                             </Button>
                                                             {u.is_active !== false ? (
@@ -1138,7 +1138,7 @@ export default function Admin() {
                         <TabsContent value="roles" className="space-y-4 outline-none">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3 md:p-4 rounded-xl shadow-sm border border-slate-200">
                                 <div><h2 className="text-lg font-semibold text-slate-900">Справочник ролей</h2></div>
-                                <Button onClick={() => setIsAddRoleOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 gap-2 w-full sm:w-auto h-9 text-xs md:text-sm"><Plus className="w-4 h-4" /> Добавить роль</Button>
+                                <Button onClick={() => setIsAddRoleOpen(true)} className="bg-blue-600 hover:bg-blue-700 gap-2 w-full sm:w-auto h-9 text-xs md:text-sm"><Plus className="w-4 h-4" /> Добавить роль</Button>
                             </div>
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                                 <div className="overflow-x-auto scrollbar-thin">
@@ -1151,7 +1151,7 @@ export default function Admin() {
                                                     <TableCell className="font-medium text-slate-900 text-sm px-2 md:px-4">{r.name}</TableCell>
                                                     <TableCell className="text-slate-600 text-xs md:text-sm px-2 md:px-4">{r.description || '—'}</TableCell>
                                                     <TableCell className="text-right space-x-1 px-2 md:px-4 whitespace-nowrap">
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditRoleData(r); setEditRoleName(r.name); setEditRoleDescription(r.description); setEditRolePermissions(r as any); setIsEditRoleOpen(true) }} disabled={r.name === 'admin'}><Edit className="w-3.5 h-3.5 text-indigo-500" /></Button>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditRoleData(r); setEditRoleName(r.name); setEditRoleDescription(r.description); setEditRolePermissions(r as any); setIsEditRoleOpen(true) }} disabled={r.name === 'admin'}><Edit className="w-3.5 h-3.5 text-blue-500" /></Button>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteRole(r.id, r.name)} disabled={r.name === 'admin' || r.name === 'employee'}><Trash2 className="w-3.5 h-3.5 text-rose-500" /></Button>
                                                     </TableCell>
                                                 </TableRow>
@@ -1168,7 +1168,7 @@ export default function Admin() {
                                 <div className="w-full sm:flex-1 sm:max-w-xs relative group">
                                     <Search className={cn(
                                         "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
-                                        catalogSearch ? "text-indigo-500" : "text-slate-400"
+                                        catalogSearch ? "text-blue-500" : "text-slate-400"
                                     )} />
                                     <FloatingInput
                                         label="Поиск в каталоге..."
@@ -1180,14 +1180,14 @@ export default function Admin() {
                                 </div>
                                 <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:ml-auto">
                                     <label className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-md cursor-pointer hover:bg-slate-50 transition-colors text-xs font-medium h-9 flex-1 sm:flex-none justify-center">
-                                        {isUploading ? <Loader2 className="w-4 h-4 animate-spin text-indigo-600" /> : <Upload className="w-4 h-4 text-slate-500" />}
+                                        {isUploading ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <Upload className="w-4 h-4 text-slate-500" />}
                                         <span className="hidden xs:inline">Массовая загрузка</span><span className="xs:hidden">Импорт</span>
                                         <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
                                     </label>
                                     <Button variant="outline" onClick={downloadTemplate} className="gap-2 h-9 text-xs flex-1 sm:flex-none">
                                         <FileDown className="w-4 h-4" /> <span className="hidden xs:inline">Шаблон</span>
                                     </Button>
-                                    <Button onClick={() => setIsAddLocoOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 gap-2 h-9 text-xs flex-1 sm:flex-none">
+                                    <Button onClick={() => setIsAddLocoOpen(true)} className="bg-blue-600 hover:bg-blue-700 gap-2 h-9 text-xs flex-1 sm:flex-none">
                                         <Plus className="w-4 h-4" /> <span className="hidden xs:inline">Добавить 1 шт.</span><span className="xs:hidden">Добавить</span>
                                     </Button>
                                 </div>
@@ -1226,7 +1226,7 @@ export default function Admin() {
                                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50" onClick={() => setQrLoco({ id: item.id, series: item.series, number: item.number })} title="QR Код">
                                                                 <QrCode className="w-3.5 h-3.5" />
                                                             </Button>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50" onClick={() => { setEditLocoId(item.id); setEditLocoSeries(item.series || ""); setEditLocoNumber(item.number); setIsEditLocoOpen(true); }}><Edit className="w-3.5 h-3.5" /></Button>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50" onClick={() => { setEditLocoId(item.id); setEditLocoSeries(item.series || ""); setEditLocoNumber(item.number); setIsEditLocoOpen(true); }}><Edit className="w-3.5 h-3.5" /></Button>
                                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => handleDeleteLoco(item.id, item.series || "", item.number)}><Trash2 className="w-3.5 h-3.5" /></Button>
                                                         </TableCell>
                                                     </TableRow>
@@ -1251,7 +1251,7 @@ export default function Admin() {
                         <TabsContent value="repairTypes" className="space-y-4 outline-none">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3 md:p-4 rounded-xl shadow-sm border border-slate-200">
                                 <div><h2 className="text-lg font-semibold">Типы ремонта</h2></div>
-                                <Button onClick={() => setIsAddRepairTypeOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 gap-2 h-9 text-xs md:text-sm w-full sm:w-auto"><Plus className="w-4 h-4" /> Добавить</Button>
+                                <Button onClick={() => setIsAddRepairTypeOpen(true)} className="bg-blue-600 hover:bg-blue-700 gap-2 h-9 text-xs md:text-sm w-full sm:w-auto"><Plus className="w-4 h-4" /> Добавить</Button>
                             </div>
                             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                                 <div className="overflow-x-auto scrollbar-thin">
@@ -1274,8 +1274,8 @@ export default function Admin() {
                         {/* LOCATIONS TAB */}
                         <TabsContent value="locations" className="space-y-4 outline-none">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3 md:p-4 rounded-xl shadow-sm border border-slate-200">
-                                <div><h2 className="text-lg font-semibold">Список Депо</h2></div>
-                                <Button onClick={() => setIsAddLocationOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 gap-2 h-9 text-xs md:text-sm w-full sm:w-auto"><Plus className="w-4 h-4" /> Добавить депо</Button>
+                                <div><h2 className="text-lg font-semibold">Список депо</h2></div>
+                                <Button onClick={() => setIsAddLocationOpen(true)} className="bg-blue-600 hover:bg-blue-700 gap-2 h-9 text-xs md:text-sm w-full sm:w-auto"><Plus className="w-4 h-4" /> Добавить депо</Button>
                             </div>
                             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                                 <div className="overflow-x-auto scrollbar-thin">
@@ -1300,7 +1300,7 @@ export default function Admin() {
                                                             setEditLocationGatePosition(loc.gate_position?.toString() || "");
                                                             setEditLocationTrackConfig(loc.track_config || "");
                                                             setIsEditLocationOpen(true);
-                                                        }}><Edit className="w-3.5 h-3.5 text-indigo-500" /></Button>
+                                                        }}><Edit className="w-3.5 h-3.5 text-blue-500" /></Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -1316,7 +1316,7 @@ export default function Admin() {
                                 <div className="w-full sm:flex-1 sm:max-w-xs relative group">
                                     <Search className={cn(
                                         "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-20",
-                                        templateSearch ? "text-indigo-500" : "text-slate-400"
+                                        templateSearch ? "text-blue-500" : "text-slate-400"
                                     )} />
                                     <FloatingInput
                                         label="Поиск в шаблонах..."
@@ -1338,7 +1338,7 @@ export default function Admin() {
                                         <span className="hidden xs:inline">Импорт</span>
                                         <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleTemplateFileUpload} />
                                     </label>
-                                    <Button onClick={() => setIsAddTemplateOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 gap-2 h-9 text-xs flex-1 sm:flex-none">
+                                    <Button onClick={() => setIsAddTemplateOpen(true)} className="bg-blue-600 hover:bg-blue-700 gap-2 h-9 text-xs flex-1 sm:flex-none">
                                         <Plus className="w-4 h-4" /> <span className="hidden xs:inline">Добавить шаблон</span><span className="xs:hidden">Добавить</span>
                                     </Button>
                                 </div>
@@ -1374,7 +1374,7 @@ export default function Admin() {
                                                             <TableCell className="font-medium text-slate-900 text-sm px-2 md:px-4">{t.text}</TableCell>
                                                             <TableCell className="px-2 md:px-4">
                                                                 {t.specialization && (
-                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] md:text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] md:text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
                                                                         {t.specialization}
                                                                     </span>
                                                                 )}
@@ -1390,7 +1390,7 @@ export default function Admin() {
                                                             <TableCell className="text-slate-600 text-xs px-2 md:px-4">{t.category || '—'}</TableCell>
                                                             <TableCell className="text-center text-slate-500 text-xs px-2 md:px-4">{t.usage_count}</TableCell>
                                                             <TableCell className="text-right px-2 md:px-4 space-x-1 sticky right-0 bg-white/95 backdrop-blur-sm">
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500 hover:text-indigo-600" onClick={() => {
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" onClick={() => {
                                                                     setEditTemplateData(t);
                                                                     setEditTemplateText(t.text);
                                                                     setEditTemplateSpecialization(t.specialization || "none");
@@ -1788,7 +1788,7 @@ export default function Admin() {
                             <Label className="font-bold flex items-center gap-2"><ShieldAlert className="w-4 h-4" /> Права доступа</Label>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-lg border border-slate-200 shadow-inner">
                                 {PERMISSIONS.map(p => (
-                                    <div key={`edit-${p.key}`} className={`flex items-start space-x-3 p-3 bg-white border rounded shadow-sm transition-colors ${editRoleData?.name === 'admin' ? 'opacity-50 grayscale' : 'hover:border-indigo-300'}`}>
+                                    <div key={`edit-${p.key}`} className={`flex items-start space-x-3 p-3 bg-white border rounded shadow-sm transition-colors ${editRoleData?.name === 'admin' ? 'opacity-50 grayscale' : 'hover:border-blue-300'}`}>
                                         <Checkbox
                                             id={`edit-perm-${p.key}`}
                                             checked={(editRolePermissions as any)[p.key]}
@@ -1834,7 +1834,7 @@ export default function Admin() {
                                 <Warehouse className="w-4 h-4" /> Настройка слотов (Депо vs Улица)
                             </Label>
                             <p className="text-xs text-slate-500">
-                                Нажмите на номер слота, чтобы пометить его как <strong className="text-indigo-600">Депо</strong> (белый фон).
+                                Нажмите на номер слота, чтобы пометить его как <strong className="text-blue-600">Депо</strong> (белый фон).
                                 Остальные будут считаться <strong className="text-slate-400">Улицей</strong> (серый фон).
                             </p>
                             <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -1847,7 +1847,7 @@ export default function Admin() {
                                             type="button"
                                             size="sm"
                                             variant={isInside ? "default" : "outline"}
-                                            className={`w-10 h-10 p-0 font-bold transition-all ${isInside ? 'bg-indigo-600 shadow-md ring-2 ring-indigo-200' : 'bg-white text-slate-400 border-dashed hover:border-indigo-400 hover:text-indigo-500'}`}
+                                            className={`w-10 h-10 p-0 font-bold transition-all ${isInside ? 'bg-blue-600 shadow-md ring-2 ring-blue-200' : 'bg-white text-slate-400 border-dashed hover:border-blue-400 hover:text-blue-500'}`}
                                             onClick={() => {
                                                 const current = addLocationGatePosition ? addLocationGatePosition.split(',') : [];
                                                 const next = isInside
@@ -1920,7 +1920,7 @@ export default function Admin() {
                                 <Warehouse className="w-4 h-4" /> Настройка слотов (Депо vs Улица)
                             </Label>
                             <p className="text-xs text-slate-500">
-                                Нажмите на номер слота, чтобы пометить его как <strong className="text-indigo-600">Депо</strong> (белый фон).
+                                Нажмите на номер слота, чтобы пометить его как <strong className="text-blue-600">Депо</strong> (белый фон).
                                 Остальные будут считаться <strong className="text-slate-400">Улицей</strong> (серый фон).
                             </p>
                             <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -1933,7 +1933,7 @@ export default function Admin() {
                                             type="button"
                                             size="sm"
                                             variant={isInside ? "default" : "outline"}
-                                            className={`w-10 h-10 p-0 font-bold transition-all ${isInside ? 'bg-indigo-600 shadow-md ring-2 ring-indigo-200' : 'bg-white text-slate-400 border-dashed hover:border-indigo-400 hover:text-indigo-500'}`}
+                                            className={`w-10 h-10 p-0 font-bold transition-all ${isInside ? 'bg-blue-600 shadow-md ring-2 ring-blue-200' : 'bg-white text-slate-400 border-dashed hover:border-blue-400 hover:text-blue-500'}`}
                                             onClick={() => {
                                                 const current = editLocationGatePosition ? editLocationGatePosition.split(',') : [];
                                                 const next = isInside

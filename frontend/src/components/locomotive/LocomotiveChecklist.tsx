@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/hooks/useAuth"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LayoutGrid, FilterX } from "lucide-react"
+import imageCompression from 'browser-image-compression'
 
 
 interface ChecklistInstance {
@@ -173,8 +174,16 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
         if (!file) return
         try {
             setUploadingPhoto(true)
+            const options = {
+                maxSizeMB: 0.5,
+                maxWidthOrHeight: 1280,
+                useWebWorker: true,
+                initialQuality: 0.8
+            }
+            const compressedFile = await imageCompression(file, options)
+            
             const formData = new FormData()
-            formData.append('photo', file)
+            formData.append('photo', compressedFile, compressedFile.name)
             const token = localStorage.getItem('access_token')
             const res = await fetch(`/api/checklists/items/${itemId}/photos`, {
                 method: "POST",
@@ -473,11 +482,11 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
             {!hideHeader && (
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-center gap-3">
-                        <div className="bg-indigo-100 p-2 rounded-lg">
-                            <BookOpen className="w-5 h-5 text-indigo-600" />
+                        <div className="bg-blue-100 p-2 rounded-lg">
+                            <BookOpen className="w-5 h-5 text-blue-600" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-slate-900">{instance.template.name}</h2>
+                            <h2 className="text-xl font-semibold text-slate-900">{instance.template.name}</h2>
                             <div className="flex gap-2 mt-1">
                                 <Badge variant={instance.status === 'completed' ? 'default' : 'secondary'} className={instance.status === 'completed' ? 'bg-green-100 text-green-700 hover:bg-green-200' : ''}>
                                     {instance.status === 'completed' ? 'Завершен' : 'В процессе'}
@@ -495,7 +504,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                         {!readOnly && remainingItems > 0 && instance.status !== 'completed' && (
                             <Button 
                                 size="sm" 
-                                className="bg-emerald-600 hover:bg-emerald-700 h-9 font-bold"
+                                className="bg-emerald-600 hover:bg-emerald-700 h-9 font-semibold"
                                 onClick={() => {
                                     const available = items.filter(i => !i.is_completed && !i.verified_at).map(i => i.id);
                                     if (confirm(`Отметить все оставшиеся пункты (${available.length}) как выполненные?`)) {
@@ -520,20 +529,20 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 md:p-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 mb-6">
                     <div className="space-y-1">
-                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Всего пунктов</span>
-                        <div className="text-xl md:text-2xl font-black text-slate-900">{totalItems}</div>
+                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-semibold tracking-wider">Всего пунктов</span>
+                        <div className="text-xl md:text-2xl font-semibold text-slate-900">{totalItems}</div>
                     </div>
                     <div className="space-y-1">
-                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Выполнено</span>
-                        <div className="text-xl md:text-2xl font-black text-emerald-600">{completedItems}</div>
+                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-semibold tracking-wider">Выполнено</span>
+                        <div className="text-xl md:text-2xl font-semibold text-emerald-600">{completedItems}</div>
                     </div>
                     <div className="space-y-1">
-                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Осталось</span>
-                        <div className="text-xl md:text-2xl font-black text-amber-600">{remainingItems}</div>
+                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-semibold tracking-wider">Осталось</span>
+                        <div className="text-xl md:text-2xl font-semibold text-amber-600">{remainingItems}</div>
                     </div>
                     <div className="space-y-1">
-                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-wider">Прогресс</span>
-                        <div className="text-xl md:text-2xl font-black text-indigo-600">{progressPercent}%</div>
+                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-semibold tracking-wider">Прогресс</span>
+                        <div className="text-xl md:text-2xl font-semibold text-blue-600">{progressPercent}%</div>
                     </div>
                 </div>
 
@@ -552,7 +561,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                             .map(([name, count]) => (
                                 <span key={name} className="inline-flex items-center gap-1.5 text-[10px] md:text-xs bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-100">
                                     <span className="font-semibold">{name}</span>
-                                    <span className="bg-white text-slate-900 rounded-md px-1.5 text-[9px] md:text-[10px] font-black border border-slate-200">{count}</span>
+                                    <span className="bg-white text-slate-900 rounded-md px-1.5 text-[9px] md:text-[10px] font-semibold border border-slate-200">{count}</span>
                                 </span>
                             ))}
                     </div>
@@ -566,7 +575,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                         <LayoutGrid className="w-4 h-4 text-slate-500" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-bold text-slate-700">Фильтры задач</h3>
+                        <h3 className="text-sm font-semibold text-slate-700">Фильтры задач</h3>
                         <p className="text-[10px] text-slate-400 font-medium">Выберите раздел или статус</p>
                     </div>
                 </div>
@@ -591,7 +600,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                         <SelectContent>
                             <SelectItem value="all" className="text-xs font-semibold">Все пункты</SelectItem>
                             <SelectItem value="not_completed" className="text-xs font-semibold text-amber-600">Не выполнено (Слесарю)</SelectItem>
-                            <SelectItem value="for_review" className="text-xs font-semibold text-indigo-600">На проверку (Мастеру)</SelectItem>
+                            <SelectItem value="for_review" className="text-xs font-semibold text-blue-600">На проверку (Мастеру)</SelectItem>
                         </SelectContent>
                     </Select>
 
@@ -639,12 +648,12 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                     <div className="flex items-center gap-2">
                                         <div className={cn(
                                             "w-6 h-6 rounded-md flex items-center justify-center transition-all",
-                                            isExpanded ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-400"
+                                            isExpanded ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-400"
                                         )}>
                                             {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                         </div>
-                                        <h3 className="font-bold text-slate-800 tracking-tight">{group}</h3>
-                                        <span className="text-xs font-bold text-slate-300 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
+                                        <h3 className="font-semibold text-slate-800 tracking-tight">{group}</h3>
+                                        <span className="text-xs font-semibold text-slate-300 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
                                             {groupItems.length}
                                         </span>
                                     </div>
@@ -653,7 +662,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                             <Button 
                                                 variant="ghost" 
                                                 size="sm" 
-                                                className="h-7 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
+                                                className="h-7 text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     const available = groupItems.filter(i => !i.is_completed && !i.verified_at).map(i => i.id);
@@ -670,7 +679,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                 style={{ width: `${(groupCompleted / groupItems.length) * 100}%` }}
                                             />
                                         </div>
-                                        <span className="text-xs font-black text-slate-400">
+                                        <span className="text-xs font-semibold text-slate-400">
                                             {groupCompleted} / {groupItems.length}
                                         </span>
                                     </div>
@@ -685,7 +694,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                     variant="outline"
                                                     className={cn(
                                                         "bg-white border-slate-200 shadow-sm rounded-xl overflow-hidden p-3 md:p-4 min-h-0 flex-col items-stretch transition-all",
-                                                        item.verified_at ? "opacity-60" : item.is_completed ? "border-amber-200/50 shadow-sm" : "hover:border-indigo-200"
+                                                        item.verified_at ? "opacity-60" : item.is_completed ? "border-amber-200/50 shadow-sm" : "hover:border-blue-200"
                                                     )}
                                                 >
                                                     <div className={cn("flex flex-col md:flex-row md:items-center gap-4 flex-1", isCompact && "md:gap-2")}>
@@ -693,7 +702,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                             <div className="flex items-start justify-between gap-2">
                                                                 <ItemTitle className={cn(
                                                                     isCompact ? "text-sm" : "text-base",
-                                                                    "whitespace-normal leading-snug cursor-pointer hover:text-indigo-600 transition-colors",
+                                                                    "whitespace-normal leading-snug cursor-pointer hover:text-blue-600 transition-colors",
                                                                     item.verified_at ? "text-slate-400 line-through font-normal" :
                                                                         item.is_completed ? "text-slate-700 font-medium" :
                                                                             "text-slate-900 font-semibold"
@@ -706,7 +715,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                         size="sm"
                                                                         className={cn(
                                                                             "h-7 w-7 p-0 shrink-0",
-                                                                            expandedItems[item.id] ? "text-indigo-600 bg-indigo-50" : "text-slate-400"
+                                                                            expandedItems[item.id] ? "text-blue-600 bg-blue-50" : "text-slate-400"
                                                                         )}
                                                                         onClick={() => toggleItemDetails(item.id)}
                                                                     >
@@ -717,13 +726,13 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
 
                                                             <div className={cn("flex flex-wrap items-center gap-2", isCompact ? "mt-1" : "mt-2")}>
                                                                 {item.template_item?.executor_role && (
-                                                                    <div className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                                                    <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
                                                                         <LucideUser className="w-3 h-3" />
                                                                         {item.template_item.executor_role}
                                                                     </div>
                                                                 )}
                                                                 {item.template_item?.controller_role && (
-                                                                    <div className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-400 bg-indigo-50/50 px-2 py-0.5 rounded border border-indigo-100">
+                                                                    <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-400 bg-blue-50/50 px-2 py-0.5 rounded border border-blue-100">
                                                                         <ShieldCheck className="w-3 h-3" />
                                                                         {item.template_item.controller_role}
                                                                     </div>
@@ -731,7 +740,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                 {item.is_completed && item.completed_by_user && (
                                                                     <div
                                                                         className={cn(
-                                                                            "text-[11px] font-bold flex items-center gap-1 px-2 py-0.5 rounded border shadow-sm transition-all",
+                                                                            "text-[11px] font-semibold flex items-center gap-1 px-2 py-0.5 rounded border shadow-sm transition-all",
                                                                             item.verified_at
                                                                                 ? "text-emerald-700 bg-emerald-50/50 border-emerald-100"
                                                                                 : "text-amber-700 bg-amber-50/50 border-amber-200"
@@ -751,10 +760,10 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                     </div>
                                                                 )}
                                                                 {item.verified_at && item.verified_by_user && (
-                                                                    <div className="text-[11px] text-indigo-600 font-bold flex items-center gap-1 bg-indigo-100/50 px-2 py-0.5 rounded border border-indigo-200" title="Дата проверки">
+                                                                    <div className="text-[11px] text-blue-600 font-semibold flex items-center gap-1 bg-blue-100/50 px-2 py-0.5 rounded border border-blue-200" title="Дата проверки">
                                                                         <ShieldCheck className="w-3 h-3" />
                                                                         {item.verified_by_user.full_name}
-                                                                        <span className="text-indigo-400 font-medium ml-1">
+                                                                        <span className="text-blue-400 font-medium ml-1">
                                                                             {item.verified_at ? new Date(item.verified_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''}
                                                                         </span>
                                                                     </div>
@@ -766,7 +775,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                     <Button
                                                                         size="sm"
                                                                         onClick={() => handleVerifyItem(item.id, true)}
-                                                                        className="bg-indigo-600 hover:bg-indigo-700 h-8 px-4 text-xs font-bold"
+                                                                        className="bg-blue-600 hover:bg-blue-700 h-8 px-4 text-xs font-semibold"
                                                                     >
                                                                         ✓ Принять
                                                                     </Button>
@@ -777,7 +786,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                             setRejectItemId(item.id)
                                                                             setRejectComment("")
                                                                         }}
-                                                                        className="border-red-200 text-red-600 hover:bg-red-50 h-8 px-4 text-xs font-bold"
+                                                                        className="border-red-200 text-red-600 hover:bg-red-50 h-8 px-4 text-xs font-semibold"
                                                                     >
                                                                         Вернуть
                                                                     </Button>
@@ -834,7 +843,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                         <Button
                                                                             onClick={() => handleCompleteItem(item.id, true)}
                                                                             disabled={itemLoading[item.id]}
-                                                                            className={cn("gap-2 bg-emerald-600 hover:bg-emerald-700 font-bold shadow-sm w-full md:w-auto", isCompact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm")}
+                                                                            className={cn("gap-2 bg-emerald-600 hover:bg-emerald-700 font-semibold shadow-sm w-full md:w-auto", isCompact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm")}
                                                                         >
                                                                             {itemLoading[item.id] ? (
                                                                                 <Loader2 className={cn("animate-spin", isCompact ? "w-3.5 h-3.5" : "w-4 h-4")} />
@@ -867,7 +876,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                     {/* Expanded Full Description */}
                                                     {item.template_item?.full_description && expandedItems[item.id] && (
                                                         <div className="mt-3 text-sm text-slate-500 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100 animate-in fade-in slide-in-from-top-1 duration-200">
-                                                            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
+                                                            <div className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
                                                                 <Info className="w-3 h-3" /> Инструкция
                                                             </div>
                                                             {item.template_item.full_description}
@@ -881,7 +890,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                         <div className="bg-slate-50 rounded-b-xl border border-t-0 p-3 md:p-4 shadow-inner">
                                                             {activeDetailTab === 'comments' && (
                                                                 <div className="space-y-3">
-                                                                    <div className="flex items-center gap-2 mb-2 text-xs font-bold text-slate-400 uppercase tracking-tight">
+                                                                    <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-tight">
                                                                         <MessageSquare className="w-3 h-3" /> Комментарии
                                                                     </div>
                                                                     {loadingDetails[item.id] ? (
@@ -890,12 +899,12 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                         <div className="space-y-3 max-h-48 overflow-y-auto pr-2 scrollbar-thin">
                                                                             {comments[item.id].map((c: any) => (
                                                                                 <div key={c.id} className="flex gap-2">
-                                                                                    <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                                                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-semibold shrink-0">
                                                                                         {(c.user_id?.full_name || '?')[0]}
                                                                                     </div>
                                                                                     <div className="flex-1 min-w-0">
                                                                                         <div className="flex items-baseline gap-2">
-                                                                                            <span className="text-xs font-bold text-slate-700">{c.user_id?.full_name}</span>
+                                                                                            <span className="text-xs font-semibold text-slate-700">{c.user_id?.full_name}</span>
                                                                                             <span className="text-[9px] text-slate-400">
                                                                                                 {new Date(c.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                                                                             </span>
@@ -915,7 +924,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                                 value={commentText}
                                                                                 onChange={e => setCommentText(e.target.value)}
                                                                                 placeholder="Добавить комментарий..."
-                                                                                className="flex-1 text-xs bg-white border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                className="flex-1 text-xs bg-white border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                                                 onKeyDown={e => e.key === 'Enter' && submitComment(item.id)}
                                                                             />
                                                                             <Button size="sm" onClick={() => submitComment(item.id)} disabled={!commentText.trim()}>
@@ -929,7 +938,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                             {activeDetailTab === 'photos' && (
                                                                 <div className="space-y-3">
                                                                     <div className="flex justify-between items-center mb-2">
-                                                                        <div className="text-xs font-bold text-slate-400 uppercase tracking-tight flex items-center gap-2">
+                                                                        <div className="text-xs font-semibold text-slate-400 uppercase tracking-tight flex items-center gap-2">
                                                                             <Camera className="w-3 h-3" /> Фотографии
                                                                         </div>
                                                                         {!readOnly && (
@@ -969,7 +978,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
 
                                                             {activeDetailTab === 'history' && (
                                                                 <div className="space-y-2">
-                                                                    <div className="text-xs font-bold text-slate-400 uppercase tracking-tight mb-2 flex items-center gap-2">
+                                                                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-tight mb-2 flex items-center gap-2">
                                                                         <History className="w-3 h-3" /> История изменений
                                                                     </div>
                                                                     {loadingDetails[item.id] ? (
@@ -982,7 +991,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                                         {new Date(h.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                                                                     </span>
                                                                                     <div className="min-w-0">
-                                                                                        <span className="font-bold text-slate-700">{h.user_id?.full_name || 'Система'}: </span>
+                                                                                        <span className="font-semibold text-slate-700">{h.user_id?.full_name || 'Система'}: </span>
                                                                                         <span className="text-slate-600">{h.details}</span>
                                                                                     </div>
                                                                                 </div>
