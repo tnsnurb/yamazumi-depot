@@ -239,110 +239,70 @@ export default function Login() {
                             <Form {...form}>
                                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
 
-                                    {/* User dropdown */}
-                                    <div className="space-y-2">
-                                        <div className="relative" ref={dropdownRef}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setDropdownOpen(!dropdownOpen)}
-                                                className={`w-full flex items-center gap-3 px-4 py-3 h-[52px] rounded-xl border text-left transition-all relative group ${dropdownOpen
-                                                    ? "border-blue-500 ring-2 ring-blue-500/20 bg-white"
-                                                    : "border-slate-200 bg-white hover:border-slate-300"
-                                                    }`}
-                                            >
-                                                {/* Floating Label for Dropdown */}
-                                                <span className={cn(
-                                                    "absolute left-3 transition-all duration-200 pointer-events-none bg-white px-2 z-10",
-                                                    (selectedUser || dropdownOpen)
-                                                        ? "-top-2.5 text-xs text-blue-600 font-medium scale-90"
-                                                        : "top-[14px] text-base text-slate-400 scale-100"
-                                                )}>
-                                                    Выберите пользователя
-                                                </span>
-
+                                    {/* User selection with FloatingInput */}
+                                    <div className="space-y-2 relative" ref={dropdownRef}>
+                                        <div className="relative">
+                                            <FloatingInput
+                                                label="Выберите пользователя"
+                                                value={selectedUser ? selectedUser.full_name : searchQuery}
+                                                onChange={(e) => {
+                                                    setSearchQuery(e.target.value)
+                                                    if (selectedUser) setSelectedUser(null)
+                                                    setDropdownOpen(true)
+                                                }}
+                                                onFocus={() => setDropdownOpen(true)}
+                                                className="pr-12 h-[52px] rounded-xl text-lg px-4"
+                                                containerClassName="mt-0"
+                                            />
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                                                 {selectedUser ? (
-                                                    <>
-                                                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden">
-                                                            {selectedUser.avatar_url ? (
-                                                                <img src={selectedUser.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-                                                            ) : (
-                                                                <User className="w-4 h-4 text-slate-500" />
-                                                            )}
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="font-medium text-slate-900 text-sm truncate">{selectedUser.full_name}</div>
-                                                            <div className="text-xs text-blue-600 font-medium truncate">{selectedUser.email}</div>
-                                                        </div>
-                                                        <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                                                    </>
+                                                    <CheckCircle2 className="w-5 h-5 text-blue-500" />
                                                 ) : (
-                                                    <>
-                                                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                                                            <User className="w-4 h-4 text-slate-400" />
-                                                        </div>
-                                                        <span className="text-transparent text-sm flex-1">Выберите пользователя...</span>
-                                                        <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
-                                                    </>
+                                                    <User className="w-5 h-5 text-slate-400" />
                                                 )}
-                                                {selectedUser && (
-                                                    <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
-                                                )}
-                                            </button>
-
-                                            {dropdownOpen && (
-                                                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                                                    {/* Search */}
-                                                    <div className="p-2 border-b border-slate-100">
-                                                        <input
-                                                            autoFocus
-                                                            type="text"
-                                                            placeholder="Поиск..."
-                                                            value={searchQuery}
-                                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                                            className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all placeholder-slate-400"
-                                                        />
-                                                    </div>
-
-                                                    {/* User list */}
-                                                    <div className="max-h-56 overflow-y-auto">
-                                                        {filteredUsers.length > 0 ? (
-                                                            filteredUsers.map((u) => (
-                                                                <button
-                                                                    key={u.username}
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setSelectedUser(u)
-                                                                        setDropdownOpen(false)
-                                                                        setSearchQuery("")
-                                                                    }}
-                                                                    className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 transition-colors text-left ${selectedUser?.username === u.username ? "bg-blue-50" : ""
-                                                                        }`}
-                                                                >
-                                                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden">
-                                                                        {u.avatar_url ? (
-                                                                            <img src={u.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-                                                                        ) : (
-                                                                            <User className="w-4 h-4 text-slate-500" />
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="font-medium text-slate-900 text-sm truncate">{u.full_name}</div>
-                                                                        <div className="text-xs text-blue-600 font-medium truncate">{u.email}</div>
-                                                                    </div>
-                                                                    {selectedUser?.username === u.username && (
-                                                                        <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                                                                    )}
-                                                                </button>
-                                                            ))
-                                                        ) : (
-                                                            <div className="py-6 text-center text-sm text-slate-400">
-                                                                {publicUsers.length === 0 ? "Загрузка..." : "Ничего не найдено"}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
+                                            </div>
                                         </div>
+
+                                        {dropdownOpen && (
+                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                                <div className="max-h-60 overflow-y-auto py-1">
+                                                    {filteredUsers.length > 0 ? (
+                                                        filteredUsers.map((u) => (
+                                                            <button
+                                                                key={u.username}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setSelectedUser(u)
+                                                                    setDropdownOpen(false)
+                                                                    setSearchQuery("")
+                                                                }}
+                                                                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors text-left ${selectedUser?.username === u.username ? "bg-blue-50" : ""
+                                                                    }`}
+                                                            >
+                                                                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
+                                                                    {u.avatar_url ? (
+                                                                        <img src={u.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <User className="w-5 h-5 text-slate-400" />
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="font-medium text-slate-900 text-sm truncate">{u.full_name}</div>
+                                                                    <div className="text-xs text-blue-600 font-medium truncate">{u.email}</div>
+                                                                </div>
+                                                                {selectedUser?.username === u.username && (
+                                                                    <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
+                                                                )}
+                                                            </button>
+                                                        ))
+                                                    ) : (
+                                                        <div className="py-8 text-center text-sm text-slate-400">
+                                                            {publicUsers.length === 0 ? "Загрузка..." : "Ничего не найдено"}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Password field */}
