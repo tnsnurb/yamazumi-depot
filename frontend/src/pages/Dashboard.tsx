@@ -9,8 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useAuth } from "@/hooks/useAuth"
 
-import { RecentActivity } from "@/components/dashboard/recent-activity"
-import { WeatherStatus } from "@/components/dashboard/weather-status"
+// removed WeatherStatus and RecentActivity imports
 
 interface DashboardData {
     totalLocomotives: number
@@ -78,15 +77,10 @@ export default function Dashboard() {
                         <SectionCards data={data} />
 
                         {/* Section 2: Bento Grid */}
-                        <div className="grid grid-cols-1 lg:grid-cols-12 auto-rows-[200px] gap-6 px-4 lg:px-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 auto-rows-[220px] gap-6 px-4 lg:px-6">
                             
-                            {/* Weather Widget (Small Bento) */}
-                            <div className="lg:col-span-3 lg:row-span-1">
-                                <WeatherStatus />
-                            </div>
-
                             {/* Status Distribution (Medium Bento) */}
-                            <div className="lg:col-span-3 lg:row-span-2">
+                            <div className="lg:col-span-4 lg:row-span-2">
                                 <Card className="h-full border-none bg-white/50 backdrop-blur-sm rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
                                     <StatusDistribution
                                         statusCounts={data?.statusCounts}
@@ -96,19 +90,14 @@ export default function Dashboard() {
                             </div>
 
                              {/* Chart (Large Bento) */}
-                             <div className="lg:col-span-6 lg:row-span-2">
+                             <div className="lg:col-span-8 lg:row-span-2">
                                 <Card className="h-full border-none bg-white/50 backdrop-blur-sm rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
                                     <ChartAreaInteractive data={chartData?.chart} />
                                 </Card>
                             </div>
 
-                            {/* Activity Feed (High Bento) */}
-                            <div className="lg:col-span-3 lg:row-span-2 -mt-[200px] lg:mt-0">
-                                <RecentActivity activities={data?.recentActivity || []} />
-                            </div>
-
                             {/* Track Occupancy (Wide Bento) */}
-                            <div className="lg:col-span-9 lg:row-span-1">
+                            <div className="lg:col-span-12 lg:row-span-1">
                                 <Card className="h-full border-none bg-white/50 backdrop-blur-sm rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
                                     <TrackOccupancy trackOccupancy={data?.trackOccupancy} />
                                 </Card>
