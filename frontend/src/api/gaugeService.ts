@@ -23,6 +23,10 @@ export interface Gauge {
     series: string;
   };
   created_at: string;
+  updated_at?: string;
+  certificate_number?: string;
+  verification_notes?: string;
+  verified_by?: string;
 }
 
 export const gaugeService = {

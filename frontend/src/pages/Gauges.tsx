@@ -57,6 +57,142 @@ import { Label } from "@/components/ui/label"
 import { useSearchParams } from "react-router-dom"
 import { Skeleton } from "@/components/ui/skeleton"
 
+const AcceptVerificationDialog = ({ 
+  gauge, 
+  open, 
+  onOpenChange, 
+  onSuccess 
+}: { 
+  gauge: Gauge | null, 
+  open: boolean, 
+  onOpenChange: (open: boolean) => void,
+  onSuccess: (data: any) => void
+}) => {
+  const [formData, setFormData] = useState({
+    last_verification: format(new Date(), 'yyyy-MM-dd'),
+    next_verification: format(addYears(new Date(), 1), 'yyyy-MM-dd'),
+    certificate_number: "",
+    verification_notes: ""
+  })
+  const [file, setFile] = useState<File | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      setFormData({
+        last_verification: format(new Date(), 'yyyy-MM-dd'),
+        next_verification: format(addYears(new Date(), 1), 'yyyy-MM-dd'),
+        certificate_number: "",
+        verification_notes: ""
+      })
+      setFile(null)
+    }
+  }, [open])
+
+  const handleDateChange = (dateStr: string) => {
+    try {
+      const date = parseISO(dateStr)
+      if (!isNaN(date.getTime())) {
+        setFormData(prev => ({
+          ...prev,
+          last_verification: dateStr,
+          next_verification: format(addYears(date, 1), 'yyyy-MM-dd')
+        }))
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
+        <DialogHeader className="p-8 pb-4 bg-blue-600 text-white">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <DialogTitle className="text-2xl font-semibold">Приемка с поверки</DialogTitle>
+              <DialogDescription className="text-blue-100 font-medium">
+                Манометр: {gauge?.serial_number}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+        <div className="p-8 pt-6 space-y-6 bg-white">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-slate-500 font-semibold text-xs uppercase tracking-wider">Дата поверки</Label>
+              <Input 
+                type="date" 
+                value={formData.last_verification}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className="h-12 rounded-xl bg-slate-50 border-slate-100 focus:ring-blue-500"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-500 font-semibold text-xs uppercase tracking-wider">Следующая поверка</Label>
+              <Input 
+                type="date" 
+                value={formData.next_verification}
+                onChange={(e) => setFormData(prev => ({ ...prev, next_verification: e.target.value }))}
+                className="h-12 rounded-xl bg-slate-50 border-slate-100 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-slate-500 font-semibold text-xs uppercase tracking-wider">Номер свидетельства</Label>
+            <Input 
+              placeholder="Введите № свидетельства" 
+              value={formData.certificate_number}
+              onChange={(e) => setFormData(prev => ({ ...prev, certificate_number: e.target.value }))}
+              className="h-12 rounded-xl bg-slate-50 border-slate-100 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-slate-500 font-semibold text-xs uppercase tracking-wider">Скан свидетельства (PDF/JPG)</Label>
+            <div className="relative group">
+              <Input 
+                type="file" 
+                accept=".pdf,image/*"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="h-12 pr-10 rounded-xl bg-slate-50 border-slate-100 cursor-pointer file:hidden pt-3.5 text-slate-600 font-medium"
+              />
+              <Upload className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-slate-500 font-semibold text-xs uppercase tracking-wider">Примечание</Label>
+            <Input 
+              placeholder="Дополнительная информация..." 
+              value={formData.verification_notes}
+              onChange={(e) => setFormData(prev => ({ ...prev, verification_notes: e.target.value }))}
+              className="h-12 rounded-xl bg-slate-50 border-slate-100 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="pt-4 flex gap-3">
+            <Button 
+              variant="outline" 
+              className="flex-1 h-12 rounded-xl font-semibold"
+              onClick={() => onOpenChange(false)}
+            >
+              Отмена
+            </Button>
+            <Button 
+              className="flex-1 h-12 rounded-xl font-semibold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100"
+              onClick={() => onSuccess({ ...formData, file })}
+            >
+              Принять исправным
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 const GaugeHistoryDialog = ({ gauge, open, onOpenChange }: { gauge: Gauge | null, open: boolean, onOpenChange: (open: boolean) => void }) => {
   const { data: history = [], isLoading } = useQuery({
     queryKey: ['gauge-history', gauge?.id],
@@ -87,7 +223,7 @@ const GaugeHistoryDialog = ({ gauge, open, onOpenChange }: { gauge: Gauge | null
                  {[1,2,3].map(i => <div key={i} className="h-20 bg-slate-50 animate-pulse rounded-2xl" />)}
                </div>
             ) : history.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 italic">История перемещений пуста</div>
+               <div className="text-center py-12 text-slate-400 italic">История перемещений пуста</div>
             ) : (
               <div className="relative border-l-2 border-slate-100 ml-3 pl-6 space-y-8">
                 {history.map((item: any) => (
@@ -156,6 +292,9 @@ const Gauges = () => {
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingGauge, setEditingGauge] = useState<Partial<Gauge> | null>(null)
+
+  const [isVerifyDialogOpen, setIsVerifyDialogOpen] = useState(false)
+  const [selectedGaugeForVerification, setSelectedGaugeForVerification] = useState<Gauge | null>(null)
 
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [returnDialogGauge, setReturnDialogGauge] = useState<Gauge | null>(null)
@@ -401,14 +540,39 @@ const Gauges = () => {
     toast.success("Журнал экспортирован");
   };
 
-  const handleVerify = (gauge: Gauge) => {
-    const today = new Date();
-    const nextYear = addYears(today, 1);
-    updateMutation.mutate({
-      id: gauge.id,
-      last_verification: format(today, 'yyyy-MM-dd'),
-      next_verification: format(nextYear, 'yyyy-MM-dd')
-    });
+  const handleVerify = async (data: any) => {
+    if (!selectedGaugeForVerification) return;
+    
+    try {
+      let certificateUrl = selectedGaugeForVerification.certificate_url;
+      
+      // Upload file if selected
+      if (data.file) {
+        const formData = new FormData();
+        formData.append('certificate', data.file);
+        const res = await gaugeService.uploadCertificate(selectedGaugeForVerification.id, formData);
+        certificateUrl = res.certificate_url;
+      }
+
+      updateMutation.mutate({
+        id: selectedGaugeForVerification.id,
+        last_verification: data.last_verification,
+        next_verification: data.next_verification,
+        certificate_number: data.certificate_number,
+        verification_notes: data.verification_notes,
+        status: 'На складе', // Automatically back to warehouse after verification
+        is_defective: false,
+        certificate_url: certificateUrl
+      }, {
+        onSuccess: () => {
+          setIsVerifyDialogOpen(false);
+          setSelectedGaugeForVerification(null);
+          toast.success("Прибор успешно принят с поверки");
+        }
+      });
+    } catch (e) {
+      toast.error("Ошибка при загрузке документа");
+    }
   }
 
   const handleInstall = () => {
@@ -571,7 +735,15 @@ const Gauges = () => {
                   </TableCell>
                   <TableCell className="text-right pr-6">
                     <div className="flex items-center justify-end gap-1">
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-green-600" onClick={() => handleVerify(gauge)} title="Поверка +1 год"><Calendar className="w-4 h-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-green-600" 
+                        onClick={() => {
+                          setSelectedGaugeForVerification(gauge);
+                          setIsVerifyDialogOpen(true);
+                        }} 
+                        title="Принять с поверки"
+                      >
+                        <Calendar className="w-4 h-4" />
+                      </Button>
                       <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => { setSelectedGaugeForHistory(gauge); setIsHistoryOpen(true); }} title="История"><History className="w-4 h-4" /></Button>
                       <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => setSelectedGaugeForQR(gauge)} title="QR Код"><QrCode className="w-4 h-4" /></Button>
                       <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => { setEditingGauge(gauge); setIsEditDialogOpen(true); }} title="Правка"><Settings2 className="w-4 h-4" /></Button>
@@ -591,6 +763,13 @@ const Gauges = () => {
       </Card>
 
       {/* Dialogs */}
+      <AcceptVerificationDialog
+        gauge={selectedGaugeForVerification}
+        open={isVerifyDialogOpen}
+        onOpenChange={setIsVerifyDialogOpen}
+        onSuccess={handleVerify}
+      />
+
       <GaugeHistoryDialog 
         gauge={selectedGaugeForHistory} 
         open={isHistoryOpen} 
