@@ -302,9 +302,9 @@ const locomotiveController = {
             // Call the atomic RPC function
             const { data, error } = await supabase.rpc('move_locomotive', {
                 p_loco_id: id,
-                p_track: track,
-                p_position: position,
-                p_reason: reason,
+                p_track: track ?? null,
+                p_position: position ?? null,
+                p_reason: reason || '',
                 p_moved_by: req.session.user.full_name || req.session.user.username,
                 p_location_id: req.session.user.active_location_id || 1,
                 p_action_type: actionType,
