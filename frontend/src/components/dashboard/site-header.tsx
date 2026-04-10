@@ -1,21 +1,50 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
+import { useLocation } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
-import { Search, Building2 } from "lucide-react"
+import { Building2 } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
-import { Input } from "@/components/ui/input"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+const ROUTE_LABELS: Record<string, string> = {
+    "/dashboard": "Дашборд",
+    "/map": "Карта",
+    "/journal": "Журнал",
+    "/admin": "Администрирование",
+    "/profile": "Профиль",
+    "/remarks": "Замечания",
+    "/checklists": "Чек-листы",
+    "/active-locomotives": "Локомотивы",
+    "/gauges": "Метрология",
+    "/gauges/terminal": "Терминал метрологии",
+    "/global-history": "История",
+}
+
+function getPageLabel(pathname: string): string {
+    // Exact match first
+    if (ROUTE_LABELS[pathname]) return ROUTE_LABELS[pathname]
+    // Dynamic routes
+    if (pathname.match(/^\/locomotive\/\d+\/checklist$/)) return "Чек-лист"
+    if (pathname.match(/^\/locomotive\/\d+\/remarks$/)) return "Замечания"
+    if (pathname.match(/^\/history\/session\/\d+\/checklists$/)) return "История чек-листов"
+    if (pathname.match(/^\/history\/session\/\d+\/remarks$/)) return "История замечаний"
+    if (pathname.match(/^\/history\/.+$/)) return "История"
+    return "Дашборд"
+}
+
 export function SiteHeader() {
     const { user: authUser } = useAuth()
     const queryClient = useQueryClient()
+    const location = useLocation()
     const [user, setUser] = useState<any>(null)
     const [locations, setLocations] = useState<{ id: number; name: string }[]>([])
     const [activeLocation, setActiveLocation] = useState<string>("")
+
+    const pageLabel = useMemo(() => getPageLabel(location.pathname), [location.pathname])
 
     useEffect(() => {
         if (authUser) {
@@ -64,15 +93,16 @@ export function SiteHeader() {
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 sticky top-0 bg-background z-10">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
-            <Breadcrumb className="hidden md:flex">
+            <Breadcrumb className="hidden md:flex font-medium">
                 <BreadcrumbList>
                     <BreadcrumbItem>
-                        <BreadcrumbLink href="/">Yamazumi</BreadcrumbLink>
+                        <BreadcrumbLink href="/" className="text-slate-400 hover:text-slate-900 transition-colors">Yamazumi</BreadcrumbLink>
                     </BreadcrumbItem>
                     <BreadcrumbSeparator />
                     <BreadcrumbItem>
-                        <BreadcrumbPage>Дашборд</BreadcrumbPage>
+                        <BreadcrumbPage className="text-slate-400">{pageLabel}</BreadcrumbPage>
                     </BreadcrumbItem>
+                    <div id="breadcrumb-portal" className="flex items-center"></div>
                 </BreadcrumbList>
             </Breadcrumb>
             <div className="ml-auto flex items-center gap-4">
@@ -94,14 +124,6 @@ export function SiteHeader() {
                         </Select>
                     </div>
                 )}
-                <div className="relative hidden lg:block">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        type="search"
-                        placeholder="Поиск..."
-                        className="w-[200px] pl-8 h-8 rounded-lg bg-muted border-none"
-                    />
-                </div>
             </div>
         </header>
     )

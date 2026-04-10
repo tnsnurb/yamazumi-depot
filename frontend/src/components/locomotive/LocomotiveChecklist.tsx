@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { User as LucideUser, ShieldCheck, Download, ChevronRight, ChevronDown, Loader2, Info, BookOpen, Clock, CheckCircle2, MessageSquare, Camera, History, Send, X, AlertCircle } from "lucide-react"
+import { User as LucideUser, ShieldCheck, Download, ChevronRight, ChevronDown, Loader2, Info, Clock, CheckCircle2, MessageSquare, Camera, History, Send, X, AlertCircle, Settings2, LayoutGrid, FilterX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
@@ -9,9 +9,16 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/hooks/useAuth"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { LayoutGrid, FilterX } from "lucide-react"
 import imageCompression from 'browser-image-compression'
-
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import { Label } from "@/components/ui/label"
 
 interface ChecklistInstance {
     id: string
@@ -47,7 +54,15 @@ interface ChecklistItem {
     verified_by_user?: { full_name: string } | null
 }
 
-export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false, hideHeader = false }: { locomotiveId?: number, instanceId?: string, readOnly?: boolean, hideHeader?: boolean }) {
+interface LocomotiveChecklistProps {
+    locomotiveId?: number;
+    instanceId?: number;
+    readOnly?: boolean;
+    hideHeader?: boolean;
+    locomotiveIdentifier?: string; // e.g. "ТЭ33А-0008"
+}
+
+export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false, hideHeader = false, locomotiveIdentifier }: LocomotiveChecklistProps) {
     const { user } = useAuth()
     const [instance, setInstance] = useState<ChecklistInstance | null>(null)
     const [items, setItems] = useState<ChecklistItem[]>([])
@@ -236,10 +251,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
     }
 
     const handleCompleteItem = async (itemId: string, checked: boolean) => {
-        // Show preloader
         setItemLoading(prev => ({ ...prev, [itemId]: true }));
-
-        // Optimistic Update
         const previousItems = [...items];
         setItems(prev => prev.map(i => i.id === itemId ? {
             ...i,
@@ -260,13 +272,10 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
             })
             if (!res.ok) throw new Error('Failed to complete item')
             const updatedItem = await res.json()
-
-            // Update with real data from server
             setItems((prev: ChecklistItem[]) => prev.map((i: ChecklistItem) => i.id === itemId ? updatedItem : i))
         } catch (error) {
             console.error(error)
             toast.error("Ошибка при обновлении пункта")
-            // Rollback on error
             setItems(previousItems);
         } finally {
             setItemLoading(prev => ({ ...prev, [itemId]: false }));
@@ -275,8 +284,6 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
 
     const handleCompleteBatch = async (itemIds: string[], checked: boolean) => {
         if (itemIds.length === 0) return;
-
-        // Optimistic Update
         const previousItems = [...items];
         setItems(prev => prev.map(i => itemIds.includes(i.id) ? {
             ...i,
@@ -296,14 +303,10 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                 },
                 body: JSON.stringify({ itemIds, is_completed: checked })
             });
-
             if (!res.ok) throw new Error('Failed to complete items in batch');
             const updatedItems = await res.json();
-
-            // The API should return the list of updated items
             const updatedItemsMap = new Map<string, ChecklistItem>(updatedItems.map((i: any) => [i.id, i]));
             setItems(prev => prev.map(i => updatedItemsMap.has(i.id) ? updatedItemsMap.get(i.id)! : i));
-            
             toast.success(checked ? `Выполнено: ${itemIds.length} шт.` : `Сброшено: ${itemIds.length} шт.`);
         } catch (error) {
             console.error(error);
@@ -311,6 +314,14 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
             setItems(previousItems);
         } finally {
             setIsBatchLoading(false);
+        }
+    };
+
+    const handleBulkComplete = () => {
+        const available = items.filter(i => !i.is_completed && !i.verified_at).map(i => i.id);
+        if (available.length === 0) return;
+        if (window.confirm(`Отметить все оставшиеся пункты (${available.length}) как выполненные?`)) {
+            handleCompleteBatch(available, true);
         }
     };
 
@@ -327,7 +338,6 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
             })
             if (!res.ok) throw new Error('Failed to verify item')
             const updatedItem = await res.json()
-
             setItems((prev: ChecklistItem[]) => prev.map((i: ChecklistItem) => i.id === itemId ? updatedItem : i))
         } catch (error) {
             console.error(error)
@@ -345,7 +355,6 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
 
     const downloadPDF = () => {
         if (!instance || items.length === 0) return
-
         const grouped = items.reduce((acc: Record<string, ChecklistItem[]>, item: ChecklistItem) => {
             const key = item.template_item?.group_name || 'Без группы'
             if (!acc[key]) acc[key] = []
@@ -378,7 +387,6 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
         Статус: ${instance.status === 'completed' ? 'Завершен' : 'В процессе'} <br/>
         Дата формирования: ${new Date().toLocaleString('ru-RU')}
     </div>
-    
     <table>
         <thead>
             <tr>
@@ -414,12 +422,10 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
             `).join('')}
         </tbody>
     </table>
-    
     <div class="footer">Yamazumi Depot • Сформировано автоматически</div>
     <script>window.onload = () => window.print();</script>
 </body>
 </html>`
-
         const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
         const url = URL.createObjectURL(blob)
         window.open(url, '_blank')
@@ -480,154 +486,254 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
         <div className="space-y-6">
             {/* Header info */}
             {!hideHeader && (
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-blue-100 p-2 rounded-lg">
-                            <BookOpen className="w-5 h-5 text-blue-600" />
+                <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 mb-5">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center flex-wrap sm:flex-nowrap gap-x-4 gap-y-2">
+                            <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tighter uppercase whitespace-normal sm:whitespace-nowrap">
+                                {locomotiveIdentifier && <span className="text-slate-400 mr-2">{locomotiveIdentifier} —</span>}
+                                {instance.template.name.includes(' — ') ? instance.template.name.split(' — ').pop() : instance.template.name}
+                            </h2>
+                            <Badge variant={instance.status === 'completed' ? 'default' : 'secondary'} className={cn(
+                                "rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest",
+                                instance.status === 'completed' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-50 text-blue-600 border-blue-100'
+                            )}>
+                                {instance.status === 'completed' ? 'Завершен' : 'В процессе'}
+                            </Badge>
+                            {instance.status === 'completed' && instance.completed_at && (
+                                <div className="text-[10px] text-slate-400 font-bold flex items-center bg-slate-50 px-2.5 py-1 rounded-full border border-slate-100">
+                                    <Clock className="w-3.5 h-3.5 mr-1.5 text-slate-300" />
+                                    {new Date(instance.completed_at).toLocaleString('ru-RU')}
+                                </div>
+                            )}
                         </div>
-                        <div>
-                            <h2 className="text-xl font-semibold text-slate-900">{instance.template.name}</h2>
-                            <div className="flex gap-2 mt-1">
-                                <Badge variant={instance.status === 'completed' ? 'default' : 'secondary'} className={instance.status === 'completed' ? 'bg-green-100 text-green-700 hover:bg-green-200' : ''}>
-                                    {instance.status === 'completed' ? 'Завершен' : 'В процессе'}
-                                </Badge>
-                                {instance.status === 'completed' && instance.completed_at && (
-                                    <span className="text-xs text-slate-500 flex items-center">
-                                        <Clock className="w-3 h-3 mr-1" />
-                                        {new Date(instance.completed_at).toLocaleString('ru-RU')}
-                                    </span>
-                                )}
+
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                            {!readOnly && remainingItems > 0 && instance.status !== 'completed' && (
+                                <Button 
+                                    onClick={handleBulkComplete} 
+                                    disabled={isBatchLoading}
+                                    className="flex-1 sm:flex-none h-11 px-6 text-[11px] font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 transition-all active:scale-95"
+                                >
+                                    {isBatchLoading ? (
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    ) : (
+                                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                                    )}
+                                    Выполнить все
+                                </Button>
+                            )}
+                            
+                            {/* Mobile Filters Trigger */}
+                            <div className="md:hidden">
+                                <Sheet>
+                                    <SheetTrigger asChild>
+                                        <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 relative border-slate-200 bg-white">
+                                            <Settings2 className="w-5 h-5 text-slate-600" />
+                                            {(selectedGroup !== "all" || statusFilter !== "all") && (
+                                                <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white" />
+                                            )}
+                                        </Button>
+                                    </SheetTrigger>
+                                    <SheetContent className="w-[300px] sm:w-[400px]">
+                                        <SheetHeader className="pb-6 border-b">
+                                            <SheetTitle className="text-xl font-bold flex items-center gap-2">
+                                                <LayoutGrid className="w-5 h-5 text-blue-500" />
+                                                Фильтры чек-листа
+                                            </SheetTitle>
+                                            <SheetDescription>
+                                                Настройте отображение задач и разделов
+                                            </SheetDescription>
+                                        </SheetHeader>
+                                        <div className="py-6 space-y-8">
+                                            <div className="space-y-3">
+                                                <Label className="text-xs font-bold uppercase tracking-wider text-slate-400">Группа задач</Label>
+                                                <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+                                                    <SelectTrigger className="h-11 border-slate-200 bg-slate-50 font-semibold text-sm">
+                                                        <SelectValue placeholder="Все группы" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">Все группы</SelectItem>
+                                                        {scrollGroups.map(g => (
+                                                            <SelectItem key={g} value={g}>{g}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                <Label className="text-xs font-bold uppercase tracking-wider text-slate-400">Статус выполнения</Label>
+                                                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                                                    <SelectTrigger className="h-11 border-slate-200 bg-slate-50 font-semibold text-sm">
+                                                        <SelectValue placeholder="Все статусы" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">Все пункты</SelectItem>
+                                                        <SelectItem value="not_completed">Не выполнено</SelectItem>
+                                                        <SelectItem value="for_review">На проверку</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="pt-4 flex flex-col gap-3">
+                                                <Button
+                                                    variant={isCompact ? "default" : "outline"}
+                                                    className={cn("h-11 font-bold", isCompact ? "bg-slate-900" : "")}
+                                                    onClick={() => setIsCompact(!isCompact)}
+                                                >
+                                                    {isCompact ? "Обычный вид" : "Компактный вид"}
+                                                </Button>
+                                                
+                                                {(selectedGroup !== "all" || statusFilter !== "all") && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="text-red-500 hover:text-red-600 hover:bg-red-50 font-bold h-11"
+                                                        onClick={() => {
+                                                            setSelectedGroup("all")
+                                                            setStatusFilter("all")
+                                                        }}
+                                                    >
+                                                        <FilterX className="w-4 h-4 mr-2" />
+                                                        Сбросить фильтры
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </SheetContent>
+                                </Sheet>
                             </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {!readOnly && remainingItems > 0 && instance.status !== 'completed' && (
-                            <Button 
-                                size="sm" 
-                                className="bg-emerald-600 hover:bg-emerald-700 h-9 font-semibold"
-                                onClick={() => {
-                                    const available = items.filter(i => !i.is_completed && !i.verified_at).map(i => i.id);
-                                    if (confirm(`Отметить все оставшиеся пункты (${available.length}) как выполненные?`)) {
-                                        handleCompleteBatch(available, true);
-                                    }
-                                }}
-                                disabled={isBatchLoading}
-                            >
-                                {isBatchLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                                Выполнить всё ({remainingItems})
+
+                            <Button variant="outline" size="icon" className="hidden sm:flex h-10 w-10 border-slate-200 hover:bg-slate-50 group" onClick={downloadPDF} title="Скачать PDF">
+                                <Download className="w-4 h-4 text-slate-600 group-hover:text-blue-600 transition-colors" />
                             </Button>
-                        )}
-                        <Button variant="outline" size="sm" className="hidden sm:flex h-9 border-slate-200 hover:bg-slate-50" onClick={downloadPDF}>
-                            <Download className="w-4 h-4 mr-2" />
-                            PDF
-                        </Button>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* Statistics Card */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 md:p-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 mb-6">
-                    <div className="space-y-1">
-                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-semibold tracking-wider">Всего пунктов</span>
-                        <div className="text-xl md:text-2xl font-semibold text-slate-900">{totalItems}</div>
-                    </div>
-                    <div className="space-y-1">
-                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-semibold tracking-wider">Выполнено</span>
-                        <div className="text-xl md:text-2xl font-semibold text-emerald-600">{completedItems}</div>
-                    </div>
-                    <div className="space-y-1">
-                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-semibold tracking-wider">Осталось</span>
-                        <div className="text-xl md:text-2xl font-semibold text-amber-600">{remainingItems}</div>
-                    </div>
-                    <div className="space-y-1">
-                        <span className="text-[10px] md:text-xs text-slate-400 uppercase font-semibold tracking-wider">Прогресс</span>
-                        <div className="text-xl md:text-2xl font-semibold text-blue-600">{progressPercent}%</div>
-                    </div>
-                </div>
 
-                <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2 mb-6">
-                    <div
-                        className="bg-emerald-500 h-1.5 md:h-2 rounded-full transition-all duration-700"
-                        style={{ width: `${progressPercent}%` }}
-                    />
-                </div>
+            {/* Statistics Card - Optimized for Mobile */}
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-6">
+                <div className="p-4 md:p-6">
+                    {/* Numbers Row */}
+                        <div className="flex items-center justify-between gap-2 md:gap-4 mb-6 text-center px-1 pt-1">
+                            <div className="flex-1">
+                                <div className="text-xl md:text-3xl font-black text-slate-900 leading-none">{totalItems}</div>
+                            </div>
+                            <div className="w-px h-10 bg-slate-100" />
+                            <div className="flex-1">
+                                <div className="text-xl md:text-3xl font-black text-emerald-600 leading-none">{completedItems}</div>
+                            </div>
+                            <div className="w-px h-10 bg-slate-100" />
+                            <div className="flex-1">
+                                <div className="text-xl md:text-3xl font-black text-amber-600 leading-none">{remainingItems}</div>
+                            </div>
+                            <div className="w-px h-10 bg-slate-100" />
+                            <div className="flex-1">
+                                <div className="text-xl md:text-3xl font-black text-blue-600 leading-none">{progressPercent}%</div>
+                            </div>
+                        </div>
 
-                {Object.keys(completedBy).length > 0 && (
-                    <div className="pt-4 border-t border-slate-100 flex flex-wrap gap-2 md:gap-3 items-center">
-                        <span className="text-[10px] md:text-xs text-slate-400 w-full md:w-auto mb-1 md:mb-0">Выполнили:</span>
-                        {Object.entries(completedBy)
-                            .sort((a, b) => b[1] - a[1])
-                            .map(([name, count]) => (
-                                <span key={name} className="inline-flex items-center gap-1.5 text-[10px] md:text-xs bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-100">
-                                    <span className="font-semibold">{name}</span>
-                                    <span className="bg-white text-slate-900 rounded-md px-1.5 text-[9px] md:text-[10px] font-semibold border border-slate-200">{count}</span>
-                                </span>
-                            ))}
+                    {/* Progress Row */}
+                    <div className="space-y-3 mb-5 px-1">
+                        <div className="flex items-center justify-between text-[10px] md:text-[11px] font-black uppercase tracking-widest text-slate-400">
+                            <span>Прогресс выполнения</span>
+                            <span className="text-blue-600 font-black">{progressPercent}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full bg-emerald-500 transition-all duration-1000 ease-in-out rounded-full shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                                style={{ width: `${progressPercent}%` }}
+                            />
+                        </div>
                     </div>
-                )}
+
+                    {/* Performers Row */}
+                    {Object.keys(completedBy).length > 0 && (
+                        <div className="flex items-center gap-4 px-1 overflow-hidden">
+                            <span className="text-[10px] md:text-[11px] font-black uppercase tracking-widest text-slate-400 shrink-0">Исполнители:</span>
+                            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                                {Object.entries(completedBy)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([name, count]) => (
+                                        <span key={name} className="inline-flex items-center gap-1 text-[10px] md:text-xs bg-slate-50/50 text-slate-700 pr-1 pl-2.5 py-1 rounded-full border border-slate-100/80 shrink-0 whitespace-nowrap shadow-sm">
+                                            <span className="font-bold">{name}</span>
+                                            <span className="bg-white text-slate-900 rounded-full w-5 h-5 flex items-center justify-center text-[9px] font-black border border-slate-200 ml-1.5">{count}</span>
+                                        </span>
+                                    ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* Group and Status Filter */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                <div className="flex items-center gap-2">
-                    <div className="bg-white p-1.5 rounded-md shadow-sm border border-slate-200">
-                        <LayoutGrid className="w-4 h-4 text-slate-500" />
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-slate-700">Фильтры задач</h3>
-                        <p className="text-[10px] text-slate-400 font-medium">Выберите раздел или статус</p>
-                    </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+            {/* Actions Row — Below Statistics */}
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 px-1">
+                <div className="flex flex-wrap items-center gap-2">
                     <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-                        <SelectTrigger className="w-full sm:w-[220px] h-9 bg-white border-slate-200 text-xs font-semibold">
-                            <SelectValue placeholder="Выберите группу" />
+                        <SelectTrigger className="w-[150px] h-9 bg-white border-slate-200 text-[11px] font-bold uppercase tracking-tight rounded-xl shadow-sm transition-all hover:border-blue-400">
+                            <SelectValue placeholder="Все группы" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all" className="text-xs font-semibold">Все группы</SelectItem>
+                            <SelectItem value="all" className="font-bold text-[11px] uppercase">Все группы</SelectItem>
                             {scrollGroups.map(g => (
-                                <SelectItem key={g} value={g} className="text-xs font-semibold">{g}</SelectItem>
+                                <SelectItem key={g} value={g} className="text-[11px] font-medium">{g}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
 
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-full sm:w-[220px] h-9 bg-white border-slate-200 text-xs font-semibold">
-                            <SelectValue placeholder="Статус выполнения" />
+                        <SelectTrigger className="w-[140px] h-9 bg-white border-slate-200 text-[11px] font-bold uppercase tracking-tight rounded-xl shadow-sm transition-all hover:border-blue-400">
+                            <SelectValue placeholder="Все пункты" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all" className="text-xs font-semibold">Все пункты</SelectItem>
-                            <SelectItem value="not_completed" className="text-xs font-semibold text-amber-600">Не выполнено (Слесарю)</SelectItem>
-                            <SelectItem value="for_review" className="text-xs font-semibold text-blue-600">На проверку (Мастеру)</SelectItem>
+                            <SelectItem value="all" className="font-bold text-[11px] uppercase">Все пункты</SelectItem>
+                            <SelectItem value="not_completed" className="text-[11px] font-bold text-amber-600 uppercase">Не выполнено</SelectItem>
+                            <SelectItem value="for_review" className="text-[11px] font-bold text-blue-600 uppercase">На проверку</SelectItem>
                         </SelectContent>
                     </Select>
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsCompact(!isCompact)}
+                        className={cn(
+                            "h-9 px-4 font-bold text-[10px] uppercase tracking-widest transition-all rounded-xl border shadow-sm",
+                            isCompact ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                        )}
+                    >
+                        {isCompact ? "Обычный вид" : "Компактный вид"}
+                    </Button>
 
                     {(selectedGroup !== "all" || statusFilter !== "all") && (
                         <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
                             onClick={() => {
                                 setSelectedGroup("all")
                                 setStatusFilter("all")
                             }}
-                            className="h-9 px-3 text-slate-400 hover:text-red-500 transition-colors shrink-0"
+                            className="h-9 w-9 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0 border border-slate-200 rounded-xl shadow-sm"
                             title="Сбросить фильтры"
                         >
                             <FilterX className="w-4 h-4" />
                         </Button>
                     )}
-
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsCompact(!isCompact)}
-                        className={cn("h-9 px-3 font-semibold text-xs", isCompact ? "bg-slate-900 text-white" : "bg-white text-slate-600")}
-                    >
-                        {isCompact ? "Обычный вид" : "Компактный вид"}
-                    </Button>
                 </div>
+
+                {!readOnly && remainingItems > 0 && instance.status !== 'completed' && (
+                    <Button 
+                        onClick={handleBulkComplete} 
+                        disabled={isBatchLoading}
+                        className="h-10 px-6 text-[11px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-200/50 transition-all active:scale-95 flex items-center gap-2 group rounded-xl"
+                    >
+                        {isBatchLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <CheckCircle2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                        )}
+                        <span>{isBatchLoading ? "Загрузка..." : `ВЫПОЛНИТЬ ВСЁ (${remainingItems})`}</span>
+                    </Button>
+                )}
             </div>
 
             {/* Checklist items by group */}
@@ -753,9 +859,6 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                         </span>
                                                                         <span className={cn("font-medium ml-1", item.verified_at ? "text-emerald-600" : "text-amber-600")}>
                                                                             {item.completed_at ? new Date(item.completed_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''}
-                                                                        </span>
-                                                                        <span className={cn("px-1 rounded ml-1", item.verified_at ? "bg-emerald-100 text-emerald-700" : "bg-amber-100/50 text-amber-700")}>
-                                                                            +{item.template_item?.points || 5} б.
                                                                         </span>
                                                                     </div>
                                                                 )}
@@ -960,31 +1063,33 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                     {loadingDetails[item.id] ? (
                                                                         <p className="text-center py-4 text-xs text-slate-400">Загрузка...</p>
                                                                     ) : photos[item.id]?.length ? (
-                                                                        <div className="grid grid-cols-3 xs:grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                                                                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                                                                             {photos[item.id].map((p: any) => (
-                                                                                <a key={p.id} href={p.photo_url} target="_blank" rel="noreferrer" className="aspect-square rounded-lg border bg-white p-0.5 overflow-hidden group relative">
-                                                                                    <img src={p.photo_url} className="w-full h-full object-cover rounded-md" alt="evidence" />
-                                                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                                                                        <Download className="w-4 h-4 text-white" />
+                                                                                <div key={p.id} className="relative aspect-square group rounded-lg overflow-hidden bg-slate-200 shadow-sm border border-slate-200">
+                                                                                    <img src={p.url} alt="remark" className="w-full h-full object-cover" />
+                                                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                                                        <a href={p.url} target="_blank" rel="noreferrer" className="bg-white/20 backdrop-blur-md p-2 rounded-full hover:bg-white/40 transition-colors">
+                                                                                            <Download className="w-4 h-4 text-white" />
+                                                                                        </a>
                                                                                     </div>
-                                                                                </a>
+                                                                                </div>
                                                                             ))}
                                                                         </div>
                                                                     ) : (
-                                                                        <p className="text-center py-2 text-xs text-slate-400">Нет фотографий</p>
+                                                                        <p className="text-center py-2 text-xs text-slate-400">Нет фото</p>
                                                                     )}
                                                                 </div>
                                                             )}
 
                                                             {activeDetailTab === 'history' && (
-                                                                <div className="space-y-2">
-                                                                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-tight mb-2 flex items-center gap-2">
+                                                                <div className="space-y-3">
+                                                                    <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-tight">
                                                                         <History className="w-3 h-3" /> История изменений
                                                                     </div>
                                                                     {loadingDetails[item.id] ? (
                                                                         <p className="text-center py-4 text-xs text-slate-400">Загрузка...</p>
                                                                     ) : history[item.id]?.length ? (
-                                                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-2 scrollbar-thin">
+                                                                        <div className="space-y-1">
                                                                             {history[item.id].map((h: any) => (
                                                                                 <div key={h.id} className="text-[11px] flex items-start gap-2 py-1 border-b border-slate-100 last:border-0">
                                                                                     <span className="text-slate-400 tabular-nums shrink-0 whitespace-nowrap">

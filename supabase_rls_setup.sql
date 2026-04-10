@@ -1,8 +1,19 @@
 -- ==========================================
--- SUPABASE RLS MIGRATION SCRIPT (FIXED)
+-- 2. Helper Functions
 -- ==========================================
+-- Centralized check for global administrator status
+CREATE OR REPLACE FUNCTION public.is_admin() 
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE uuid = auth.uid() 
+    AND (is_global_admin = TRUE OR role = 'admin')
+  );
+$$ LANGUAGE sql SECURITY DEFINER;
+
 
 -- 1. Enable RLS on all existing tables
+
 ALTER TABLE "public"."locations" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."repair_types" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."roles" ENABLE ROW LEVEL SECURITY;
@@ -11,6 +22,9 @@ ALTER TABLE "public"."locomotives" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."locomotive_remarks" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."remark_templates" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."remark_comments" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."remark_history" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."remark_photos" ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE "public"."checklist_templates" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."checklist_template_items" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."checklist_instances" ENABLE ROW LEVEL SECURITY;
@@ -21,6 +35,9 @@ ALTER TABLE "public"."checklist_item_photos" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."movements" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."users" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."audit_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."gauges" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."gauge_history" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."gauge_types" ENABLE ROW LEVEL SECURITY;
 
 -- 2. Drop all existing policies in public schema to avoid conflicts
 DO $$ 
@@ -46,10 +63,17 @@ DECLARE
     public_tables TEXT[] := ARRAY['locations', 'repair_types', 'roles', 'locomotive_catalog', 'checklist_templates', 'checklist_template_items', 'remark_templates'];
 BEGIN 
     FOREACH t IN ARRAY public_tables LOOP
-        EXECUTE format('CREATE POLICY "Allow public read" ON "public".%I FOR SELECT USING (true)', t);
-        EXECUTE format('CREATE POLICY "Admins full access" ON "public".%I FOR ALL TO authenticated USING (auth.jwt() ->> ''role'' = ''admin'')', t);
+        EXECUTE format('DROP POLICY IF EXISTS "Allow auth select %I" ON "public".%I', t, t);
+        EXECUTE format('DROP POLICY IF EXISTS "Allow admin manage %I" ON "public".%I', t, t);
+        
+        EXECUTE format('CREATE POLICY "Allow auth select %I" ON "public".%I FOR SELECT TO authenticated USING (true)', t, t);
+        EXECUTE format('CREATE POLICY "Allow admin manage %I" ON "public".%I FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin())', t, t);
     END LOOP;
 END $$;
+
+
+
+
 
 -- --- OPERATIONAL TABLES (Authenticated only) ---
 -- Tables: locomotives, locomotive_remarks, remark_comments, checklist_instances, checklist_instance_items, checklist_item_history, checklist_item_comments, checklist_item_photos, movements
@@ -57,26 +81,44 @@ END $$;
 DO $$ 
 DECLARE 
     t TEXT;
-    op_tables TEXT[] := ARRAY['locomotives', 'locomotive_remarks', 'remark_comments', 'checklist_instances', 'checklist_instance_items', 'checklist_item_history', 'checklist_item_comments', 'checklist_item_photos', 'movements'];
+    op_tables TEXT[] := ARRAY['locomotives', 'locomotive_remarks', 'remark_comments', 'remark_history', 'remark_photos', 'checklist_instances', 'checklist_instance_items', 'checklist_item_history', 'checklist_item_comments', 'checklist_item_photos', 'movements', 'gauges', 'gauge_history', 'gauge_types', 'repair_sessions'];
+
 BEGIN 
     FOREACH t IN ARRAY op_tables LOOP
-        EXECUTE format('CREATE POLICY "Auth users read" ON "public".%I FOR SELECT TO authenticated USING (true)', t);
-        EXECUTE format('CREATE POLICY "Auth users insert" ON "public".%I FOR INSERT TO authenticated WITH CHECK (true)', t);
-        EXECUTE format('CREATE POLICY "Auth users update" ON "public".%I FOR UPDATE TO authenticated USING (true)', t);
-        EXECUTE format('CREATE POLICY "Admins delete" ON "public".%I FOR DELETE TO authenticated USING (auth.jwt() ->> ''role'' = ''admin'')', t);
+        EXECUTE format('DROP POLICY IF EXISTS "Allow auth select %I" ON "public".%I', t, t);
+        EXECUTE format('DROP POLICY IF EXISTS "Allow auth insert %I" ON "public".%I', t, t);
+        EXECUTE format('DROP POLICY IF EXISTS "Allow auth update %I" ON "public".%I', t, t);
+        EXECUTE format('DROP POLICY IF EXISTS "Allow admin delete %I" ON "public".%I', t, t);
+
+        EXECUTE format('CREATE POLICY "Allow auth select %I" ON "public".%I FOR SELECT TO authenticated USING (true)', t, t);
+        EXECUTE format('CREATE POLICY "Allow auth insert %I" ON "public".%I FOR INSERT TO authenticated WITH CHECK (true)', t, t);
+        EXECUTE format('CREATE POLICY "Allow auth update %I" ON "public".%I FOR UPDATE TO authenticated USING (true)', t, t);
+        EXECUTE format('CREATE POLICY "Allow admin delete %I" ON "public".%I FOR DELETE TO authenticated USING (public.is_admin())', t, t);
     END LOOP;
 END $$;
+
+
+
+
+
 
 -- --- SENSITIVE TABLES (Admin only access) ---
 -- Tables: users, audit_logs
 
--- Users table: Anyone can read (to see names on login page), but only admins can manage
-CREATE POLICY "Public users read users" ON "public"."users" FOR SELECT USING (true);
-CREATE POLICY "Admins manage users" ON "public"."users" FOR ALL TO authenticated USING (auth.jwt() ->> 'role' = 'admin');
+-- Users table: Authenticated only
+DROP POLICY IF EXISTS "Auth users read users" ON "public"."users";
+DROP POLICY IF EXISTS "Admins manage users" ON "public"."users";
+CREATE POLICY "Auth users read users" ON "public"."users" FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Admins manage users" ON "public"."users" FOR ALL TO authenticated USING (public.is_admin());
+
 
 -- Audit logs: Admins can see everything, system can write
-CREATE POLICY "Admins read audit" ON "public"."audit_logs" FOR SELECT TO authenticated USING (auth.jwt() ->> 'role' = 'admin');
+DROP POLICY IF EXISTS "Admins read audit" ON "public"."audit_logs";
+DROP POLICY IF EXISTS "System write audit" ON "public"."audit_logs";
+CREATE POLICY "Admins read audit" ON "public"."audit_logs" FOR SELECT TO authenticated USING (public.is_admin());
 CREATE POLICY "System write audit" ON "public"."audit_logs" FOR INSERT TO authenticated WITH CHECK (true);
+
+
 
 -- ==========================================
 -- 4. Note on Storage

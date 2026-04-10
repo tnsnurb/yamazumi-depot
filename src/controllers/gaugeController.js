@@ -4,14 +4,23 @@ const gaugeController = {
   // Получение всех манометров
   getAllGauges: async (req, res) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('gauges')
         .select(`
           *,
-          locomotive:locomotives(number, series),
+          locomotive:locomotives(number, series, location_id),
           type:gauge_types(part_number, description, image_url, accuracy_class, pressure_range, thread_type)
         `)
         .order('next_verification', { ascending: true });
+
+      // Фильтрация по активной локации пользователя
+      if (req.session && req.session.user && req.session.user.active_location_id) {
+        const activeLocId = req.session.user.active_location_id;
+        // Показываем только манометры, закрепленные за этим депо
+        query = query.eq('location_id', activeLocId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       
@@ -89,6 +98,7 @@ const gaugeController = {
           is_defective,
           status,
           locomotive_id,
+          location_id: req.body.location_id || req.session?.user?.active_location_id, 
           photo_url,
           certificate_url
         }])
@@ -148,9 +158,17 @@ const gaugeController = {
           if (updates.locomotive_id === null) {
             action = 'Снят с локомотива';
             details.push(`Перемещен на склад`);
+            // При снятии привязываем к текущей активной локации пользователя
+            if (req.session?.user?.active_location_id) {
+              updates.location_id = req.session.user.active_location_id;
+            }
           } else {
             action = 'Установлен на локомотив';
             details.push(`Локомотив ID: ${updates.locomotive_id}`);
+            // При установке закрепляем манометр за текущим депо установщика
+            if (req.session?.user?.active_location_id) {
+              updates.location_id = req.session.user.active_location_id;
+            }
           }
         }
         if (updates.is_defective !== undefined) details.push(updates.is_defective ? 'Отмечен как брак' : 'Брак снят');

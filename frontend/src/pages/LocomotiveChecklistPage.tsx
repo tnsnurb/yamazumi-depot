@@ -1,11 +1,10 @@
-import { useParams, useNavigate } from "react-router-dom"
-import { Button } from "@/components/ui/button"
-import { ChevronLeft, ClipboardCheck } from "lucide-react"
+import { useParams } from "react-router-dom"
 import { LocomotiveChecklist } from "@/components/locomotive/LocomotiveChecklist"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { LocomotiveHistory } from "@/components/locomotive/LocomotiveHistory"
+import { Badge } from "@/components/ui/badge"
+import { createPortal } from "react-dom"
+import { BreadcrumbSeparator, BreadcrumbItem, BreadcrumbPage } from "@/components/ui/breadcrumb"
 
 interface Locomotive {
     id: number
@@ -13,21 +12,32 @@ interface Locomotive {
     series: string
 }
 
+interface ChecklistInstance {
+    id: number
+    status: string
+    template: { name: string }
+}
+
 export default function LocomotiveChecklistPage() {
     const { id } = useParams<{ id: string }>()
-    const navigate = useNavigate()
     const [locomotive, setLocomotive] = useState<Locomotive | null>(null)
+    const [instance, setInstance] = useState<ChecklistInstance | null>(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         if (id) {
-            fetchLocomotive()
+            fetchData()
         }
     }, [id])
 
+    const fetchData = async () => {
+        setLoading(true)
+        await Promise.all([fetchLocomotive(), fetchActiveChecklist()])
+        setLoading(false)
+    }
+
     const fetchLocomotive = async () => {
         try {
-            setLoading(true)
             const token = localStorage.getItem('access_token')
             const res = await fetch(`/api/locomotives/${id}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -38,8 +48,20 @@ export default function LocomotiveChecklistPage() {
         } catch (error) {
             console.error(error)
             toast.error("Ошибка загрузки данных локомотива")
-        } finally {
-            setLoading(false)
+        }
+    }
+
+    const fetchActiveChecklist = async () => {
+        try {
+            const token = localStorage.getItem('access_token')
+            const res = await fetch(`/api/checklists/locomotive/${id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            if (!res.ok) throw new Error('Failed to fetch checklist')
+            const data = await res.json()
+            setInstance(data.instance)
+        } catch (error) {
+            console.error(error)
         }
     }
 
@@ -47,48 +69,43 @@ export default function LocomotiveChecklistPage() {
 
     return (
         <div className="flex flex-col h-full bg-slate-50/30">
-            {/* Header */}
-            <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-4 py-3 md:px-8">
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => navigate(-1)}
-                            className="h-9 w-9 text-slate-500 hover:text-slate-900 bg-slate-100/50"
-                        >
-                            <ChevronLeft className="w-5 h-5" />
-                        </Button>
-                        <div className="flex items-center gap-3">
-                            <div className="bg-blue-600 p-2 rounded-xl shadow-blue-100 shadow-lg">
-                                <ClipboardCheck className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                                <h1 className="text-lg md:text-xl font-semibold text-slate-900 tracking-tight leading-none">
-                                    Локомотив {loading ? "..." : `${locomotive?.series}-${locomotive?.number}`}
-                                </h1>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </header>
+            {/* Header Portal for Breadcrumbs */}
+            {typeof document !== 'undefined' && document.getElementById('breadcrumb-portal') ? (
+                createPortal(
+                    <div className="flex items-center gap-1.5 min-w-0 animate-in fade-in slide-in-from-left-2 duration-300">
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem className="min-w-0">
+                            <BreadcrumbPage className="flex items-center gap-2 font-black text-slate-900 truncate">
+                                <span>{loading ? "..." : (locomotive ? `${locomotive.series}-${locomotive.number}` : "")}</span>
+                                {instance && <span className="text-slate-300 font-normal">/</span>}
+                                {instance && (
+                                    <span className="text-blue-600 truncate max-w-[120px] sm:max-w-none">
+                                        {instance.template.name.includes(' — ') ? instance.template.name.split(' — ').pop() : instance.template.name}
+                                    </span>
+                                )}
+                            </BreadcrumbPage>
+                        </BreadcrumbItem>
+                        {instance && (
+                            <Badge variant={instance.status === 'completed' ? 'default' : 'secondary'} className={`rounded-full px-2 py-0 h-5 text-[9px] font-black uppercase tracking-tighter shrink-0 ml-1 shadow-sm ${
+                                instance.status === 'completed' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-600 border-blue-100'
+                            }`}>
+                                {instance.status === 'completed' ? 'Выполнено' : 'В ПРОЦЕССЕ'}
+                            </Badge>
+                        )}
+                    </div>,
+                    document.getElementById('breadcrumb-portal')!
+                )
+            ) : null}
+
 
             {/* Content */}
-            <main className="flex-1 overflow-auto p-4 md:p-8">
-                <div className="max-w-7xl mx-auto h-full">
+            <main className="flex-1 overflow-auto pt-5 pb-4 px-4 md:pt-6 md:pb-8 md:px-10">
+                <div className="max-w-7xl mx-auto">
                     {locomotive ? (
-                        <Tabs defaultValue="active" className="w-full h-full flex flex-col">
-                            <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
-                                <TabsTrigger value="active">Текущий ремонт</TabsTrigger>
-                                <TabsTrigger value="history">История ремонтов</TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="active" className="flex-1 mt-4">
-                                <LocomotiveChecklist locomotiveId={locomotive.id} />
-                            </TabsContent>
-                            <TabsContent value="history" className="flex-1 mt-4">
-                                <LocomotiveHistory locomotiveId={locomotive.id} />
-                            </TabsContent>
-                        </Tabs>
+                            <LocomotiveChecklist 
+                                locomotiveId={Number(id)} 
+                                hideHeader={true}
+                            />
                     ) : (
                         <div className="flex h-40 items-center justify-center text-slate-500">
                             {loading ? "Загрузка..." : "Локомотив не найден"}

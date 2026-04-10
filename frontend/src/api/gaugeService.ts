@@ -14,9 +14,7 @@ export interface Gauge {
   photo_url?: string;
   certificate_url?: string;
   model_image_url?: string;
-  accuracy_class?: string;
-  pressure_range?: string;
-  thread_type?: string;
+  location_id?: number;
   installation_side?: 'K1' | 'K2' | null;
   locomotive?: {
     number: string;
