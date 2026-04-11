@@ -189,7 +189,7 @@ export function MobileNav() {
                                 </Link>
                             )}
                             
-                            <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em] mt-8">Yamazumi Depot v3.0</p>
+                            <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em] mt-8">Yamazumi Depot v3.1 (Mobile Opt)</p>
                         </motion.div>
                     </>
                 )}

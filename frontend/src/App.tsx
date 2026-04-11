@@ -37,6 +37,7 @@ function App() {
 
   // Auth state listener for Supabase
   useEffect(() => {
+    console.log("🚀 Yamazumi Depot: Mobile Ergonomics Update (v3.1) loaded");
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("🔔 Supabase Auth Event:", event);
 
