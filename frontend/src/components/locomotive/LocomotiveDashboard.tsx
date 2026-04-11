@@ -310,7 +310,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
                         {/* GAUGES TAB */}
                         <TabsContent value="gauges" className="p-4 md:p-6 outline-none">
                             <div className="space-y-6">
-                                <div>
+                                <div className="hidden md:block">
                                     <h3 className="font-semibold text-slate-800 mb-3 text-xs uppercase tracking-widest text-slate-400 px-1">Установленные манометры</h3>
                                     {isLoadingGauges ? (
                                         <div className="space-y-3">

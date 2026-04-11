@@ -74,7 +74,7 @@ export default function ActiveLocosList() {
                 <div className="bg-red-50 text-red-600 p-6 rounded-2xl border border-red-100 max-w-md text-center">
                     <p className="font-bold mb-2">Ошибка загрузки</p>
                     <p className="text-sm opacity-80">{(error as Error).message}</p>
-                    <Button variant="outline" onClick={() => refetch()} className="mt-4 border-red-200 text-red-600 hover:bg-red-100">
+                    <Button variant="outline" onClick={() => refetch()} className="mt-4 border-red-200 text-red-600 hover:bg-red-100 h-11">
                         Попробовать снова
                     </Button>
                 </div>
@@ -151,14 +151,14 @@ export default function ActiveLocosList() {
 
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" className="w-full sm:w-auto border-dashed hover:border-solid bg-blue-50/50 hover:bg-blue-100 transition-all font-medium text-blue-700">
+                                                <Button variant="outline" className="w-full sm:w-auto border-dashed hover:border-solid bg-blue-50/50 hover:bg-blue-100 transition-all font-medium text-blue-700 h-11">
                                                     Действия <MoreHorizontal className="w-4 h-4 ml-2 opacity-50" />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end" className="w-56 font-medium">
                                                 <DropdownMenuLabel className="text-xs text-slate-400 font-bold uppercase tracking-widest px-2 pb-1">Управление</DropdownMenuLabel>
 
-                                                <DropdownMenuItem asChild className="cursor-pointer py-2.5 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-900 group">
+                                                <DropdownMenuItem asChild className="cursor-pointer py-3.5 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-900 group">
                                                     <Link to={`/locomotive/${session.locomotive?.id}/remarks`}>
                                                         <Wrench className="w-4 h-4 mr-3 text-blue-500 group-hover:scale-110 transition-transform" />
                                                         <span>Замечания</span>
@@ -166,7 +166,7 @@ export default function ActiveLocosList() {
                                                     </Link>
                                                 </DropdownMenuItem>
 
-                                                <DropdownMenuItem asChild className="cursor-pointer py-2.5 hover:bg-slate-100 group">
+                                                <DropdownMenuItem asChild className="cursor-pointer py-3.5 hover:bg-slate-100 group">
                                                     <Link to={`/history/${session.locomotive?.number}`}>
                                                         <History className="w-4 h-4 mr-3 text-slate-500 group-hover:rotate-[-45deg] transition-transform" />
                                                         <span>История (Журнал)</span>
@@ -176,7 +176,7 @@ export default function ActiveLocosList() {
                                                 <DropdownMenuSeparator />
 
                                                 <DropdownMenuItem
-                                                    className="cursor-pointer py-2.5 hover:bg-blue-50 focus:bg-blue-50 text-blue-700 group"
+                                                    className="cursor-pointer py-3.5 hover:bg-blue-50 focus:bg-blue-50 text-blue-700 group"
                                                     onClick={() => setSelectedLocoForWheelset(session.locomotive)}
                                                 >
                                                     <Scale className="w-4 h-4 mr-3 text-amber-500 group-hover:scale-110 transition-transform" />
@@ -184,7 +184,7 @@ export default function ActiveLocosList() {
                                                 </DropdownMenuItem>
 
                                                 <DropdownMenuItem
-                                                    className="cursor-pointer py-2.5 hover:bg-blue-50 focus:bg-blue-50 text-blue-700 group"
+                                                    className="cursor-pointer py-3.5 hover:bg-blue-50 focus:bg-blue-50 text-blue-700 group"
                                                     onClick={() => setSelectedLocoForQr(session.locomotive)}
                                                 >
                                                     <QrCode className="w-4 h-4 mr-3 text-blue-500 group-hover:scale-110 transition-transform" />

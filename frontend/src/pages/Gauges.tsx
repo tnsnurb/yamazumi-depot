@@ -765,7 +765,7 @@ const Gauges = () => {
         </div>
       </div>
 
-      <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
+      <Card className="hidden md:block bg-white border-slate-200 shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-slate-50/50">
             <TableRow>
@@ -845,6 +845,94 @@ const Gauges = () => {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Mobile Cards View */}
+      <div className="grid md:hidden grid-cols-1 gap-4">
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-40 w-full rounded-2xl bg-white border border-slate-100" />
+            ))}
+          </div>
+        ) : filteredGauges.length === 0 ? (
+          <div className="text-center py-16 bg-white border border-dashed border-slate-200 rounded-2xl text-slate-400 italic font-medium">
+            Приборы не найдены
+          </div>
+        ) : (
+          filteredGauges.map((gauge: Gauge) => {
+            const d = differenceInDays(parseISO(gauge.next_verification), new Date())
+            return (
+              <div key={gauge.id} className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-3xl p-5 shadow-sm flex flex-col relative overflow-hidden">
+                {/* Certificate Link - Top Right Corner */}
+                {gauge.certificate_url && (
+                  <a href={gauge.certificate_url} target="_blank" rel="noreferrer" className="absolute top-5 right-5 text-blue-600 bg-blue-50/80 w-10 h-10 flex items-center justify-center rounded-xl shadow-sm border border-blue-100">
+                    <FileText className="w-5 h-5" />
+                  </a>
+                )}
+                
+                {/* Header: S/N and Part */}
+                <div className="flex flex-col pr-12 mb-4">
+                  <span className="text-2xl font-bold text-slate-900 tracking-tight leading-none mb-1">{gauge.serial_number}</span>
+                  <span className="text-slate-400 font-semibold text-xs uppercase tracking-widest">{gauge.part_number || 'Н/Д'}</span>
+                </div>
+                
+                {/* Status Badges */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Badge className={cn("text-[11px] py-1 text-center font-bold uppercase", getStatusColor(gauge))}>
+                    {gauge.status === 'На локомотиве' ? `${gauge.locomotive?.series} ${gauge.locomotive?.number}` : gauge.status}
+                  </Badge>
+                  {gauge.installation_side && (
+                    <Badge className="text-[11px] py-1 font-bold bg-slate-900 text-white uppercase border-none">
+                      Cab {gauge.installation_side}
+                    </Badge>
+                  )}
+                  {gauge.description && (
+                     <div className="w-full text-xs text-slate-500 font-medium leading-tight mt-1 bg-slate-50 p-2 rounded-lg">
+                       {gauge.description}
+                     </div>
+                  )}
+                </div>
+
+                <div className="text-sm text-slate-500 leading-tight mb-4 font-medium flex items-center justify-between bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                  <span>Поверка до:</span>
+                  <span className={cn("font-bold", d < 0 ? "text-red-600" : d < 30 ? "text-amber-600" : "text-emerald-600")}>
+                    {format(parseISO(gauge.next_verification), 'dd.MM.yyyy')}
+                  </span>
+                </div>
+
+                {/* Mobile Actions - Bottom Row */}
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-2 flex-wrap">
+                  <div className="flex gap-2">
+                    <Button size="icon" variant="ghost" className="h-11 w-11 bg-slate-50 border border-slate-200 text-slate-500 hover:text-green-600 rounded-[14px]" onClick={() => { setSelectedGaugeForVerification(gauge); setIsVerifyDialogOpen(true); }}>
+                      <Calendar className="w-5 h-5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-11 w-11 bg-slate-50 border border-slate-200 text-slate-500 hover:text-blue-600 rounded-[14px]" onClick={() => { setSelectedGaugeForHistory(gauge); setIsHistoryOpen(true); }}>
+                      <History className="w-5 h-5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-11 w-11 bg-slate-50 border border-slate-200 text-slate-500 hover:text-blue-600 rounded-[14px]" onClick={() => setSelectedGaugeForQR(gauge)}>
+                      <QrCode className="w-5 h-5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-11 w-11 bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-900 rounded-[14px]" onClick={() => { setEditingGauge(gauge); setIsEditDialogOpen(true); }}>
+                      <Settings2 className="w-5 h-5" />
+                    </Button>
+                  </div>
+                  
+                  {gauge.status === 'На складе' ? (
+                    <Button className="h-11 bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200 rounded-[14px] font-bold px-6 flex-1 min-w-[100px]" onClick={() => { setSelectedGaugeForInstall(gauge); setIsInstallDialogOpen(true); }}>
+                      Выдать
+                    </Button>
+                  ) : gauge.status === 'На локомотиве' ? (
+                    <Button variant="outline" className="h-11 text-red-600 border-red-200 bg-red-50 hover:bg-red-100 rounded-[14px] font-bold px-6 flex-1 min-w-[100px]" onClick={() => { if(confirm('Снять прибор?')) handleUninstall(gauge); }}>
+                      Снять
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
 
       {/* Dialogs */}
       <AcceptVerificationDialog

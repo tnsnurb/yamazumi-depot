@@ -102,13 +102,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                                <TrainFront className="size-4" />
+                        <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground py-6 md:py-4">
+                            <div className="flex aspect-square size-10 md:size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                                <TrainFront className="size-5 md:size-4" />
                             </div>
-                            <div className="grid flex-1 text-left text-sm leading-tight">
+                            <div className="grid flex-1 text-left text-base md:text-sm leading-tight">
                                 <span className="truncate font-semibold">Yamazumi Depot</span>
-                                <span className="truncate text-xs">Система управления</span>
+                                <span className="truncate text-sm md:text-xs">Система управления</span>
                             </div>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -122,6 +122,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 tooltip={item.title}
                                 onClick={() => navigate(item.url)}
                                 isActive={location.pathname === item.url}
+                                className="h-12 md:h-8 text-base md:text-sm gap-3 md:gap-2 [&>svg]:size-5 md:[&>svg]:size-4"
                             >
                                 {item.icon && <item.icon />}
                                 <span>{item.title}</span>
@@ -135,6 +136,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 tooltip="Админ-панель"
                                 onClick={() => navigate("/admin")}
                                 isActive={location.pathname === "/admin"}
+                                className="h-12 md:h-8 text-base md:text-sm gap-3 md:gap-2 [&>svg]:size-5 md:[&>svg]:size-4"
                             >
                                 <ShieldCheck />
                                 <span>Админ-панель</span>
@@ -147,7 +149,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <SidebarMenu className="p-2 border-t">
                         {navSecondary.map((item) => (
                             <SidebarMenuItem key={item.title}>
-                                <SidebarMenuButton tooltip={item.title} onClick={() => navigate(item.url)}>
+                                <SidebarMenuButton 
+                                    tooltip={item.title} 
+                                    onClick={() => navigate(item.url)}
+                                    className="h-12 md:h-8 text-base md:text-sm gap-3 md:gap-2 [&>svg]:size-5 md:[&>svg]:size-4"
+                                >
                                     {item.icon && <item.icon />}
                                     <span>{item.title}</span>
                                 </SidebarMenuButton>
@@ -159,20 +165,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarFooter>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <div className="flex items-center gap-2 px-2 py-1.5">
-                            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted shrink-0">
-                                <User className="size-4" />
+                        <div className="flex items-center gap-3 md:gap-2 px-2 py-3 md:py-1.5">
+                            <div className="flex aspect-square size-10 md:size-8 items-center justify-center rounded-lg bg-muted shrink-0">
+                                <User className="size-5 md:size-4" />
                             </div>
-                            <div className="grid flex-1 text-left text-sm leading-tight min-w-0 group-data-[collapsible=icon]:hidden">
+                            <div className="grid flex-1 text-left text-base md:text-sm leading-tight min-w-0 group-data-[collapsible=icon]:hidden">
                                 <span className="truncate font-semibold">{user?.full_name || 'Пользователь'}</span>
-                                <span className="truncate text-xs text-muted-foreground">{user?.role === 'admin' ? 'Администратор' : user?.role === 'global_admin' ? 'Супер-админ' : 'Слесарь'}</span>
+                                <span className="truncate text-sm md:text-xs text-muted-foreground">{user?.role === 'admin' ? 'Администратор' : user?.role === 'global_admin' ? 'Супер-админ' : 'Слесарь'}</span>
                             </div>
                             <button
                                 onClick={signOut}
                                 title="Выход"
-                                className="ml-auto size-8 flex items-center justify-center rounded-md cursor-pointer text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors group-data-[collapsible=icon]:hidden"
+                                className="ml-auto size-10 md:size-8 flex items-center justify-center rounded-md cursor-pointer text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors group-data-[collapsible=icon]:hidden"
                             >
-                                <LogOut className="size-4" />
+                                <LogOut className="size-5 md:size-4" />
                             </button>
                         </div>
                     </SidebarMenuItem>

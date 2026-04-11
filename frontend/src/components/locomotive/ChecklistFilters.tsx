@@ -36,7 +36,7 @@ export function ChecklistFilters({
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6 px-1">
             <div className="flex flex-wrap items-center gap-2">
                 <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-                    <SelectTrigger className="w-[150px] h-9 bg-white border-slate-200 text-[11px] font-bold uppercase tracking-tight rounded-xl shadow-sm transition-all hover:border-blue-400">
+                    <SelectTrigger className="w-[150px] h-11 bg-white border-slate-200 text-[11px] font-bold uppercase tracking-tight rounded-xl shadow-sm transition-all hover:border-blue-400">
                         <SelectValue placeholder="Все группы" />
                     </SelectTrigger>
                     <SelectContent>
@@ -48,7 +48,7 @@ export function ChecklistFilters({
                 </Select>
 
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[140px] h-9 bg-white border-slate-200 text-[11px] font-bold uppercase tracking-tight rounded-xl shadow-sm transition-all hover:border-blue-400">
+                    <SelectTrigger className="w-[140px] h-11 bg-white border-slate-200 text-[11px] font-bold uppercase tracking-tight rounded-xl shadow-sm transition-all hover:border-blue-400">
                         <SelectValue placeholder="Все пункты" />
                     </SelectTrigger>
                     <SelectContent>
@@ -63,7 +63,7 @@ export function ChecklistFilters({
                     size="sm"
                     onClick={() => setIsCompact(!isCompact)}
                     className={cn(
-                        "h-9 px-4 font-bold text-[10px] uppercase tracking-widest transition-all rounded-xl border shadow-sm",
+                        "h-11 px-4 font-bold text-[10px] uppercase tracking-widest transition-all rounded-xl border shadow-sm",
                         isCompact ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
                     )}
                 >
@@ -78,7 +78,7 @@ export function ChecklistFilters({
                             setSelectedGroup("all")
                             setStatusFilter("all")
                         }}
-                        className="h-9 w-9 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0 border border-slate-200 rounded-xl shadow-sm"
+                        className="h-11 w-11 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0 border border-slate-200 rounded-xl shadow-sm"
                         title="Сбросить фильтры"
                     >
                         <FilterX className="w-4 h-4" />
@@ -90,7 +90,7 @@ export function ChecklistFilters({
                 <Button 
                     onClick={handleBulkComplete} 
                     disabled={isBatchLoading}
-                    className="h-10 px-6 text-[11px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-200/50 transition-all active:scale-95 flex items-center gap-2 group rounded-xl"
+                    className="h-11 px-6 text-[11px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-200/50 transition-all active:scale-95 flex items-center gap-2 group rounded-xl"
                 >
                     {isBatchLoading ? (
                         <Loader2 className="w-4 h-4 animate-spin" />

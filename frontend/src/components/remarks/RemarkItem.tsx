@@ -96,7 +96,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
     return (
         <div className={cn(
             "group bg-white border border-slate-200 p-5 rounded-2xl transition-all",
-            remark.is_completed && "opacity-60 grayscale-[0.5]",
+            remark.is_verified && "opacity-60 grayscale-[0.0]",
             remark.id.toString().startsWith('temp-') && "opacity-50 animate-pulse pointer-events-none cursor-wait"
         )}>
             {/* Top Bar: Controls & Priority */}
@@ -138,7 +138,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                                     <Button
                                         size="sm"
                                         onClick={() => verifyMutation.mutate(remark.id)}
-                                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg h-8 px-3 text-xs"
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg h-11 px-6 text-xs"
                                     >
                                         Принять
                                     </Button>
@@ -146,7 +146,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                                         size="sm"
                                         variant="outline"
                                         onClick={() => onReject(remark.id)}
-                                        className="border-rose-200 text-rose-600 hover:bg-rose-50 h-8 px-3 text-xs"
+                                        className="border-rose-200 text-rose-600 hover:bg-rose-50 h-11 px-6 text-xs"
                                     >
                                         В работу
                                     </Button>
@@ -158,7 +158,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                             size="sm"
                             disabled={isPending}
                             onClick={() => completeMutation.mutate({ remarkId: remark.id, status: true })}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg h-8 px-4 text-xs"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg h-11 px-6 text-xs"
                         >
                             {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-2" />}
                             Выполнить
@@ -171,7 +171,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
             <div className="mb-6">
                 <p className={cn(
                     "text-lg font-semibold text-slate-900 leading-snug",
-                    remark.is_completed && "text-slate-400 line-through"
+                    remark.is_completed && "text-slate-400"
                 )}>
                     {remark.text}
                 </p>
@@ -188,7 +188,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
             <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-100">
                 <div className="flex items-center gap-3">
                     <Select onValueChange={handleAssign} defaultValue={remark.assigned_to?.toString() || "none"}>
-                        <SelectTrigger className="w-48 bg-slate-50 border-slate-200 rounded-lg h-9 text-xs">
+                        <SelectTrigger className="w-48 bg-slate-50 border-slate-200 rounded-lg h-11 text-xs">
                             <div className="flex items-center gap-2 truncate">
                                 <UserPlus className="w-4 h-4 text-slate-400" />
                                 <SelectValue placeholder="Назначить специалиста" />
@@ -208,7 +208,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     </Select>
                     
                     {remark.assigned_user && (
-                        <div className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-semibold uppercase tracking-wider">
+                        <div className="px-3 h-11 flex items-center bg-slate-100 text-slate-600 rounded-lg text-[10px] font-semibold uppercase tracking-wider">
                             Исполнитель: {remark.assigned_user.username}
                         </div>
                     )}
@@ -218,7 +218,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     <button
                         onClick={() => setExpandedTab(expandedTab === "comments" ? null : "comments")}
                         className={cn(
-                            "flex items-center gap-2 px-3 h-9 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                            "flex items-center gap-2 px-3 h-11 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
                             expandedTab === "comments" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"
                         )}
                     >
@@ -227,7 +227,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     <button
                         onClick={() => setExpandedTab(expandedTab === "photos" ? null : "photos")}
                         className={cn(
-                            "flex items-center gap-2 px-3 h-9 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                            "flex items-center gap-2 px-3 h-11 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
                             expandedTab === "photos" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"
                         )}
                     >
@@ -236,7 +236,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                     <button
                         onClick={() => setExpandedTab(expandedTab === "history" ? null : "history")}
                         className={cn(
-                            "flex items-center gap-2 px-3 h-9 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                            "flex items-center gap-2 px-3 h-11 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
                             expandedTab === "history" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"
                         )}
                     >

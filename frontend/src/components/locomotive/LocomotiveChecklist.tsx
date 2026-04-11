@@ -518,7 +518,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                             <div className="md:hidden">
                                 <Sheet>
                                     <SheetTrigger asChild>
-                                        <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 relative border-slate-200 bg-white">
+                                        <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 relative border-slate-200 bg-white">
                                             <Settings2 className="w-5 h-5 text-slate-600" />
                                             {(selectedGroup !== "all" || statusFilter !== "all") && (
                                                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white" />
@@ -593,8 +593,8 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                 </Sheet>
                             </div>
 
-                            <Button variant="outline" size="icon" className="hidden sm:flex h-10 w-10 border-slate-200 hover:bg-slate-50 group" onClick={downloadPDF} title="Скачать PDF">
-                                <Download className="w-4 h-4 text-slate-600 group-hover:text-blue-600 transition-colors" />
+                            <Button variant="outline" size="icon" className="hidden sm:flex h-11 w-11 border-slate-200 hover:bg-slate-50 group" onClick={downloadPDF} title="Скачать PDF">
+                                <Download className="w-5 h-5 text-slate-600 group-hover:text-blue-600 transition-colors" />
                             </Button>
                         </div>
                     </div>
@@ -603,7 +603,9 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
 
 
             {/* Statistics Card */}
-            <ChecklistStatistics items={items} />
+            <div className="hidden md:block">
+                <ChecklistStatistics items={items} />
+            </div>
 
             {/* Actions Row (Filters & Bulk Actions) */}
             <ChecklistFilters 
@@ -694,7 +696,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                 <ItemTitle className={cn(
                                                                     isCompact ? "text-sm" : "text-base",
                                                                     "whitespace-normal leading-snug cursor-pointer hover:text-blue-600 transition-colors",
-                                                                    item.verified_at ? "text-slate-400 line-through font-normal" :
+                                                                    item.verified_at ? "text-slate-400 font-normal" :
                                                                         item.is_completed ? "text-slate-700 font-medium" :
                                                                             "text-slate-900 font-semibold"
                                                                 )} onClick={() => item.template_item?.full_description && toggleItemDetails(item.id)}>
@@ -763,7 +765,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                     <Button
                                                                         size="sm"
                                                                         onClick={() => handleVerifyItem(item.id, true)}
-                                                                        className="bg-blue-600 hover:bg-blue-700 h-8 px-4 text-xs font-semibold"
+                                                                        className="bg-blue-600 hover:bg-blue-700 h-11 px-6 text-xs font-semibold flex-1 sm:flex-none"
                                                                     >
                                                                         ✓ Принять
                                                                     </Button>
@@ -774,7 +776,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                             setRejectItemId(item.id)
                                                                             setRejectComment("")
                                                                         }}
-                                                                        className="border-red-200 text-red-600 hover:bg-red-50 h-8 px-4 text-xs font-semibold"
+                                                                        className="border-red-200 text-red-600 hover:bg-red-50 h-11 px-6 text-xs font-semibold flex-1 sm:flex-none"
                                                                     >
                                                                         Вернуть
                                                                     </Button>
@@ -788,8 +790,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                 <button
                                                                     onClick={() => toggleItemId(item.id, 'comments')}
                                                                     className={cn(
-                                                                        "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs rounded-lg transition-all border",
-                                                                        isCompact ? "px-2 py-1" : "px-3 py-2",
+                                                                        "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs rounded-lg transition-all border h-11 px-3",
                                                                         expandedItemId === item.id && activeDetailTab === 'comments'
                                                                             ? "bg-slate-900 text-white border-slate-900"
                                                                             : "bg-white text-slate-600 border-slate-200"
@@ -801,8 +802,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                 <button
                                                                     onClick={() => toggleItemId(item.id, 'photos')}
                                                                     className={cn(
-                                                                        "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs rounded-lg transition-all border",
-                                                                        isCompact ? "px-2 py-1" : "px-3 py-2",
+                                                                        "flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 text-xs rounded-lg transition-all border h-11 px-3",
                                                                         expandedItemId === item.id && activeDetailTab === 'photos'
                                                                             ? "bg-slate-900 text-white border-slate-900"
                                                                             : "bg-white text-slate-600 border-slate-200"
@@ -814,8 +814,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                 <button
                                                                     onClick={() => toggleItemId(item.id, 'history')}
                                                                     className={cn(
-                                                                        "flex-none inline-flex items-center justify-center rounded-lg transition-all border",
-                                                                        isCompact ? "w-7 h-7" : "w-9 h-9",
+                                                                        "flex-none inline-flex items-center justify-center rounded-lg transition-all border h-11 w-11",
                                                                         expandedItemId === item.id && activeDetailTab === 'history'
                                                                             ? "bg-slate-900 text-white border-slate-900"
                                                                             : "bg-white text-slate-600 border-slate-200"
@@ -831,12 +830,12 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                         <Button
                                                                             onClick={() => handleCompleteItem(item.id, true)}
                                                                             disabled={itemLoading[item.id]}
-                                                                            className={cn("gap-2 bg-emerald-600 hover:bg-emerald-700 font-semibold shadow-sm w-full md:w-auto", isCompact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm")}
+                                                                            className={cn("gap-2 bg-emerald-600 hover:bg-emerald-700 font-semibold shadow-sm w-full md:w-auto h-11 px-6 text-sm")}
                                                                         >
                                                                             {itemLoading[item.id] ? (
-                                                                                <Loader2 className={cn("animate-spin", isCompact ? "w-3.5 h-3.5" : "w-4 h-4")} />
+                                                                                <Loader2 className={cn("animate-spin", "w-4 h-4")} />
                                                                             ) : (
-                                                                                <CheckCircle2 className={cn(isCompact ? "w-3.5 h-3.5" : "w-4 h-4")} />
+                                                                                <CheckCircle2 className={cn("w-4 h-4")} />
                                                                             )} 
                                                                             Выполнить
                                                                         </Button>
@@ -845,13 +844,13 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                             variant="ghost"
                                                                             onClick={() => handleCompleteItem(item.id, false)}
                                                                             disabled={itemLoading[item.id]}
-                                                                            className={cn("gap-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg w-full md:w-auto", isCompact ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm")}
+                                                                            className={cn("gap-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg w-full md:w-auto h-11 px-4 text-sm")}
                                                                             title="Снять отметку"
                                                                         >
                                                                             {itemLoading[item.id] ? (
-                                                                                <Loader2 className={cn("animate-spin", isCompact ? "w-3.5 h-3.5" : "w-4 h-4")} />
+                                                                                <Loader2 className={cn("animate-spin", "w-4 h-4")} />
                                                                             ) : (
-                                                                                <X className={cn(isCompact ? "w-3.5 h-3.5" : "w-4 h-4")} />
+                                                                                <X className={cn("w-4 h-4")} />
                                                                             )}
                                                                             {isCompact ? "Снять" : "Снять отметку"}
                                                                         </Button>
@@ -865,7 +864,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                     {item.template_item?.full_description && expandedItems[item.id] && (
                                                         <div className="mt-3 text-sm text-slate-500 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100 animate-in fade-in slide-in-from-top-1 duration-200">
                                                             <div className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
-                                                                <Info className="w-3 h-3" /> Инструкция
+                                                                 <Info className="w-3 h-3" /> Инструкция
                                                             </div>
                                                             {item.template_item.full_description}
                                                         </div>
@@ -912,11 +911,11 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                                 value={commentText}
                                                                                 onChange={e => setCommentText(e.target.value)}
                                                                                 placeholder="Добавить комментарий..."
-                                                                                className="flex-1 text-xs bg-white border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                                className="flex-1 text-xs bg-white border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 h-11"
                                                                                 onKeyDown={e => e.key === 'Enter' && submitComment(item.id)}
                                                                             />
-                                                                            <Button size="sm" onClick={() => submitComment(item.id)} disabled={!commentText.trim()}>
-                                                                                <Send className="w-3.5 h-3.5" />
+                                                                            <Button size="sm" onClick={() => submitComment(item.id)} disabled={!commentText.trim()} className="h-11 w-11">
+                                                                                <Send className="w-4 h-4" />
                                                                             </Button>
                                                                         </div>
                                                                     )}
@@ -938,8 +937,8 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                                                                                     onChange={(e) => handlePhotoUpload(item.id, e)}
                                                                                     disabled={uploadingPhoto}
                                                                                 />
-                                                                                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={uploadingPhoto}>
-                                                                                    {uploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Camera className="w-3 h-3 mr-1" />}
+                                                                                <Button size="sm" variant="outline" className="h-11 px-4 text-xs font-bold" disabled={uploadingPhoto}>
+                                                                                    {uploadingPhoto ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Camera className="w-4 h-4 mr-2" />}
                                                                                     Загрузить
                                                                                 </Button>
                                                                             </div>
@@ -1023,11 +1022,12 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
                         />
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setRejectItemId(null)} disabled={isRejecting}>Отмена</Button>
+                        <Button variant="outline" onClick={() => setRejectItemId(null)} disabled={isRejecting} className="h-11 px-6">Отмена</Button>
                         <Button
                             variant="destructive"
                             onClick={handleReject}
                             disabled={!rejectComment.trim() || isRejecting}
+                            className="h-11 px-6"
                         >
                             {isRejecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <AlertCircle className="w-4 h-4 mr-2" />}
                             Отклонить

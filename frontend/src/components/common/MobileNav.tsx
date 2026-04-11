@@ -175,7 +175,7 @@ export function MobileNav() {
                                     className="flex items-center gap-4 p-5 bg-slate-950 dark:bg-blue-600 rounded-[2rem] text-white shadow-xl shadow-slate-200 dark:shadow-none active:scale-[0.98] transition-all"
                                 >
                                     <Users className="w-6 h-6" />
-                                    <span className="font-bold uppercase tracking-widest text-xs flex-1">Панель администратора</span>
+                                    <span className="font-bold uppercase tracking-widest text-sm flex-1">Панель администратора</span>
                                     <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
                                 </Link>
                             ) : (
@@ -185,7 +185,7 @@ export function MobileNav() {
                                     className="flex items-center gap-4 p-5 bg-slate-950 dark:bg-slate-800 rounded-[2rem] text-white shadow-xl shadow-slate-200 dark:shadow-none active:scale-[0.98] transition-all"
                                 >
                                     <LayoutDashboard className="w-6 h-6" />
-                                    <span className="font-bold uppercase tracking-widest text-xs flex-1">Дашборд</span>
+                                    <span className="font-bold uppercase tracking-widest text-sm flex-1">Дашборд</span>
                                 </Link>
                             )}
                             
@@ -239,7 +239,7 @@ export function MobileNav() {
                             </div>
                             
                             <span className={cn(
-                                "text-[11px] font-bold tracking-tight transition-all",
+                                "text-xs font-semibold tracking-tight transition-all",
                                 isActive ? "text-slate-900 dark:text-white" : "opacity-70"
                             )}>
                                 {item.label}
@@ -262,7 +262,7 @@ function QuickAction({ icon: Icon, label, color, onClick, to }: any) {
             )}>
                 <Icon className="w-6 h-6" />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">{label}</span>
         </>
     );
 

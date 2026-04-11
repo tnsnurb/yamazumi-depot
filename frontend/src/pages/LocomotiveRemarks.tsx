@@ -9,22 +9,15 @@ import {
     BookOpen, 
     Download,
     Search,
-    ClipboardPaste,
     FileText,
     CheckCircle2,
-    Wrench,
-    Loader2,
-    Trash2,
-    Camera
+    Loader2
 } from "lucide-react"
-import { format, differenceInDays, parseISO } from "date-fns"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { locomotiveApi } from "@/api/locomotiveService"
 import { remarkApi } from "@/api/remarkService"
-import { gaugeService, type Gauge } from "@/api/gaugeService"
 import type { Remark, RemarkTemplate, RemarkUser, CreateRemarkDTO } from "@/types/remark"
 import { RemarkItem } from "@/components/remarks/RemarkItem"
 import { exportRemarksToExcel, exportRemarksToPDF } from "@/utils/exportRemarks"
@@ -56,12 +49,7 @@ export default function LocomotiveRemarks() {
     const [searchQuery, setSearchQuery] = useState("")
 
     // --- MODAL STATES ---
-    const [isPasteOpen, setIsPasteOpen] = useState(false)
-    const [pasteText, setPasteText] = useState("")
     const [isAddManualOpen, setIsAddManualOpen] = useState(false)
-    const [isInstallGaugeOpen, setIsInstallGaugeOpen] = useState(false)
-    const [selectedWarehouseGaugeId, setSelectedWarehouseGaugeId] = useState<string>("")
-    const [installSide, setInstallSide] = useState<'K1' | 'K2'>('K1')
     const [manualRemark, setManualRemark] = useState<{ text: string, priority: "low" | "medium" | "high", category: string }>({ 
         text: "", 
         priority: "medium", 
@@ -86,12 +74,6 @@ export default function LocomotiveRemarks() {
         enabled: !!locomotiveId
     })
 
-    const { data: locomotiveGauges = [] } = useQuery<Gauge[]>({
-        queryKey: ['locomotive-gauges', locomotiveId],
-        queryFn: () => gaugeService.getByLocomotive(locomotiveId!),
-        enabled: !!locomotiveId
-    })
-
     const { data: allUsers = [] } = useQuery<RemarkUser[]>({
         queryKey: ['users'],
         queryFn: () => locomotiveApi.getUsers(),
@@ -103,29 +85,7 @@ export default function LocomotiveRemarks() {
         staleTime: Infinity,
     })
 
-    const { data: allGauges = [] } = useQuery<Gauge[]>({
-        queryKey: ['gauges'],
-        queryFn: gaugeService.getAll
-    })
-
-    const warehouseGauges = useMemo(() => {
-        return allGauges.filter(g => g.status === 'На складе')
-    }, [allGauges])
-
-    const selectedWarehouseGauge = useMemo(() => {
-        return warehouseGauges.find(g => g.id === selectedWarehouseGaugeId)
-    }, [warehouseGauges, selectedWarehouseGaugeId])
-
     // --- MUTATIONS ---
-    const addBatchMutation = useMutation({
-        mutationFn: (texts: string[]) => remarkApi.bulkCreate(locomotiveId!, texts),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
-            toast.success("Замечания добавлены")
-            setIsPasteOpen(false)
-            setPasteText("")
-        }
-    })
 
     const completeBatchMutation = useMutation({
         mutationFn: (ids: string[]) => remarkApi.completeBatch(ids),
@@ -149,15 +109,10 @@ export default function LocomotiveRemarks() {
         mutationFn: (ids: number[]) => remarkApi.addFromTemplates(locomotiveId!, ids),
         onMutate: async (newTemplateIds) => {
             setAddingTemplateIds(prev => [...prev, ...newTemplateIds])
-            
-            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
             await queryClient.cancelQueries({ queryKey: ['remarks', locomotiveId] })
-
-            // Snapshot the previous value
             const previousRemarks = queryClient.getQueryData<Remark[]>(['remarks', locomotiveId])
             const authUser = queryClient.getQueryData<RemarkUser>(['authUser'])
 
-            // Optimistically update to the new value
             if (previousRemarks) {
                 const optimisticRemarks: Remark[] = newTemplateIds.map(id => {
                     const template = templates.find(t => t.id === id)
@@ -173,31 +128,23 @@ export default function LocomotiveRemarks() {
                         created_by: authUser || null,
                     } as Remark
                 })
-                
-                // Add new optimistic remarks to the top of the list
                 queryClient.setQueryData(['remarks', locomotiveId], [...optimisticRemarks, ...previousRemarks])
             }
-
             return { previousRemarks }
         },
         onError: (err: any, newTemplateIds, context) => {
             setAddingTemplateIds(prev => prev.filter(id => !newTemplateIds.includes(id)))
-            
-            // Roll back to the previous value if mutation fails
             if (context?.previousRemarks) {
                 queryClient.setQueryData(['remarks', locomotiveId], context.previousRemarks)
             }
             toast.error("Ошибка при добавлении: " + err.message)
         },
         onSettled: () => {
-            // Always refetch after error or success to sync with server
             queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
         },
         onSuccess: (_, newTemplateIds) => {
             setAddingTemplateIds(prev => prev.filter(id => !newTemplateIds.includes(id)))
             setAddedTemplateIds(prev => [...prev, ...newTemplateIds])
-            
-            // Show checkmark for 2 seconds
             setTimeout(() => {
                 setAddedTemplateIds(prev => prev.filter(id => !newTemplateIds.includes(id)))
             }, 2000)
@@ -213,41 +160,6 @@ export default function LocomotiveRemarks() {
             toast.success("Замечание отклонено")
         }
     })
-
-    const updateGaugeMutation = useMutation({
-        mutationFn: ({id, ...updates}: Partial<Gauge> & {id: string}) => gaugeService.update(id, updates),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['gauges'] })
-            queryClient.invalidateQueries({ queryKey: ['locomotive-gauges', locomotiveId] })
-            setIsInstallGaugeOpen(false)
-            setSelectedWarehouseGaugeId("")
-            setInstallSide('K1')
-            toast.success("Данные манометра обновлены")
-        },
-        onError: (err: any) => {
-            toast.error(err.message || "Ошибка при обновлении манометра")
-        }
-    })
-
-    const handleInstallGauge = () => {
-        if (!selectedWarehouseGaugeId) return
-        updateGaugeMutation.mutate({
-            id: selectedWarehouseGaugeId,
-            locomotive_id: parseInt(locomotiveId!),
-            status: 'На локомотиве',
-            installation_side: installSide
-        })
-    }
-
-    const handleUninstallGauge = (gaugeId: string) => {
-        if (!window.confirm("Снять этот манометр и вернуть на склад?")) return
-        updateGaugeMutation.mutate({
-            id: gaugeId,
-            locomotive_id: null,
-            status: 'На складе',
-            installation_side: null
-        })
-    }
 
     // --- DERIVED DATA ---
     const filteredRemarks = useMemo(() => {
@@ -267,11 +179,6 @@ export default function LocomotiveRemarks() {
     }, [templates, catalogSearch])
 
     // --- HANDLERS ---
-    const handlePasteSubmit = () => {
-        const lines = pasteText.split('\n').map(l => l.trim()).filter(l => l.length > 0)
-        if (lines.length === 0) return
-        addBatchMutation.mutate(lines)
-    }
 
     const handleCompleteAll = () => {
         const incompleteIds = remarks.filter((r) => !r.is_completed).map((r) => r.id)
@@ -286,15 +193,16 @@ export default function LocomotiveRemarks() {
             <main className="flex-1 w-full max-w-7xl mx-auto p-6 md:p-12">
                 
                 {/* Header Section */}
-                <div className="flex items-center justify-between gap-4 mb-8">
+                <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
                     <div className="space-y-1">
                         <button 
                             onClick={() => navigate("/")}
-                            className="flex items-center gap-1.5 text-slate-500 hover:text-slate-900 transition-colors text-xs font-medium"
+                            className="flex items-center gap-1.5 text-slate-500 hover:text-slate-900 transition-colors text-xs font-medium h-11 pr-4"
                         >
-                            <ChevronLeft className="w-4 h-4" /> Назад к списку
+                            <ChevronLeft className="w-5 h-5" /> 
+                            <span className="hidden sm:inline">Назад к списку</span>
                         </button>
-                        <h1 className="text-3xl font-semibold text-slate-900">
+                        <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 leading-tight">
                             Замечания <span className="text-slate-400 font-normal">#{locomotive?.number || '—'}</span>
                         </h1>
                     </div>
@@ -303,36 +211,41 @@ export default function LocomotiveRemarks() {
                         <Button 
                             onClick={() => refetch()} 
                             variant="outline" 
-                            className="bg-white hover:bg-slate-50 border-slate-200"
+                            className="bg-white hover:bg-slate-50 border-slate-200 h-11 w-11 p-0 shrink-0"
                         >
-                            <RefreshCw className={cn("w-4 h-4 text-slate-400", isFetching && "animate-spin")} />
+                            <RefreshCw className={cn("w-5 h-5 text-slate-400", isFetching && "animate-spin")} />
                         </Button>
                         <Button
                             onClick={handleCompleteAll}
                             disabled={stats.pending === 0}
                             variant="outline"
-                            className="bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100"
+                            className="bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100 h-11 px-3 md:px-6 shrink-0"
                         >
-                            <ClipboardCheck className="w-4 h-4 mr-2" /> Выполнить все
+                            <ClipboardCheck className="w-5 h-5 md:mr-2" /> 
+                            <span className="hidden md:inline">Выполнить все</span>
                         </Button>
                         <Button
                             onClick={() => exportRemarksToExcel(remarks, locomotive!, 'all')}
                             variant="outline"
-                            className="bg-white border-slate-200"
+                            className="bg-white border-slate-200 h-11 px-3 md:px-4 shrink-0"
+                            title="Экспорт в Excel"
                         >
-                            <Download className="w-4 h-4 mr-2" /> Excel
+                            <Download className="w-5 h-5 md:mr-2" />
+                            <span className="hidden md:inline">Excel</span>
                         </Button>
                         <Button
                             onClick={() => exportRemarksToPDF(remarks, locomotive!, 'all')}
                             variant="outline"
-                            className="bg-white border-slate-200"
+                            className="bg-white border-slate-200 h-11 px-3 md:px-4 shrink-0"
+                            title="Экспорт в PDF"
                         >
-                            <FileText className="w-4 h-4 mr-2" /> PDF Отчет
+                            <FileText className="w-5 h-5 md:mr-2" />
+                            <span className="hidden md:inline">PDF Отчет</span>
                         </Button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                     <div className="bg-white border border-slate-200 p-5 rounded-2xl">
                         <div className="text-slate-500 text-xs font-medium mb-1">Всего замечаний</div>
                         <div className="text-3xl font-semibold text-slate-900">{stats.total}</div>
@@ -355,142 +268,29 @@ export default function LocomotiveRemarks() {
 
                 <div className="bg-white border border-slate-200 p-4 rounded-2xl mb-8 flex flex-col md:flex-row items-center gap-4">
                     <div className="relative flex-1 w-full">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                         <Input
                             placeholder="Поиск по замечаниям..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10 bg-slate-50 border-slate-200"
+                            className="pl-11 bg-slate-50 border-slate-200 h-11"
                         />
                     </div>
                     
                     <div className="flex items-center gap-2 w-full md:w-auto">
                         <Button 
                             onClick={() => setIsAddManualOpen(true)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 flex-1 md:flex-none"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 flex-1 md:flex-none h-11"
                         >
-                            <Plus className="w-4 h-4" /> Добавить
-                        </Button>
-                        <Button 
-                            onClick={() => setIsInstallGaugeOpen(true)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white gap-2 flex-1 md:flex-none"
-                        >
-                            <Wrench className="w-4 h-4" /> Установить манометр
+                            <Plus className="w-5 h-5" /> Добавить
                         </Button>
                         <Button 
                             onClick={() => setIsCatalogOpen(true)}
-                            className="bg-slate-800 hover:bg-slate-900 text-white gap-2 flex-1 md:flex-none"
+                            className="bg-slate-800 hover:bg-slate-900 text-white gap-2 flex-1 md:flex-none h-11"
                         >
-                            <BookOpen className="w-4 h-4" /> Из каталога
-                        </Button>
-                        <Button 
-                            onClick={() => setIsPasteOpen(true)}
-                            variant="outline"
-                            className="border-slate-200 gap-2 flex-1 md:flex-none"
-                        >
-                            <ClipboardPaste className="w-4 h-4" /> Быстрая вставка
+                            <BookOpen className="w-5 h-5" /> Из каталога
                         </Button>
                     </div>
-                </div>
-
-                {/* Gauges Section */}
-                <div className="mb-8 p-6 bg-white border border-slate-200 rounded-3xl shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                            <Wrench className="w-5 h-5 text-blue-600" />
-                            Установленные приборы
-                        </h3>
-                        <div className="flex items-center gap-2">
-                            <Button 
-                                onClick={() => setIsInstallGaugeOpen(true)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
-                                size="sm"
-                            >
-                                <Plus className="w-4 h-4" /> Установить
-                            </Button>
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="text-slate-500 hover:text-slate-700 font-medium"
-                                onClick={() => navigate('/gauges')}
-                            >
-                                Справочник
-                            </Button>
-                        </div>
-                    </div>
-                    
-                    {locomotiveGauges.length === 0 ? (
-                        <div className="py-8 text-center bg-slate-50/50 border border-slate-100 border-dashed rounded-2xl">
-                            <p className="text-slate-400 text-sm">На этот локомотив еще не установлены манометры</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {locomotiveGauges.map(gauge => {
-                                const daysLeft = differenceInDays(parseISO(gauge.next_verification), new Date())
-                                const isExpiring = daysLeft < 30
-                                const isOverdue = daysLeft < 0
-
-                                return (
-                                    <div key={gauge.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between group">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <code className="text-xs font-semibold bg-white px-2 py-0.5 rounded border border-slate-200">
-                                                    {gauge.serial_number}
-                                                </code>
-                                                {gauge.installation_side && (
-                                                   <Badge className="bg-blue-600 text-white border-blue-600 text-[10px] h-5 px-1 font-semibold">
-                                                       {gauge.installation_side}
-                                                   </Badge>
-                                                )}
-                                                <span className="text-xs text-slate-500 font-medium">{gauge.part_number}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                                                Поверка: {format(parseISO(gauge.next_verification), 'dd.MM.yyyy')}
-                                            </div>
-                                            {gauge.photo_url && (
-                                                <div 
-                                                    className="mt-2 w-full h-24 rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
-                                                    onClick={() => window.open(gauge.photo_url, '_blank')}
-                                                >
-                                                    <img src={gauge.photo_url} className="w-full h-full object-cover" alt="Gauge" />
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-col items-end gap-1">
-                                            <Badge 
-                                                variant="outline" 
-                                                className={cn(
-                                                    "font-semibold text-[10px]",
-                                                    isOverdue ? "bg-red-500 text-white border-red-500 animate-pulse" :
-                                                    isExpiring ? "bg-amber-100 text-amber-700 border-amber-200" :
-                                                    "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                                )}
-                                            >
-                                                {daysLeft} дн.
-                                            </Badge>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                                                title="Снять прибор (на склад)"
-                                                onClick={() => handleUninstallGauge(gauge.id)}
-                                            >
-                                                <Trash2 className="w-3 h-3" />
-                                            </Button>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                onClick={() => navigate(`/gauges?serial=${gauge.serial_number}`)}
-                                            >
-                                                <Search className="w-3 h-3 text-slate-400" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    )}
                 </div>
 
                 {/* Main List */}
@@ -661,129 +461,6 @@ export default function LocomotiveRemarks() {
                 </DialogContent>
             </Dialog>
 
-            {/* Batch Paste Dialog */}
-            <Dialog open={isPasteOpen} onOpenChange={setIsPasteOpen}>
-                <DialogContent className="bg-white border-slate-200 max-w-2xl rounded-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Быстрая вставка замечаний</DialogTitle>
-                        <DialogDescription>
-                            Вставьте список из Excel или другого документа (одно замечание на строку)
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Textarea 
-                        value={pasteText}
-                        onChange={(e) => setPasteText(e.target.value)}
-                        placeholder="Замечание 1&#10;Замечание 2&#10;..."
-                        className="bg-slate-50 border-slate-200 min-h-[200px] mb-4"
-                    />
-                    <DialogFooter>
-                        <Button 
-                            onClick={handlePasteSubmit}
-                            disabled={!pasteText.trim() || addBatchMutation.isPending}
-                            className="w-full bg-slate-800 hover:bg-slate-900 text-white"
-                        >
-                            {addBatchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ClipboardPaste className="w-4 h-4 mr-2" />}
-                            Импортировать
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            {/* Install Gauge Dialog */}
-            <Dialog open={isInstallGaugeOpen} onOpenChange={setIsInstallGaugeOpen}>
-                <DialogContent className="bg-white border-slate-200 max-w-md rounded-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Установка манометра</DialogTitle>
-                        <DialogDescription>
-                            Выберите прибор со склада для установки на локомотив #{locomotive?.number}
-                        </DialogDescription>
-                    </DialogHeader>
-                    
-                    <div className="space-y-6 py-4">
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold text-slate-400 tracking-wider">Серийный номер (на складе)</label>
-                            <Select value={selectedWarehouseGaugeId} onValueChange={setSelectedWarehouseGaugeId}>
-                                <SelectTrigger className="bg-slate-50 border-slate-200">
-                                    <SelectValue placeholder="Выберите манометр..." />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px]">
-                                    {warehouseGauges.length === 0 ? (
-                                        <div className="p-4 text-center text-slate-500 text-sm">Нет свободных манометров</div>
-                                    ) : (
-                                        warehouseGauges.map(g => (
-                                            <SelectItem key={g.id} value={g.id}>
-                                                {g.serial_number} — {g.part_number}
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold text-slate-400 tracking-wider">Сторона установки</label>
-                            <div className="flex gap-2">
-                                {['K1', 'K2'].map((side) => (
-                                <button
-                                    key={side}
-                                    type="button"
-                                    onClick={() => setInstallSide(side as 'K1' | 'K2')}
-                                    className={`flex-1 py-3 rounded-xl border text-sm font-semibold transition-all ${
-                                    installSide === side 
-                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100' 
-                                        : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                                    }`}
-                                >
-                                    Cabin {side}
-                                </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {selectedWarehouseGauge && (
-                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <div className="flex items-start gap-4">
-                                    <div className="w-24 h-24 rounded-xl bg-white border border-slate-200 overflow-hidden flex-shrink-0">
-                                        {selectedWarehouseGauge.photo_url ? (
-                                            <img src={selectedWarehouseGauge.photo_url} className="w-full h-full object-cover" />
-                                        ) : selectedWarehouseGauge.model_image_url ? (
-                                            <img src={selectedWarehouseGauge.model_image_url} className="w-full h-full object-cover opacity-50 blur-[1px]" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                                <Camera className="w-8 h-8" />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="space-y-1 py-1">
-                                        <div className="text-xs font-semibold text-blue-600 uppercase tracking-tighter">Характеристики</div>
-                                        <div className="text-lg font-semibold text-slate-900 leading-tight">
-                                            {selectedWarehouseGauge.part_number}
-                                        </div>
-                                        <div className="text-xs text-slate-500 font-medium">
-                                            {selectedWarehouseGauge.description}
-                                        </div>
-                                        <div className="pt-2 flex items-center gap-1.5">
-                                            <Badge variant="outline" className="bg-white text-[10px] font-semibold">
-                                                Поверка до: {format(parseISO(selectedWarehouseGauge.next_verification), 'dd.MM.yyyy')}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <DialogFooter>
-                        <Button 
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold h-12 rounded-xl shadow-lg shadow-blue-200"
-                            disabled={!selectedWarehouseGaugeId || updateGaugeMutation.isPending}
-                            onClick={handleInstallGauge}
-                        >
-                            {updateGaugeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Подтвердить установку"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
 
         </div>
     )
