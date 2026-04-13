@@ -64,7 +64,7 @@ export default function HistorySessionChecklists() {
                     {session.checklists && session.checklists.length > 0 ? (
                         <div className="space-y-8">
                             {session.checklists.map((cl: any) => (
-                                <div key={cl.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden p-6 md:p-8">
+                                <div key={cl.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden p-4 md:p-8">
                                     <LocomotiveChecklist instanceId={cl.id} readOnly={true} hideHeader={true} />
                                 </div>
                             ))}

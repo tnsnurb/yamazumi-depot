@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { User as LucideUser, ShieldCheck, Download, ChevronRight, ChevronDown, Loader2, Info, Clock, MessageSquare, Camera, History, Send, X, AlertCircle, Settings2, LayoutGrid, CheckCircle2, FilterX } from "lucide-react"
 import { ChecklistStatistics } from "./ChecklistStatistics"
 import { ChecklistFilters } from "./ChecklistFilters"
+import { ChecklistSkeleton } from "./ChecklistSkeleton"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
@@ -99,6 +100,9 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
     const fetchChecklist = async () => {
         try {
             setLoading(true)
+            // Artificial delay to show the beautiful skeleton loader
+            await new Promise(resolve => setTimeout(resolve, 800))
+            
             const token = localStorage.getItem('access_token')
             let res
             if (instanceId) {
@@ -434,11 +438,7 @@ export function LocomotiveChecklist({ locomotiveId, instanceId, readOnly = false
     }
 
     if (loading) {
-        return (
-            <div className="flex justify-center items-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-        )
+        return <ChecklistSkeleton />
     }
 
     if (!instance || items.length === 0) {

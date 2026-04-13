@@ -138,7 +138,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
         <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {/* Header Card */}
             <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
-                <div className="bg-slate-50 border-b border-slate-100 p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="bg-slate-50 border-b border-slate-100 p-4 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div className="flex items-center gap-5">
                         <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner">
                             <Train className="w-8 h-8" />

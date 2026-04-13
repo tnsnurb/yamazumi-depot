@@ -1,5 +1,6 @@
 import { useParams } from "react-router-dom"
 import { LocomotiveChecklist } from "@/components/locomotive/LocomotiveChecklist"
+import { ChecklistSkeleton } from "@/components/locomotive/ChecklistSkeleton"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -106,9 +107,11 @@ export default function LocomotiveChecklistPage() {
                                 locomotiveId={Number(id)} 
                                 hideHeader={true}
                             />
+                    ) : loading ? (
+                        <ChecklistSkeleton />
                     ) : (
                         <div className="flex h-40 items-center justify-center text-slate-500">
-                            {loading ? "Загрузка..." : "Локомотив не найден"}
+                            Локомотив не найден
                         </div>
                     )}
                 </div>

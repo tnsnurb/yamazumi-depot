@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { remarkApi } from "@/api/remarkService"
-import type { Remark, RemarkUser } from "@/types/remark"
+import type { Remark } from "@/types/remark"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { 
@@ -10,7 +10,6 @@ import {
     History, 
     CheckCircle2, 
     Loader2, 
-    UserPlus, 
     Tag, 
     AlertCircle,
     ChevronDown
@@ -21,13 +20,6 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { RemarkComments } from "./RemarkComments"
@@ -37,11 +29,10 @@ import { RemarkHistory } from "./RemarkHistory"
 interface RemarkItemProps {
     remark: Remark;
     locomotiveId: string;
-    allUsers: RemarkUser[];
     onReject: (remarkId: string) => void;
 }
 
-export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkItemProps) {
+export function RemarkItem({ remark, locomotiveId, onReject }: RemarkItemProps) {
     const queryClient = useQueryClient()
     const [expandedTab, setExpandedTab] = useState<"comments" | "photos" | "history" | null>(null)
 
@@ -83,20 +74,12 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
         updateStatusMutation.mutate({ remarkId: remark.id, updates: { priority } })
     }
 
-    const handleAssign = (userId: string) => {
-        const uId = userId === "none" ? null : parseInt(userId)
-        remarkApi.assignWorker(remark.id, uId).then(() => {
-            queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
-            toast.success(uId ? "Специалист назначен" : "Назначение снято")
-        })
-    }
 
     const isPending = updateStatusMutation.isPending || completeMutation.isPending || verifyMutation.isPending
 
     return (
         <div className={cn(
             "group bg-white border border-slate-200 p-5 rounded-2xl transition-all",
-            remark.is_verified && "opacity-60 grayscale-[0.0]",
             remark.id.toString().startsWith('temp-') && "opacity-50 animate-pulse pointer-events-none cursor-wait"
         )}>
             {/* Top Bar: Controls & Priority */}
@@ -127,33 +110,7 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {remark.is_completed ? (
-                        <>
-                            {remark.is_verified ? (
-                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 rounded-lg py-1 px-3 text-[10px] uppercase font-semibold">
-                                    Принято
-                                </Badge>
-                            ) : (
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        size="sm"
-                                        onClick={() => verifyMutation.mutate(remark.id)}
-                                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg h-11 px-6 text-xs"
-                                    >
-                                        Принять
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => onReject(remark.id)}
-                                        className="border-rose-200 text-rose-600 hover:bg-rose-50 h-11 px-6 text-xs"
-                                    >
-                                        В работу
-                                    </Button>
-                                </div>
-                            )}
-                        </>
-                    ) : (
+                    {!remark.is_completed && (
                         <Button
                             size="sm"
                             disabled={isPending}
@@ -164,55 +121,53 @@ export function RemarkItem({ remark, locomotiveId, allUsers, onReject }: RemarkI
                             Выполнить
                         </Button>
                     )}
+                    {remark.is_verified && (
+                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 rounded-lg py-1 px-3 text-[10px] uppercase font-semibold">
+                            Принято
+                        </Badge>
+                    )}
                 </div>
             </div>
 
             {/* Content Section */}
             <div className="mb-6">
-                <p className={cn(
-                    "text-lg font-semibold text-slate-900 leading-snug",
-                    remark.is_completed && "text-slate-400"
-                )}>
+                <p className="text-lg font-semibold text-slate-900 leading-snug">
                     {remark.text}
                 </p>
                 
                 {remark.is_completed && (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                        <span>Выполнил: <b>{remark.completed_by?.full_name || "Неизвестно"}</b></span>
+                    <div className="mt-3 flex flex-col gap-4">
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                            <span>Выполнил: <b>{remark.completed_by?.full_name || "Неизвестно"}</b></span>
+                        </div>
+                        
+                        {!remark.is_verified && (
+                            <div className="flex items-center gap-2 w-full">
+                                <Button
+                                    size="sm"
+                                    onClick={() => verifyMutation.mutate(remark.id)}
+                                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-12 text-sm font-bold shadow-lg shadow-emerald-100"
+                                >
+                                    Принять
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => onReject(remark.id)}
+                                    className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50 rounded-xl h-12 text-sm font-bold"
+                                >
+                                    В работу
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
 
             {/* Footer: Assignment & Details Tabs */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-100">
-                <div className="flex items-center gap-3">
-                    <Select onValueChange={handleAssign} defaultValue={remark.assigned_to?.toString() || "none"}>
-                        <SelectTrigger className="w-48 bg-slate-50 border-slate-200 rounded-lg h-11 text-xs">
-                            <div className="flex items-center gap-2 truncate">
-                                <UserPlus className="w-4 h-4 text-slate-400" />
-                                <SelectValue placeholder="Назначить специалиста" />
-                            </div>
-                        </SelectTrigger>
-                        <SelectContent className="bg-white border-slate-200">
-                            <SelectItem value="none" className="text-slate-400 italic">Не назначено</SelectItem>
-                            {allUsers.map((u: RemarkUser) => (
-                                <SelectItem key={u.id} value={u.id.toString()}>
-                                    <div className="flex flex-col">
-                                        <span className="font-medium">{u.full_name}</span>
-                                        <span className="text-[10px] text-slate-400 lowercase italic">{u.specialization || "общий"}</span>
-                                    </div>
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    
-                    {remark.assigned_user && (
-                        <div className="px-3 h-11 flex items-center bg-slate-100 text-slate-600 rounded-lg text-[10px] font-semibold uppercase tracking-wider">
-                            Исполнитель: {remark.assigned_user.username}
-                        </div>
-                    )}
-                </div>
+                <div></div>
 
                 <div className="flex items-center gap-1">
                     <button

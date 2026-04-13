@@ -20,6 +20,7 @@ import { locomotiveApi } from "@/api/locomotiveService"
 import { remarkApi } from "@/api/remarkService"
 import type { Remark, RemarkTemplate, RemarkUser, CreateRemarkDTO } from "@/types/remark"
 import { RemarkItem } from "@/components/remarks/RemarkItem"
+import { RemarkSkeleton } from "@/components/locomotive/RemarkSkeleton"
 import { exportRemarksToExcel, exportRemarksToPDF } from "@/utils/exportRemarks"
 import {
     Dialog,
@@ -70,14 +71,14 @@ export default function LocomotiveRemarks() {
 
     const { data: remarks = [], isLoading, isFetching, refetch } = useQuery<Remark[]>({
         queryKey: ['remarks', locomotiveId],
-        queryFn: () => remarkApi.getByLocomotiveId(locomotiveId!),
+        queryFn: async () => {
+            // Artificial delay to show the beautiful skeleton loader
+            await new Promise(resolve => setTimeout(resolve, 800))
+            return remarkApi.getByLocomotiveId(locomotiveId!)
+        },
         enabled: !!locomotiveId
     })
 
-    const { data: allUsers = [] } = useQuery<RemarkUser[]>({
-        queryKey: ['users'],
-        queryFn: () => locomotiveApi.getUsers(),
-    })
 
     const { data: templates = [] } = useQuery<RemarkTemplate[]>({
         queryKey: ['remark-templates'],
@@ -190,7 +191,7 @@ export default function LocomotiveRemarks() {
 
     return (
         <div className="flex-1 flex flex-col bg-slate-50/50 overflow-auto">
-            <main className="flex-1 w-full max-w-7xl mx-auto p-6 md:p-12">
+            <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-12">
                 
                 {/* Header Section */}
                 <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
@@ -296,10 +297,7 @@ export default function LocomotiveRemarks() {
                 {/* Main List */}
                 <div className="space-y-6">
                     {isLoading ? (
-                        <div className="flex flex-col items-center py-32 gap-6">
-                            <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-                            <p className="text-slate-500 text-[10px] font-semibold uppercase tracking-[0.5em]">Synchronizing Registry</p>
-                        </div>
+                        <RemarkSkeleton />
                     ) : filteredRemarks.length === 0 ? (
                         <div className="py-20 text-center bg-white border border-slate-200 border-dashed rounded-2xl">
                             <p className="text-slate-400">Замечаний для этого локомотива не найдено</p>
@@ -310,7 +308,6 @@ export default function LocomotiveRemarks() {
                                 key={remark.id} 
                                 remark={remark} 
                                 locomotiveId={locomotiveId} 
-                                allUsers={allUsers}
                                 onReject={(id) => setRejectDialog({ id, comment: "" })}
                             />
                         ))
