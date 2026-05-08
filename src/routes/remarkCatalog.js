@@ -10,15 +10,31 @@ const router = express.Router();
  */
 router.get('/', requireAuth, async (req, res) => {
     try {
-        const { data, error } = await supabase
-            .from('remark_catalog')
-            .select('id, code, category, section, description_ru, description_en, has_placeholder')
-            .eq('is_active', true)
-            .order('code', { ascending: true })
-            .limit(5000);
+        let allData = [];
+        let start = 0;
+        const limit = 1000;
+        let hasMore = true;
 
-        if (error) throw error;
-        res.json(data || []);
+        while (hasMore) {
+            const { data, error } = await supabase
+                .from('remark_catalog')
+                .select('id, code, category, section, description_ru, description_en, has_placeholder')
+                .eq('is_active', true)
+                .order('code', { ascending: true })
+                .range(start, start + limit - 1);
+
+            if (error) throw error;
+            
+            allData = allData.concat(data);
+            
+            if (data.length < limit) {
+                hasMore = false;
+            } else {
+                start += limit;
+            }
+        }
+
+        res.json(allData || []);
     } catch (err) {
         console.error('API Error (remark-catalog):', err);
         res.status(500).json({ error: err.message });
