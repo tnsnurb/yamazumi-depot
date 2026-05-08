@@ -199,32 +199,32 @@ export function RemarkCatalogDrawer({ open, onOpenChange, locomotiveId }: Remark
                         </div>
                     </div>
 
-                    {/* Category chips - horizontally scrollable */}
-                    <div className="px-5 pb-3">
-                        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                    {/* Category chips - Multi-line (all visible) */}
+                    <div className="px-5 pb-4 border-b border-slate-50 bg-slate-50/50 pt-2">
+                        <div className="flex flex-wrap gap-1.5">
                             <button
                                 onClick={() => setActiveCategory(null)}
                                 className={cn(
-                                    "shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                    "shrink-0 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-all border",
                                     !activeCategory
-                                        ? "bg-slate-900 text-white"
-                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                        ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                                        : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
                                 )}
                             >
-                                Все ({catalogItems.length})
+                                ВСЕ ({catalogItems.length})
                             </button>
                             {categories.map(cat => (
                                 <button
                                     key={cat.name}
                                     onClick={() => setActiveCategory(activeCategory === cat.name ? null : cat.name)}
                                     className={cn(
-                                        "shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap",
+                                        "shrink-0 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-all border whitespace-nowrap",
                                         activeCategory === cat.name
-                                            ? "bg-slate-900 text-white"
-                                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                                            : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
                                     )}
                                 >
-                                    {cat.name} ({cat.count})
+                                    {cat.name.toUpperCase()} ({cat.count})
                                 </button>
                             ))}
                         </div>

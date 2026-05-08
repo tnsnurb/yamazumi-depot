@@ -14,7 +14,8 @@ router.get('/', requireAuth, async (req, res) => {
             .from('remark_catalog')
             .select('id, code, category, section, description_ru, description_en, has_placeholder')
             .eq('is_active', true)
-            .order('code', { ascending: true });
+            .order('code', { ascending: true })
+            .limit(5000);
 
         if (error) throw error;
         res.json(data || []);
