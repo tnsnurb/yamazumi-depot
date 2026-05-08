@@ -37,6 +37,14 @@
     --sidebar-accent-foreground: 221 83% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 221 83% 53%;
+    --surface: 220 15% 94%;
+    --surface-foreground: 220 25% 15%;
+    --brand: 220 70% 45%;
+    --brand-light: 220 70% 92%;
+    --success: 160 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 90% 50%;
+    --warning-foreground: 40 90% 15%;
   }
 
   .dark {
@@ -72,5 +80,40 @@
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 215 27% 17%;
     --sidebar-ring: 221 83% 53%;
+    --surface: 215 27% 17%;
+    --surface-foreground: 210 40% 98%;
+    --brand: 221 83% 53%;
+    --brand-light: 221 83% 15%;
+    --success: 160 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 90% 50%;
+    --warning-foreground: 40 90% 15%;
+  }
+}
+
+@layer utilities {
+  .label-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area, .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .label-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

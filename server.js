@@ -27,6 +27,7 @@ const sessionRoutes = require('./src/routes/sessions');
 const adminRoutes = require('./src/routes/admin');
 const gaugeRoutes = require('./src/routes/gaugeRoutes');
 const gaugeTypeRoutes = require('./src/routes/gaugeTypeRoutes');
+const remarkCatalogRoutes = require('./src/routes/remarkCatalog');
 
 // API Routes
 app.use('/api', authRoutes);
@@ -43,6 +44,7 @@ app.use('/api', dictionaryRoutes);
 app.use('/api', adminRoutes);
 app.use('/api/gauges', gaugeRoutes);
 app.use('/api/gauge-types', gaugeTypeRoutes);
+app.use('/api/remark-catalog', remarkCatalogRoutes);
 
 // ===================== PAGE ROUTES =====================
 

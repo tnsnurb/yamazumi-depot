@@ -34,6 +34,7 @@ router.get('/:id/remarks', requireAuth, remarkController.getLocomotiveRemarks);
 router.post('/:id/remarks', requireAuth, requirePermission('can_edit_catalog'), remarkController.createRemark);
 router.post('/:id/remarks/template', requireAuth, requirePermission('can_edit_catalog'), remarkController.createFromTemplate);
 router.post('/:id/remarks/bulk', requireAuth, requirePermission('can_edit_catalog'), remarkController.bulkCreate);
+router.post('/:id/remarks/from-catalog', requireAuth, requirePermission('can_edit_catalog'), remarkController.createFromCatalog);
 
 router.get('/:id/sessions', requireAuth, locomotiveController.getSessions);
 

@@ -13,7 +13,9 @@ import {
     ClipboardCheck,
     ListTodo,
     Wrench,
-    ScanLine
+    ScanLine,
+    QrCode,
+    Trophy
 } from "lucide-react"
 
 import {
@@ -44,6 +46,11 @@ const navMain = [
         title: "Журнал",
         url: "/journal",
         icon: History,
+    },
+    {
+        title: "Рейтинг",
+        url: "/leaderboard",
+        icon: Trophy,
     },
     {
         title: "Замечания",
@@ -131,17 +138,30 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     ))}
 
                     {isAdmin && (
-                        <SidebarMenuItem>
-                            <SidebarMenuButton
-                                tooltip="Админ-панель"
-                                onClick={() => navigate("/admin")}
-                                isActive={location.pathname === "/admin"}
-                                className="h-12 md:h-8 text-base md:text-sm gap-3 md:gap-2 [&>svg]:size-5 md:[&>svg]:size-4"
-                            >
-                                <ShieldCheck />
-                                <span>Админ-панель</span>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
+                        <>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    tooltip="Админ-панель"
+                                    onClick={() => navigate("/admin")}
+                                    isActive={location.pathname === "/admin"}
+                                    className="h-12 md:h-8 text-base md:text-sm gap-3 md:gap-2 [&>svg]:size-5 md:[&>svg]:size-4"
+                                >
+                                    <ShieldCheck />
+                                    <span>Админ-панель</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    tooltip="QR генератор"
+                                    onClick={() => navigate("/qr-generator")}
+                                    isActive={location.pathname === "/qr-generator"}
+                                    className="h-12 md:h-8 text-base md:text-sm gap-3 md:gap-2 [&>svg]:size-5 md:[&>svg]:size-4"
+                                >
+                                    <QrCode />
+                                    <span>QR генератор</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        </>
                     )}
                 </SidebarMenu>
 

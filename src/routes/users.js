@@ -28,6 +28,60 @@ router.get('/public', async (req, res) => {
     res.json(data);
 });
 
+// GET /api/users/leaderboard (Gamification)
+router.get('/leaderboard', requireAuth, async (req, res) => {
+    try {
+        const { data: users, error: userError } = await supabase
+            .from('users')
+            .select('id, username, full_name, role, specialization, total_points, avatar_url')
+            .eq('is_active', true)
+            .order('total_points', { ascending: false });
+
+        if (userError) throw userError;
+
+        // Count completed vs rejected directly in memory
+        const { data: history, error: historyError } = await supabase
+            .from('checklist_item_history')
+            .select('user_id, action')
+            .in('action', ['completed', 'rejected']);
+
+        if (historyError) throw historyError;
+
+        const stats = {};
+        if (history) {
+            history.forEach(h => {
+                if (!stats[h.user_id]) stats[h.user_id] = { completed: 0, rejected: 0 };
+                if (h.action === 'completed') stats[h.user_id].completed++;
+                if (h.action === 'rejected') stats[h.user_id].rejected++;
+            });
+        }
+
+        const rankedUsers = users.map(u => {
+            const userStats = stats[u.id] || { completed: 0, rejected: 0 };
+            const completed = userStats.completed;
+            const rejected = userStats.rejected;
+            
+            let accuracy = 100;
+            if (completed + rejected > 0) {
+                accuracy = 100 - ((rejected / (completed + rejected)) * 100);
+            }
+
+            return {
+                ...u,
+                tasks_completed: completed,
+                tasks_rejected: rejected,
+                accuracy: parseFloat(accuracy.toFixed(1))
+            };
+        });
+
+        res.json(rankedUsers);
+    } catch (err) {
+        console.error("Error fetching leaderboard:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
 // GET /api/users
 router.get('/', requireAuth, requireAdmin, async (req, res) => {
     let query = supabase

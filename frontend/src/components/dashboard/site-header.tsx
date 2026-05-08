@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react"
 import { useLocation } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { Building2 } from "lucide-react"
+import { NotificationBell } from "@/components/dashboard/notification-bell"
 import { useAuth } from "@/hooks/useAuth"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -105,7 +106,8 @@ export function SiteHeader() {
                     <div id="breadcrumb-portal" className="flex items-center"></div>
                 </BreadcrumbList>
             </Breadcrumb>
-            <div className="ml-auto flex items-center gap-4">
+            <div className="ml-auto flex items-center gap-2">
+                <NotificationBell />
                 {(user?.role === 'admin' || user?.is_global_admin) && (
                     <div className="flex items-center gap-2">
                         <Building2 className="w-4 h-4 text-muted-foreground" />

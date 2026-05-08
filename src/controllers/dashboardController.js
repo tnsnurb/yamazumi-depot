@@ -44,10 +44,14 @@ const dashboardController = {
                 count
             }));
 
-            // Average repair time 
+            // Average repair time (Limited to last 90 days to prevent unbounded full table scans)
+            const ninetyDaysAgo = new Date();
+            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
             let allMQuery = supabase
                 .from('movements')
                 .select('locomotive_number, action, moved_at')
+                .gte('moved_at', ninetyDaysAgo.toISOString())
                 .order('moved_at', { ascending: true });
 
             if (!showAllLocations && req.session.user.active_location_id) {
@@ -90,40 +94,24 @@ const dashboardController = {
             // Total locomotives
             let locQuery1 = supabase.from('locomotives').select('*', { count: 'exact', head: true });
             if (!showAllLocations && req.session.user.active_location_id) locQuery1 = locQuery1.eq('location_id', req.session.user.active_location_id);
-            const { count: totalLocos } = await locQuery1;
 
             // On tracks
             let locQuery2 = supabase.from('locomotives').select('id, status, track').not('track', 'is', null);
             if (!showAllLocations && req.session.user.active_location_id) locQuery2 = locQuery2.eq('location_id', req.session.user.active_location_id);
-            const { data: onTracks } = await locQuery2;
-
-            // Status breakdown
-            const statusCounts = { active: 0, repair: 0, waiting: 0, completed: 0 };
-            const trackOccupancy = {};
-            (onTracks || []).forEach(l => {
-                statusCounts[l.status] = (statusCounts[l.status] || 0) + 1;
-                trackOccupancy[l.track] = (trackOccupancy[l.track] || 0) + 1;
-            });
-
-            // Track utilization (assuming 36 total slots)
-            const totalSlots = 36;
-            const occupiedSlots = (onTracks || []).length;
 
             // Movements today
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             let mTodayQ = supabase.from('movements').select('*', { count: 'exact', head: true }).gte('moved_at', today.toISOString());
             if (!showAllLocations && req.session.user.active_location_id) mTodayQ = mTodayQ.eq('location_id', req.session.user.active_location_id);
-            const { count: movementsToday } = await mTodayQ;
 
             // Movements this week
             const weekAgo = new Date();
             weekAgo.setDate(weekAgo.getDate() - 7);
             let mWeekQ = supabase.from('movements').select('*', { count: 'exact', head: true }).gte('moved_at', weekAgo.toISOString());
             if (!showAllLocations && req.session.user.active_location_id) mWeekQ = mWeekQ.eq('location_id', req.session.user.active_location_id);
-            const { count: movementsWeek } = await mWeekQ;
 
-            // NEW: Overdue Repairs (in repair status for > 3 days)
+            // Overdue Repairs (in repair status for > 3 days)
             const threeDaysAgo = new Date();
             threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
             let overdueQ = supabase.from('locomotives')
@@ -131,24 +119,52 @@ const dashboardController = {
                 .eq('status', 'repair')
                 .lt('updated_at', threeDaysAgo.toISOString());
             if (!showAllLocations && req.session.user.active_location_id) overdueQ = overdueQ.eq('location_id', req.session.user.active_location_id);
-            const { count: overdueRepairs } = await overdueQ;
 
-            // NEW: Recent Activity (last 10 movements/remarks)
+            // Recent Activity (last 10 movements/remarks)
             let activityQ = supabase.from('movements')
                 .select('id, locomotive_number, action, moved_at, moved_by')
                 .order('moved_at', { ascending: false })
                 .limit(10);
             if (!showAllLocations && req.session.user.active_location_id) activityQ = activityQ.eq('location_id', req.session.user.active_location_id);
-            const { data: recentActivity } = await activityQ;
 
-            // NEW: Overdue/Expiring Gauges (next 14 days)
+            // Build Overdue/Expiring Gauges Query
             const twoWeeksFromNow = new Date();
             twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
-            const { count: overdueGauges } = await supabase
+            const overdueGaugesQuery = supabase
                 .from('gauges')
                 .select('id', { count: 'exact', head: true })
                 .lt('next_verification', twoWeeksFromNow.toISOString().split('T')[0])
                 .neq('status', 'Списан');
+
+            // Execute all queries concurrently to eliminate waterfall latencies
+            const [
+                { count: totalLocos },
+                { data: onTracks },
+                { count: movementsToday },
+                { count: movementsWeek },
+                { count: overdueRepairs },
+                { data: recentActivity },
+                { count: overdueGauges }
+            ] = await Promise.all([
+                locQuery1,
+                locQuery2,
+                mTodayQ,
+                mWeekQ,
+                overdueQ,
+                activityQ,
+                overdueGaugesQuery
+            ]);
+
+            // Track utilization and status breakdown
+            const statusCounts = { active: 0, repair: 0, waiting: 0, completed: 0 };
+            const trackOccupancy = {};
+            (onTracks || []).forEach(l => {
+                statusCounts[l.status] = (statusCounts[l.status] || 0) + 1;
+                trackOccupancy[l.track] = (trackOccupancy[l.track] || 0) + 1;
+            });
+
+            const totalSlots = 36;
+            const occupiedSlots = (onTracks || []).length;
 
             res.json({
                 totalLocomotives: totalLocos || 0,

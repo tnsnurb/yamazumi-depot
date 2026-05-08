@@ -131,7 +131,7 @@ export function RemarkItem({ remark, locomotiveId, onReject }: RemarkItemProps) 
 
             {/* Content Section */}
             <div className="mb-6">
-                <p className="text-lg font-semibold text-slate-900 leading-snug">
+                <p className="text-base font-semibold text-slate-900 leading-snug">
                     {remark.text}
                 </p>
                 

@@ -10,7 +10,6 @@ import {
     Download,
     Search,
     FileText,
-    CheckCircle2,
     Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -18,9 +17,10 @@ import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { locomotiveApi } from "@/api/locomotiveService"
 import { remarkApi } from "@/api/remarkService"
-import type { Remark, RemarkTemplate, RemarkUser, CreateRemarkDTO } from "@/types/remark"
+import type { Remark, CreateRemarkDTO } from "@/types/remark"
 import { RemarkItem } from "@/components/remarks/RemarkItem"
 import { RemarkSkeleton } from "@/components/locomotive/RemarkSkeleton"
+import { RemarkCatalogDrawer } from "@/components/remarks/RemarkCatalogDrawer"
 import { exportRemarksToExcel, exportRemarksToPDF } from "@/utils/exportRemarks"
 import {
     Dialog,
@@ -57,10 +57,7 @@ export default function LocomotiveRemarks() {
         category: "" 
     })
     const [isCatalogOpen, setIsCatalogOpen] = useState(false)
-    const [catalogSearch, setCatalogSearch] = useState("")
     const [rejectDialog, setRejectDialog] = useState<{ id: string, comment: string } | null>(null)
-    const [addingTemplateIds, setAddingTemplateIds] = useState<number[]>([])
-    const [addedTemplateIds, setAddedTemplateIds] = useState<number[]>([])
 
     // --- QUERIES ---
     const { data: locomotive } = useQuery({
@@ -80,11 +77,6 @@ export default function LocomotiveRemarks() {
     })
 
 
-    const { data: templates = [] } = useQuery<RemarkTemplate[]>({
-        queryKey: ['remark-templates'],
-        queryFn: () => fetch('/api/remark-templates').then(r => r.json()),
-        staleTime: Infinity,
-    })
 
     // --- MUTATIONS ---
 
@@ -103,52 +95,6 @@ export default function LocomotiveRemarks() {
             setIsAddManualOpen(false)
             setManualRemark({ text: "", priority: "medium", category: "" })
             toast.success("Замечание добавлено")
-        }
-    })
-
-    const templateAddMutation = useMutation({
-        mutationFn: (ids: number[]) => remarkApi.addFromTemplates(locomotiveId!, ids),
-        onMutate: async (newTemplateIds) => {
-            setAddingTemplateIds(prev => [...prev, ...newTemplateIds])
-            await queryClient.cancelQueries({ queryKey: ['remarks', locomotiveId] })
-            const previousRemarks = queryClient.getQueryData<Remark[]>(['remarks', locomotiveId])
-            const authUser = queryClient.getQueryData<RemarkUser>(['authUser'])
-
-            if (previousRemarks) {
-                const optimisticRemarks: Remark[] = newTemplateIds.map(id => {
-                    const template = templates.find(t => t.id === id)
-                    return {
-                        id: `temp-${Math.random()}`,
-                        text: template?.text || "Добавление...",
-                        priority: "medium",
-                        category: template?.category || null,
-                        is_completed: false,
-                        completed_at: null,
-                        created_at: new Date().toISOString(),
-                        completed_by: null,
-                        created_by: authUser || null,
-                    } as Remark
-                })
-                queryClient.setQueryData(['remarks', locomotiveId], [...optimisticRemarks, ...previousRemarks])
-            }
-            return { previousRemarks }
-        },
-        onError: (err: any, newTemplateIds, context) => {
-            setAddingTemplateIds(prev => prev.filter(id => !newTemplateIds.includes(id)))
-            if (context?.previousRemarks) {
-                queryClient.setQueryData(['remarks', locomotiveId], context.previousRemarks)
-            }
-            toast.error("Ошибка при добавлении: " + err.message)
-        },
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
-        },
-        onSuccess: (_, newTemplateIds) => {
-            setAddingTemplateIds(prev => prev.filter(id => !newTemplateIds.includes(id)))
-            setAddedTemplateIds(prev => [...prev, ...newTemplateIds])
-            setTimeout(() => {
-                setAddedTemplateIds(prev => prev.filter(id => !newTemplateIds.includes(id)))
-            }, 2000)
         }
     })
 
@@ -175,10 +121,6 @@ export default function LocomotiveRemarks() {
         done: remarks.filter((r) => r.is_completed).length
     }), [remarks])
 
-    const filteredTemplates = useMemo(() => {
-        return templates.filter((t) => t.text.toLowerCase().includes(catalogSearch.toLowerCase()))
-    }, [templates, catalogSearch])
-
     // --- HANDLERS ---
 
     const handleCompleteAll = () => {
@@ -191,10 +133,10 @@ export default function LocomotiveRemarks() {
 
     return (
         <div className="flex-1 flex flex-col bg-slate-50/50 overflow-auto">
-            <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-12">
+            <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-8">
                 
                 {/* Header Section */}
-                <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+                <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
                     <div className="space-y-1">
                         <button 
                             onClick={() => navigate("/")}
@@ -246,7 +188,7 @@ export default function LocomotiveRemarks() {
                     </div>
                 </div>
 
-                <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-white border border-slate-200 p-5 rounded-2xl">
                         <div className="text-slate-500 text-xs font-medium mb-1">Всего замечаний</div>
                         <div className="text-3xl font-semibold text-slate-900">{stats.total}</div>
@@ -267,7 +209,7 @@ export default function LocomotiveRemarks() {
                     </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 p-4 rounded-2xl mb-8 flex flex-col md:flex-row items-center gap-4">
+                <div className="bg-white border border-slate-200 p-4 rounded-2xl mb-6 flex flex-col md:flex-row items-center gap-4">
                     <div className="relative flex-1 w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                         <Input
@@ -295,7 +237,7 @@ export default function LocomotiveRemarks() {
                 </div>
 
                 {/* Main List */}
-                <div className="space-y-6">
+                <div className="space-y-4">
                     {isLoading ? (
                         <RemarkSkeleton />
                     ) : filteredRemarks.length === 0 ? (
@@ -372,63 +314,12 @@ export default function LocomotiveRemarks() {
                 </DialogContent>
             </Dialog>
 
-            {/* Catalog Dialog */}
-            <Dialog open={isCatalogOpen} onOpenChange={setIsCatalogOpen}>
-                <DialogContent className="bg-white border-slate-200 max-w-4xl max-h-[90vh] flex flex-col rounded-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Каталог замечаний</DialogTitle>
-                        <DialogDescription>
-                            Выберите типовое замечание из базы знаний
-                        </DialogDescription>
-                    </DialogHeader>
-                    
-                    <div className="relative mb-4 mt-4">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <Input 
-                            placeholder="Поиск по шаблонам..." 
-                            value={catalogSearch}
-                            onChange={(e) => setCatalogSearch(e.target.value)}
-                            className="pl-10 bg-slate-50 border-slate-200"
-                        />
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto pr-2 space-y-2">
-                        {filteredTemplates.map((t) => {
-                            const isAdding = addingTemplateIds.includes(t.id)
-                            const isAdded = addedTemplateIds.includes(t.id)
-                            
-                            return (
-                                <div 
-                                    key={t.id} 
-                                    onClick={() => {
-                                        if (!isAdding && !isAdded) templateAddMutation.mutate([t.id])
-                                    }}
-                                    className={cn(
-                                        "group flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-xl transition-colors cursor-pointer",
-                                        !isAdding && !isAdded && "hover:bg-slate-100",
-                                        (isAdding || isAdded) && "pointer-events-none opacity-80"
-                                    )}
-                                >
-                                    <div className="space-y-0.5 pr-4 flex-1">
-                                        <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{t.category || "Общее"}</div>
-                                        <div className="text-sm font-medium text-slate-900">{t.text}</div>
-                                    </div>
-                                    <div className={cn(
-                                        "w-8 h-8 rounded-full border flex items-center justify-center transition-all",
-                                        isAdding ? "bg-white border-slate-200 text-emerald-600" :
-                                        isAdded ? "bg-emerald-600 border-emerald-600 text-white" :
-                                        "bg-white border-slate-200 text-slate-400 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600"
-                                    )}>
-                                        {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : 
-                                         isAdded ? <CheckCircle2 className="w-4 h-4" /> : 
-                                         <Plus className="w-4 h-4" />}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                </DialogContent>
-            </Dialog>
+            {/* Catalog Drawer */}
+            <RemarkCatalogDrawer
+                open={isCatalogOpen}
+                onOpenChange={setIsCatalogOpen}
+                locomotiveId={locomotiveId}
+            />
 
             {/* Reject/Redo Dialog */}
             <Dialog open={!!rejectDialog} onOpenChange={(open) => !open && setRejectDialog(null)}>

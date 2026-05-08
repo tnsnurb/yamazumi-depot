@@ -46,8 +46,8 @@ const GaugeTerminal = () => {
 
   // Queries
   const { data: gauges = [] } = useQuery({
-    queryKey: ['gauges'],
-    queryFn: gaugeService.getAll
+    queryKey: ['gauges-all'],
+    queryFn: gaugeService.getAllFlat
   })
 
   const { data: locomotives = [] } = useQuery({

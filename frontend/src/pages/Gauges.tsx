@@ -19,7 +19,11 @@ import {
   History,
   Download,
   Eye,
-  Upload
+  Upload,
+  FileUp,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown
 } from "lucide-react"
 import ExcelJS from 'exceljs'
 import { format, differenceInDays, parseISO, addYears } from "date-fns"
@@ -304,6 +308,16 @@ const Gauges = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [returnDialogGauge, setReturnDialogGauge] = useState<Gauge | null>(null)
 
+  // Pagination & Sorting state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [sortBy, setSortBy] = useState('next_verification')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const pageSize = 50
+
+  // Import dialog state
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+
   const [isScannerOpen, setIsScannerOpen] = useState(false)
   const [scanResult, setScanResult] = useState<string | null>(null)
   const scannerRef = useRef<Html5Qrcode | null>(null)
@@ -375,10 +389,44 @@ const Gauges = () => {
     } catch (e) { setNewGauge(prev => ({...prev, last_verification: dateStr})); }
   }
 
-  const { data: gauges = [], isLoading } = useQuery({
-    queryKey: ['gauges'],
-    queryFn: gaugeService.getAll
+  const { data: gaugesResponse, isLoading } = useQuery({
+    queryKey: ['gauges', currentPage, sortBy, sortOrder],
+    queryFn: () => gaugeService.getAll({ page: currentPage, limit: pageSize, sort: sortBy, order: sortOrder }),
   })
+  const gauges = gaugesResponse?.data || []
+  const pagination = gaugesResponse?.pagination
+
+  const importMutation = useMutation({
+    mutationFn: (formData: FormData) => gaugeService.importFromExcel(formData),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['gauges'] })
+      queryClient.invalidateQueries({ queryKey: ['gauge-alerts'] })
+      setIsImportDialogOpen(false)
+      setImportFile(null)
+      toast.success(`Импортировано: ${result.imported} из ${result.total}`)
+      if (result.errors && result.errors.length > 0) {
+        toast.warning(`Ошибки: ${result.errors.join('; ')}`)
+      }
+    },
+    onError: (err: any) => toast.error(err.message || 'Ошибка импорта')
+  })
+
+  const handleImport = () => {
+    if (!importFile) return
+    const formData = new FormData()
+    formData.append('file', importFile)
+    importMutation.mutate(formData)
+  }
+
+  const toggleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(column)
+      setSortOrder('asc')
+    }
+    setCurrentPage(1)
+  }
 
   useEffect(() => {
     if (scanResult && Array.isArray(gauges)) {
@@ -642,6 +690,9 @@ const Gauges = () => {
           <Button variant="outline" className="gap-2" onClick={exportToExcel}>
             <Download className="w-4 h-4" /> Экспорт
           </Button>
+          <Button variant="outline" className="gap-2 bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100 font-semibold" onClick={() => setIsImportDialogOpen(true)}>
+            <FileUp className="w-4 h-4" /> Импорт
+          </Button>
           <Button className="gap-2 bg-blue-600 hover:bg-blue-700 shadow-md" onClick={() => setIsAddDialogOpen(true)}>
              <Plus className="w-4 h-4" /> Добавить прибор
           </Button>
@@ -649,7 +700,7 @@ const Gauges = () => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Всего" value={gauges.length} color="slate" active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
+        <StatCard label="Всего" value={pagination?.total || gauges.length} color="slate" active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
         <StatCard label="Просрочено" value={gauges.filter(g => differenceInDays(parseISO(g.next_verification), new Date()) < 0).length} color="red" active={statusFilter === 'expired'} onClick={() => setStatusFilter('expired')} />
         <StatCard label="Срок истекает" value={gauges.filter(g => { const d = differenceInDays(parseISO(g.next_verification), new Date()); return d >= 0 && d < 30; }).length} color="amber" active={statusFilter === 'expiring'} onClick={() => setStatusFilter('expiring')} />
         <StatCard label="В норме" value={gauges.filter(g => differenceInDays(parseISO(g.next_verification), new Date()) >= 30).length} color="emerald" active={false} onClick={() => setStatusFilter('all')} />
@@ -769,10 +820,22 @@ const Gauges = () => {
         <Table>
           <TableHeader className="bg-slate-50/50">
             <TableRow>
-              <TableHead className="font-semibold pl-6">Прибор</TableHead>
-              <TableHead className="font-semibold">Поверка</TableHead>
+              <TableHead className="font-semibold pl-6">
+                <button onClick={() => toggleSort('serial_number')} className="flex items-center gap-1 hover:text-blue-600 transition-colors">
+                  Прибор <ArrowUpDown className={cn("w-3 h-3", sortBy === 'serial_number' ? 'text-blue-600' : 'text-slate-300')} />
+                </button>
+              </TableHead>
+              <TableHead className="font-semibold">
+                <button onClick={() => toggleSort('next_verification')} className="flex items-center gap-1 hover:text-blue-600 transition-colors">
+                  Поверка <ArrowUpDown className={cn("w-3 h-3", sortBy === 'next_verification' ? 'text-blue-600' : 'text-slate-300')} />
+                </button>
+              </TableHead>
               <TableHead className="font-semibold">Характеристики</TableHead>
-              <TableHead className="font-semibold">Статус</TableHead>
+              <TableHead className="font-semibold">
+                <button onClick={() => toggleSort('status')} className="flex items-center gap-1 hover:text-blue-600 transition-colors">
+                  Статус <ArrowUpDown className={cn("w-3 h-3", sortBy === 'status' ? 'text-blue-600' : 'text-slate-300')} />
+                </button>
+              </TableHead>
               <TableHead className="text-right pr-6 w-[200px]">Действия</TableHead>
             </TableRow>
           </TableHeader>
@@ -845,6 +908,63 @@ const Gauges = () => {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Pagination Controls */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="hidden md:flex items-center justify-between px-2">
+          <span className="text-sm text-slate-500">
+            Страница {pagination.page} из {pagination.totalPages} • Всего: {pagination.total}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 px-3 rounded-xl"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" /> Назад
+            </Button>
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                let page: number
+                if (pagination.totalPages <= 5) {
+                  page = i + 1
+                } else if (currentPage <= 3) {
+                  page = i + 1
+                } else if (currentPage >= pagination.totalPages - 2) {
+                  page = pagination.totalPages - 4 + i
+                } else {
+                  page = currentPage - 2 + i
+                }
+                return (
+                  <Button
+                    key={page}
+                    variant={page === currentPage ? 'default' : 'ghost'}
+                    size="sm"
+                    className={cn(
+                      "h-9 w-9 rounded-xl font-semibold",
+                      page === currentPage && "bg-blue-600 hover:bg-blue-700"
+                    )}
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </Button>
+                )
+              })}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 px-3 rounded-xl"
+              disabled={currentPage >= pagination.totalPages}
+              onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+            >
+              Вперёд <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Cards View */}
       <div className="grid md:hidden grid-cols-1 gap-4">
@@ -1117,6 +1237,86 @@ const Gauges = () => {
            <Button variant="outline" className="w-full rounded-xl font-semibold" onClick={() => setIsScannerOpen(false)}>Отмена</Button>
         </DialogContent>
       </Dialog>
+      {/* Import Excel Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={(v) => { setIsImportDialogOpen(v); if (!v) setImportFile(null); }}>
+        <DialogContent className="sm:max-w-[520px] rounded-[2rem] p-6 space-y-4">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
+              <FileUp className="w-5 h-5 text-violet-600" /> Импорт манометров из Excel
+            </DialogTitle>
+            <DialogDescription>
+              Загрузите файл Excel (.xlsx) со списком манометров для массового добавления.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-violet-300 transition-colors">
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                id="import-file-input"
+                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+              />
+              <label htmlFor="import-file-input" className="cursor-pointer">
+                {importFile ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-12 h-12 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <span className="font-semibold text-slate-800">{importFile.name}</span>
+                    <span className="text-xs text-slate-400">{(importFile.size / 1024).toFixed(1)} КБ</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <span className="font-semibold text-slate-600">Нажмите для выбора файла</span>
+                    <span className="text-xs text-slate-400">.xlsx или .xls</span>
+                  </div>
+                )}
+              </label>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-4 text-xs space-y-2">
+              <p className="font-semibold text-slate-700">Формат файла:</p>
+              <div className="grid grid-cols-4 gap-1 text-center">
+                <div className="bg-white rounded-lg p-2 border border-slate-200">
+                  <span className="font-bold text-slate-800">Серийный номер</span>
+                  <span className="text-slate-400 block mt-0.5">обязательно</span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-slate-200">
+                  <span className="font-bold text-slate-800">Парт-номер</span>
+                  <span className="text-slate-400 block mt-0.5">модель</span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-slate-200">
+                  <span className="font-bold text-slate-800">Дата поверки</span>
+                  <span className="text-slate-400 block mt-0.5">последняя</span>
+                </div>
+                <div className="bg-white rounded-lg p-2 border border-slate-200">
+                  <span className="font-bold text-slate-800">Следующая</span>
+                  <span className="text-slate-400 block mt-0.5">авто-расчет</span>
+                </div>
+              </div>
+              <p className="text-slate-400 italic mt-1">Если «Следующая поверка» не заполнена — будет рассчитана как +1 год от «Дата поверки»</p>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1 h-11 rounded-xl font-semibold" onClick={() => { setIsImportDialogOpen(false); setImportFile(null); }}>
+              Отмена
+            </Button>
+            <Button
+              className="flex-1 h-11 rounded-xl bg-violet-600 hover:bg-violet-700 font-semibold shadow-lg"
+              disabled={!importFile || importMutation.isPending}
+              onClick={handleImport}
+            >
+              {importMutation.isPending ? 'Импорт...' : `Импортировать`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )
@@ -1139,23 +1339,97 @@ const StatCard = ({ label, value, color, active, onClick }: any) => {
   )
 }
 
-const QRDialog = ({ gauge, open, onOpenChange }: any) => (
-  <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="sm:max-w-[350px] rounded-3xl p-8 flex flex-col items-center">
-      <DialogHeader className="text-center w-full">
-        <DialogTitle className="text-xl font-semibold mb-1">QR Код</DialogTitle>
-        <DialogDescription>
-          Серийный номер: {gauge?.serial_number}
-        </DialogDescription>
-      </DialogHeader>
-      <div className="p-4 bg-white rounded-2xl border shadow-sm my-4">
-        {gauge && <QRCodeSVG value={`gauge:${gauge.serial_number}`} size={200} level="H" />}
-      </div>
-      <p className="font-semibold text-lg">{gauge?.serial_number}</p>
-      <Button className="w-full mt-4 bg-slate-900 font-semibold rounded-xl" onClick={() => onOpenChange(false)}>Закрыть</Button>
-    </DialogContent>
-  </Dialog>
-)
+const QRDialog = ({ gauge, open, onOpenChange }: any) => {
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[400px] rounded-3xl p-8 flex flex-col items-center print:border-none print:shadow-none print:p-0 print:m-0 print:block">
+        <style type="text/css" media="print">
+          {`
+            @page {
+              size: 58mm 60mm;
+              margin: 0;
+            }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+            }
+            /* Hides everything except the dialog portal */
+            body > :not([data-radix-portal]) {
+              display: none !important;
+            }
+            
+            #print-area {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 58mm;
+              height: 60mm;
+              box-sizing: border-box;
+              padding: 2mm;
+              margin: 0;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              background-color: white;
+            }
+          `}
+        </style>
+
+        <DialogHeader className="text-center w-full print:hidden">
+          <DialogTitle className="text-2xl font-bold tracking-tight text-slate-900 mb-1">Метка прибора</DialogTitle>
+          <DialogDescription className="text-slate-500 font-medium">
+            Размер наклейки: 58x60 мм
+          </DialogDescription>
+        </DialogHeader>
+        
+        {/* Область этикетки */}
+        <div id="print-area" className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col items-center">
+          <div className="mb-4 print:mb-2 bg-white flex items-center justify-center">
+            {gauge && (
+              <QRCodeSVG 
+                value={gauge.serial_number} 
+                size={180} 
+                level="M" 
+                className="print:w-[38mm] print:h-[38mm]" 
+                style={{ imageRendering: 'pixelated' }}
+              />
+            )}
+          </div>
+          
+          <div className="text-center flex flex-col items-center w-full">
+            <span className="font-black text-3xl tracking-tighter text-slate-900 print:text-[22px] print:leading-none print:mb-1.5">{gauge?.serial_number}</span>
+            <div className="w-12 h-1 bg-blue-600 rounded-full my-3 print:hidden"></div>
+            {gauge?.part_number && (
+              <span className="font-bold text-sm text-slate-500 uppercase tracking-widest print:text-[14px] print:text-black print:leading-none print:mb-1">
+                PN: {gauge.part_number}
+              </span>
+            )}
+            {gauge?.description && (
+              <span className="text-[11px] font-semibold text-slate-400 mt-1 uppercase leading-tight print:text-[12px] print:text-black print:leading-tight">
+                {gauge.description}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="w-full flex gap-3 mt-6 print:hidden">
+          <Button variant="outline" className="flex-1 h-12 rounded-xl font-bold border-slate-200 text-slate-600" onClick={() => onOpenChange(false)}>
+            Закрыть
+          </Button>
+          <Button className="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100 font-bold" onClick={handlePrint}>
+            Печать
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 const GaugeTableSkeleton = () => (
   <>

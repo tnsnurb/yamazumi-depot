@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react"
-import { Plus, Trash2, Upload, Save, FileSpreadsheet, Loader2, ChevronRight, Filter } from "lucide-react"
+import { Plus, Trash2, Upload, Save, FileSpreadsheet, Loader2, Filter } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectGroup, SelectLabel, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 interface RepairType {
@@ -36,11 +38,14 @@ interface ChecklistItem {
 
 export function ChecklistAdmin({ repairTypes }: { repairTypes: RepairType[] }) {
     const [templates, setTemplates] = useState<ChecklistTemplate[]>([])
-    const [loading, setLoading] = useState(true)
+    // loading state removed
     const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null)
     const [templateItems, setTemplateItems] = useState<ChecklistItem[]>([])
     const [itemsLoading, setItemsLoading] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
+    
+    // Series list from catalog
+    const [uniqueSeries, setUniqueSeries] = useState<string[]>([])
 
     // New Template Dialog
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -55,11 +60,30 @@ export function ChecklistAdmin({ repairTypes }: { repairTypes: RepairType[] }) {
 
     useEffect(() => {
         fetchTemplates()
+        fetchAvailableSeries()
     }, [])
+
+    const fetchAvailableSeries = async () => {
+        try {
+            const token = localStorage.getItem('access_token')
+            const res = await fetch('/api/locomotives', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            if (res.ok) {
+                const catalog = await res.json()
+                const seriesSet = new Set<string>()
+                catalog.forEach((l: any) => {
+                    if (l.series) seriesSet.add(l.series.trim())
+                })
+                setUniqueSeries(Array.from(seriesSet).sort())
+            }
+        } catch (error) {
+            console.error("Failed to load series catalog", error)
+        }
+    }
 
     const fetchTemplates = async () => {
         try {
-            setLoading(true)
             const token = localStorage.getItem('access_token')
             const res = await fetch('/api/checklists/templates', {
                 headers: { 'Authorization': `Bearer ${token} ` }
@@ -70,8 +94,6 @@ export function ChecklistAdmin({ repairTypes }: { repairTypes: RepairType[] }) {
         } catch (error) {
             console.error(error)
             toast.error("Ошибка загрузки шаблонов")
-        } finally {
-            setLoading(false)
         }
     }
 
@@ -243,108 +265,92 @@ export function ChecklistAdmin({ repairTypes }: { repairTypes: RepairType[] }) {
     }, {} as Record<string, ChecklistTemplate[]>)
 
     // Derived values for the editor
-    const activeTemplate = templates.find(t => t.id === selectedTemplate)
+    // Derived values for the editor
     const uniqueGroups = Array.from(new Set(templateItems.map(i => i.group_name).filter(Boolean)))
     const filteredItems = groupFilter === 'all' ? templateItems : templateItems.filter(i => i.group_name === groupFilter)
 
     return (
-        <div className="flex h-[calc(100vh-12rem)] border rounded-lg overflow-hidden bg-card">
-            {/* Left Sidebar: Series & Templates Tree */}
-            <div className="w-64 border-r bg-muted/10 flex flex-col">
-                <div className="p-4 border-b bg-card flex justify-between items-center">
-                    <h3 className="font-semibold text-foreground">Шаблоны</h3>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-primary" onClick={() => setIsCreateDialogOpen(true)}>
-                        <Plus className="h-4 w-4" />
-                    </Button>
-                </div>
-                <div className="flex-1 p-2 overflow-y-auto min-h-0">
-                    {loading ? (
-                        <div className="p-4 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-                    ) : Object.keys(seriesGroups).length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center p-4">Нет шаблонов</p>
-                    ) : (
-                        Object.entries(seriesGroups).map(([series, tmpls]) => (
-                            <div key={series} className="mb-4">
-                                <div className="text-xs font-semibold text-muted-foreground tracking-wider mb-2 px-2 uppercase">{series}</div>
-                                <div className="space-y-1">
+        <div className="flex flex-col h-[calc(100vh-12rem)] border rounded-lg overflow-hidden bg-card">
+            {/* Top Header: Template Selector & Main Actions */}
+            <div className="p-4 border-b flex justify-between items-center bg-muted/10">
+                <div className="flex items-center gap-4">
+                    <h3 className="font-semibold text-foreground whitespace-nowrap">Шаблон:</h3>
+                    
+                    <Select 
+                        value={selectedTemplate?.toString() || ""} 
+                        onValueChange={(val) => fetchTemplateItems(parseInt(val))}
+                    >
+                        <SelectTrigger className="w-[300px] bg-background">
+                            <SelectValue placeholder="Выберите шаблон локомотива..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[400px]">
+                            {Object.entries(seriesGroups).map(([series, tmpls]) => (
+                                <SelectGroup key={series}>
+                                    <SelectLabel className="text-muted-foreground font-semibold">{series}</SelectLabel>
                                     {tmpls.map(t => (
-                                        <div
-                                            key={t.id}
-                                            className={`
-                                                flex items-center justify-between p-2 rounded-md cursor-pointer text-sm transition-colors
-                                                ${selectedTemplate === t.id ? 'bg-primary/15 text-primary font-medium' : 'hover:bg-muted text-foreground'}
-                                            `}
-                                            onClick={() => fetchTemplateItems(t.id)}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <ChevronRight className={`h-4 w-4 ${selectedTemplate === t.id ? 'opacity-100' : 'opacity-0'}`} />
-                                                <span>{t.repair_type.name}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant="secondary" className="text-[10px] px-1.5 h-5">
-                                                    {t.items?.[0]?.count || 0}
-                                                </Badge>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(t.id); }}
-                                                >
-                                                    <Trash2 className="h-3 w-3" />
-                                                </Button>
-                                            </div>
-                                        </div>
+                                        <SelectItem key={t.id.toString()} value={t.id.toString()}>
+                                            {t.series} — {t.repair_type.name} ({t.items?.[0]?.count || 0} п.)
+                                        </SelectItem>
                                     ))}
-                                </div>
-                            </div>
-                        ))
+                                </SelectGroup>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    
+                    <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2" /> Создать
+                    </Button>
+
+                    {selectedTemplate && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            onClick={() => handleDeleteTemplate(selectedTemplate)}
+                            title="Удалить выбранный шаблон"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
                     )}
                 </div>
+
+                {selectedTemplate && (
+                    <div className="flex items-center gap-3">
+                        <div>
+                            <input
+                                type="file"
+                                id="excel-upload"
+                                className="hidden"
+                                accept=".xlsx,.xls"
+                                onChange={handleFileUpload}
+                                disabled={uploading}
+                            />
+                            <Label htmlFor="excel-upload">
+                                <div className={`flex items-center gap-2 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md cursor-pointer transition-colors text-sm font-medium ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                    Импорт из Excel
+                                </div>
+                            </Label>
+                        </div>
+                        <Button onClick={handleSaveItems} disabled={isSaving}>
+                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                            Сохранить
+                        </Button>
+                    </div>
+                )}
             </div>
 
-            {/* Right Content: Template Editor */}
-            <div className="flex-1 flex flex-col bg-background">
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col bg-background overflow-hidden">
                 {!selectedTemplate ? (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground flex-col gap-4">
                         <FileSpreadsheet className="h-12 w-12 opacity-20" />
-                        <p>Выберите шаблон слева или создайте новый</p>
+                        <p>Выберите шаблон сверху или создайте новый</p>
                     </div>
                 ) : itemsLoading ? (
                     <div className="flex-1 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : (
-                    <>
-                        <div className="p-4 border-b flex justify-between items-center bg-card">
-                            <div>
-                                <h2 className="text-xl font-bold text-foreground">
-                                    {activeTemplate?.series} <span className="text-muted-foreground font-normal mx-2">→</span> {activeTemplate?.repair_type.name}
-                                </h2>
-                                <p className="text-sm text-muted-foreground">Настройка пунктов чек-листа</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div>
-                                    <input
-                                        type="file"
-                                        id="excel-upload"
-                                        className="hidden"
-                                        accept=".xlsx,.xls"
-                                        onChange={handleFileUpload}
-                                        disabled={uploading}
-                                    />
-                                    <Label htmlFor="excel-upload">
-                                        <div className={`flex items-center gap-2 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md cursor-pointer transition-colors text-sm font-medium ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                                            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                                            Импорт из Excel
-                                        </div>
-                                    </Label>
-                                </div>
-                                <Button onClick={handleSaveItems} disabled={isSaving}>
-                                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                                    Сохранить
-                                </Button>
-                            </div>
-                        </div>
-
-                        {/* Filters */}
+                    <div className="flex-1 flex flex-col min-h-0 bg-background">
                         <div className="p-2 border-b bg-muted/30 flex items-center gap-4 px-4">
                             <Filter className="h-4 w-4 text-muted-foreground" />
                             <div className="flex gap-2">
@@ -389,80 +395,98 @@ export function ChecklistAdmin({ repairTypes }: { repairTypes: RepairType[] }) {
                                     </div>
                                 ) : (
                                     <>
-                                        {/* Table Header like structure */}
-                                        <div className="grid grid-cols-[auto_1fr_2fr_1fr_1fr_auto_auto] gap-3 mb-2 px-3 text-sm font-medium text-muted-foreground">
-                                            <div className="w-6">№</div>
-                                            <div>Группа</div>
-                                            <div>Краткое описание / Полное описание</div>
-                                            <div>Исполнитель</div>
-                                            <div>Контроль</div>
-                                            <div className="w-10">Обяз.</div>
-                                            <div className="w-8"></div>
-                                        </div>
+                                    <div className="border rounded-md bg-card shadow-sm overflow-hidden">
+                                        <Table>
+                                            <TableHeader className="bg-muted/30">
+                                                <TableRow>
+                                                    <TableHead className="w-[50px] text-center font-semibold">№</TableHead>
+                                                    <TableHead className="font-semibold w-[15%]">Группа</TableHead>
+                                                    <TableHead className="font-semibold w-[40%]">Описание задачи</TableHead>
+                                                    <TableHead className="font-semibold w-[15%]">Исполнитель</TableHead>
+                                                    <TableHead className="font-semibold w-[15%]">Контроль</TableHead>
+                                                    <TableHead className="w-[60px] text-center font-semibold">Обяз.</TableHead>
+                                                    <TableHead className="w-[50px]"></TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {templateItems.map((item, index) => {
+                                                    if (groupFilter !== 'all' && item.group_name !== groupFilter) return null;
+                                                    
+                                                    // Reusable classes for clean 'ghost' inputs
+                                                    const ghostInputClass = "h-9 border-transparent shadow-none bg-transparent hover:bg-muted/50 focus-visible:border-primary focus-visible:ring-1 focus-visible:bg-background transition-all"
+                                                    const ghostTextareaClass = "min-h-[40px] border-transparent shadow-none bg-transparent hover:bg-muted/50 focus-visible:border-primary focus-visible:ring-1 focus-visible:bg-background transition-all resize-y text-xs text-muted-foreground mt-1"
 
-                                        {templateItems.map((item, index) => {
-                                            // Hide if filtering
-                                            if (groupFilter !== 'all' && item.group_name !== groupFilter) return null;
-
-                                            return (
-                                                <div key={index} className="grid grid-cols-[auto_1fr_2fr_1fr_1fr_auto_auto] gap-3 items-start p-3 bg-card border rounded-lg shadow-sm hover:border-primary/50 transition-colors focus-within:ring-1 focus-within:ring-primary">
-                                                    <div className="w-6 pt-3 text-muted-foreground font-mono text-xs text-center">{index + 1}</div>
-
-                                                    <div className="flex flex-col gap-2">
-                                                        <Input
-                                                            value={item.group_name || ''}
-                                                            onChange={e => updateItem(index, 'group_name', e.target.value)}
-                                                            placeholder="Например: Лаб." className="h-9 text-sm"
-                                                        />
-                                                    </div>
-
-                                                    <div className="flex flex-col gap-2">
-                                                        <Input
-                                                            value={item.short_description}
-                                                            onChange={e => updateItem(index, 'short_description', e.target.value)}
-                                                            placeholder="Проверка уровня масла" className="h-9 font-medium"
-                                                        />
-                                                        <textarea
-                                                            className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-y"
-                                                            value={item.full_description || ''}
-                                                            onChange={e => updateItem(index, 'full_description', e.target.value)}
-                                                            placeholder="Подробная инструкция (опционально)..."
-                                                        />
-                                                    </div>
-
-                                                    <div className="flex flex-col gap-2">
-                                                        <Input
-                                                            value={item.executor_role || ''}
-                                                            onChange={e => updateItem(index, 'executor_role', e.target.value)}
-                                                            placeholder="Мастер/Слесарь" className="h-9 text-sm"
-                                                        />
-                                                    </div>
-
-                                                    <div className="flex flex-col gap-2">
-                                                        <Input
-                                                            value={item.controller_role || ''}
-                                                            onChange={e => updateItem(index, 'controller_role', e.target.value)}
-                                                            placeholder="Мастер (опционально)" className="h-9 text-sm"
-                                                        />
-                                                    </div>
-
-                                                    <div className="w-10 flex justify-center pt-3">
-                                                        <Checkbox
-                                                            checked={item.required}
-                                                            onCheckedChange={(c) => updateItem(index, 'required', !!c)}
-                                                        />
-                                                    </div>
-
-                                                    <div className="w-8 pt-1.5 flex justify-center">
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => removeItem(index)}>
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-
-                                        <div className="pt-4 flex justify-center">
+                                                    return (
+                                                        <TableRow key={index} className="group hover:bg-muted/20">
+                                                            <TableCell className="text-center text-muted-foreground font-mono text-xs font-medium">
+                                                                {index + 1}
+                                                            </TableCell>
+                                                            <TableCell className="p-1 align-top">
+                                                                <Input
+                                                                    value={item.group_name || ''}
+                                                                    onChange={e => updateItem(index, 'group_name', e.target.value)}
+                                                                    placeholder="Группа..." 
+                                                                    className={ghostInputClass}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="p-1 align-top">
+                                                                <div className="flex flex-col px-2 py-1">
+                                                                    <Input
+                                                                        value={item.short_description}
+                                                                        onChange={e => updateItem(index, 'short_description', e.target.value)}
+                                                                        placeholder="Краткое описание" 
+                                                                        className={`font-medium px-2 py-1 h-8 ${ghostInputClass}`}
+                                                                    />
+                                                                    <Textarea
+                                                                        value={item.full_description || ''}
+                                                                        onChange={e => updateItem(index, 'full_description', e.target.value)}
+                                                                        placeholder="Добавить подробную инструкцию..." 
+                                                                        className={`px-2 py-1 ${ghostTextareaClass}`}
+                                                                    />
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="p-1 align-top">
+                                                                <Input
+                                                                    value={item.executor_role || ''}
+                                                                    onChange={e => updateItem(index, 'executor_role', e.target.value)}
+                                                                    placeholder="Мастер/Слесарь" 
+                                                                    className={ghostInputClass}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="p-1 align-top">
+                                                                <Input
+                                                                    value={item.controller_role || ''}
+                                                                    onChange={e => updateItem(index, 'controller_role', e.target.value)}
+                                                                    placeholder="Мастер (опц.)" 
+                                                                    className={ghostInputClass}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="text-center align-middle">
+                                                                <div className="flex justify-center">
+                                                                    <Switch
+                                                                        checked={item.required}
+                                                                        onCheckedChange={(c) => updateItem(index, 'required', !!c)}
+                                                                        className="scale-90"
+                                                                    />
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-center align-middle pr-4">
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-8 w-8 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive hover:bg-destructive/10" 
+                                                                    onClick={() => removeItem(index)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                    <div className="pt-4 flex justify-center pb-8">
                                             <Button variant="outline" className="w-full max-w-sm border-dashed" onClick={addItem}>
                                                 <Plus className="h-4 w-4 mr-2" /> Добавить пункт
                                             </Button>
@@ -471,7 +495,7 @@ export function ChecklistAdmin({ repairTypes }: { repairTypes: RepairType[] }) {
                                 )}
                             </div>
                         </div>
-                    </>
+                    </div>
                 )}
             </div>
 
@@ -484,11 +508,20 @@ export function ChecklistAdmin({ repairTypes }: { repairTypes: RepairType[] }) {
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
                             <Label>Серия локомотива</Label>
-                            <Input
-                                placeholder="ТЭП33А, ТЭ33А, ТЭ33АС..."
-                                value={newTemplateSeries}
-                                onChange={e => setNewTemplateSeries(e.target.value)}
-                            />
+                            <Select value={newTemplateSeries} onValueChange={setNewTemplateSeries}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Выберите серию из каталога" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {uniqueSeries.length === 0 ? (
+                                        <SelectItem value="loading" disabled>Загрузка каталога...</SelectItem>
+                                    ) : (
+                                        uniqueSeries.map(s => (
+                                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                                        ))
+                                    )}
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="space-y-2">
                             <Label>Тип ремонта</Label>
@@ -497,9 +530,13 @@ export function ChecklistAdmin({ repairTypes }: { repairTypes: RepairType[] }) {
                                     <SelectValue placeholder="Выберите тип ремонта" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {repairTypes.map(rt => (
-                                        <SelectItem key={rt.id} value={rt.id.toString()}>{rt.name}</SelectItem>
-                                    ))}
+                                    {repairTypes.length === 0 ? (
+                                        <SelectItem value="empty" disabled>Загрузка типов ремонта...</SelectItem>
+                                    ) : (
+                                        repairTypes.map(rt => (
+                                            <SelectItem key={rt.id} value={rt.id.toString()}>{rt.name}</SelectItem>
+                                        ))
+                                    )}
                                 </SelectContent>
                             </Select>
                         </div>

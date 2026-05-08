@@ -27,10 +27,59 @@ export interface Gauge {
   verified_by?: string;
 }
 
+export interface GaugePagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface GaugesResponse {
+  data: Gauge[];
+  pagination: GaugePagination;
+}
+
+export interface GaugeAlert {
+  id: string;
+  serial_number: string;
+  next_verification: string;
+  days_left: number;
+  severity: 'critical' | 'urgent' | 'warning';
+  status: string;
+  part_number?: string;
+  description?: string;
+  locomotive?: { number: string; series: string };
+}
+
+export interface GaugeAlertsResponse {
+  total: number;
+  critical: number;
+  urgent: number;
+  warning: number;
+  items: GaugeAlert[];
+}
+
 export const gaugeService = {
-  // Получение всех манометров
-  getAll: async (): Promise<Gauge[]> => {
-    return apiClient.get('/api/gauges');
+  // Получение всех манометров (с пагинацией)
+  getAll: async (params?: { page?: number; limit?: number; sort?: string; order?: string }): Promise<GaugesResponse> => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.sort) query.set('sort', params.sort);
+    if (params?.order) query.set('order', params.order);
+    const qs = query.toString();
+    return apiClient.get(`/api/gauges${qs ? `?${qs}` : ''}`);
+  },
+
+  // Получение всех манометров как плоский массив (для терминала, без пагинации)
+  getAllFlat: async (): Promise<Gauge[]> => {
+    const res: GaugesResponse = await apiClient.get('/api/gauges?limit=9999');
+    return res.data || [];
+  },
+
+  // Получение уведомлений о просрочках
+  getAlerts: async (): Promise<GaugeAlertsResponse> => {
+    return apiClient.get('/api/gauges/alerts');
   },
 
   // Получение по серийному номеру
@@ -76,5 +125,10 @@ export const gaugeService = {
   // Загрузка сертификата
   uploadCertificate: async (id: string, formData: FormData): Promise<Gauge> => {
     return apiClient.post(`/api/gauges/${id}/certificate`, formData);
+  },
+
+  // Массовый импорт из Excel
+  importFromExcel: async (formData: FormData): Promise<{ imported: number; skipped: number; total: number; errors?: string[] }> => {
+    return apiClient.post('/api/gauges/import', formData);
   }
 };

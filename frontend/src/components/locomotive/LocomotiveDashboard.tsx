@@ -135,7 +135,7 @@ export function LocomotiveDashboard({ locomotive }: LocomotiveDashboardProps) {
     )
 
     return (
-        <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="w-full space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {/* Header Card */}
             <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
                 <div className="bg-slate-50 border-b border-slate-100 p-4 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">

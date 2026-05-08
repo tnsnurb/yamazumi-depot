@@ -99,4 +99,37 @@ export const remarkApi = {
      */
     update: (remarkId: string, updates: Partial<Remark>) =>
         apiClient.put<Remark>(`/api/remarks/${remarkId}`, updates),
+
+    // --- Catalog ---
+
+    /**
+     * Get all catalog items
+     */
+    getCatalog: () =>
+        apiClient.get<CatalogItem[]>('/api/remark-catalog'),
+
+    /**
+     * Get catalog categories with counts
+     */
+    getCatalogCategories: () =>
+        apiClient.get<{ name: string; count: number }[]>('/api/remark-catalog/categories'),
+
+    /**
+     * Add remarks from catalog items
+     */
+    addFromCatalog: (locomotiveId: string | number, catalogIds: string[], customTexts?: Record<string, string>) =>
+        apiClient.post<Remark[]>(`/api/locomotives/${locomotiveId}/remarks/from-catalog`, {
+            catalog_ids: catalogIds,
+            custom_texts: customTexts
+        }),
 };
+
+export interface CatalogItem {
+    id: string;
+    code: string;
+    category: string;
+    section: string | null;
+    description_ru: string | null;
+    description_en: string | null;
+    has_placeholder: boolean;
+}

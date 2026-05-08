@@ -1,9 +1,21 @@
 const supabase = require('../../db');
+const ExcelJS = require('exceljs');
 
 const gaugeController = {
-  // Получение всех манометров
+  // Получение всех манометров (с пагинацией и сортировкой)
   getAllGauges: async (req, res) => {
     try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 50;
+      const sortBy = req.query.sort || 'next_verification';
+      const sortOrder = req.query.order === 'desc' ? false : true;
+      const offset = (page - 1) * limit;
+
+      // Count query
+      let countQuery = supabase
+        .from('gauges')
+        .select('*', { count: 'exact', head: true });
+
       let query = supabase
         .from('gauges')
         .select(`
@@ -11,33 +23,224 @@ const gaugeController = {
           locomotive:locomotives(number, series, location_id),
           type:gauge_types(part_number, description, image_url, accuracy_class, pressure_range, thread_type)
         `)
-        .order('next_verification', { ascending: true });
+        .order(sortBy, { ascending: sortOrder })
+        .range(offset, offset + limit - 1);
 
       // Фильтрация по активной локации пользователя
       if (req.session && req.session.user && req.session.user.active_location_id) {
         const activeLocId = req.session.user.active_location_id;
-        // Показываем только манометры, закрепленные за этим депо
         query = query.eq('location_id', activeLocId);
+        countQuery = countQuery.eq('location_id', activeLocId);
       }
 
-      const { data, error } = await query;
+      const [{ data, error }, { count }] = await Promise.all([query, countQuery]);
 
       if (error) throw error;
       
-      const mappedData = data.map(g => ({
+      const mappedData = (data || []).map(g => ({
         ...g,
         part_number: g.type?.part_number,
         description: g.type?.description,
         accuracy_class: g.type?.accuracy_class,
         pressure_range: g.type?.pressure_range,
         thread_type: g.type?.thread_type,
-        type: undefined // remove the nested object after mapping
+        type: undefined
       }));
       
-      res.json(mappedData);
+      res.json({
+        data: mappedData,
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit)
+        }
+      });
     } catch (error) {
       console.error('Error fetching gauges:', error);
       res.status(500).json({ error: 'Ошибка при получении списка манометров' });
+    }
+  },
+
+  // Уведомления — приборы с истекающей/просроченной поверкой
+  getAlerts: async (req, res) => {
+    try {
+      const now = new Date();
+      const in30Days = new Date();
+      in30Days.setDate(in30Days.getDate() + 30);
+
+      let query = supabase
+        .from('gauges')
+        .select(`
+          id, serial_number, next_verification, status, type_id, locomotive_id,
+          locomotive:locomotives(number, series),
+          type:gauge_types(part_number, description)
+        `)
+        .lt('next_verification', in30Days.toISOString().split('T')[0])
+        .neq('status', 'Списан')
+        .order('next_verification', { ascending: true });
+
+      if (req.session?.user?.active_location_id) {
+        query = query.eq('location_id', req.session.user.active_location_id);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const alerts = (data || []).map(g => {
+        const nextDate = new Date(g.next_verification);
+        const daysLeft = Math.ceil((nextDate - now) / (1000 * 60 * 60 * 24));
+        let severity = 'warning'; // 1-30 days
+        if (daysLeft < 0) severity = 'critical';
+        else if (daysLeft <= 7) severity = 'urgent';
+
+        return {
+          id: g.id,
+          serial_number: g.serial_number,
+          next_verification: g.next_verification,
+          days_left: daysLeft,
+          severity,
+          status: g.status,
+          part_number: g.type?.part_number,
+          description: g.type?.description,
+          locomotive: g.locomotive
+        };
+      });
+
+      res.json({
+        total: alerts.length,
+        critical: alerts.filter(a => a.severity === 'critical').length,
+        urgent: alerts.filter(a => a.severity === 'urgent').length,
+        warning: alerts.filter(a => a.severity === 'warning').length,
+        items: alerts
+      });
+    } catch (error) {
+      console.error('Error fetching gauge alerts:', error);
+      res.status(500).json({ error: 'Ошибка загрузки уведомлений' });
+    }
+  },
+
+  // Массовый импорт из Excel
+  bulkImport: async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Нет файла' });
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer);
+      const worksheet = workbook.worksheets[0];
+
+      if (!worksheet) {
+        return res.status(400).json({ error: 'Файл не содержит листов' });
+      }
+
+      // Найти заголовки (первая строка)
+      const headerRow = worksheet.getRow(1);
+      const headers = {};
+      headerRow.eachCell((cell, colNumber) => {
+        const val = String(cell.value || '').toLowerCase().trim();
+        if (val.includes('серийн') || val.includes('serial') || val.includes('s/n')) headers.serial = colNumber;
+        if (val.includes('парт') || val.includes('part') || val.includes('модел')) headers.part_number = colNumber;
+        if (val.includes('послед') || val.includes('last') || val.includes('дата пов')) headers.last_verification = colNumber;
+        if (val.includes('следу') || val.includes('next')) headers.next_verification = colNumber;
+      });
+
+      if (!headers.serial) {
+        return res.status(400).json({ 
+          error: 'Не найден столбец с серийным номером. Убедитесь, что в первой строке есть заголовок "Серийный номер" или "Serial".' 
+        });
+      }
+
+      // Загрузить справочник моделей для маппинга
+      const { data: gaugeTypes } = await supabase.from('gauge_types').select('id, part_number');
+      const typeMap = {};
+      (gaugeTypes || []).forEach(t => { typeMap[t.part_number?.toLowerCase()] = t.id; });
+
+      const locationId = req.body.location_id || req.session?.user?.active_location_id;
+      const rows = [];
+      const errors = [];
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // skip header
+
+        const serial = String(row.getCell(headers.serial).value || '').trim();
+        if (!serial) return;
+
+        const partNumber = headers.part_number ? String(row.getCell(headers.part_number).value || '').trim() : '';
+        const typeId = typeMap[partNumber.toLowerCase()] || null;
+
+        let lastVerification = null;
+        let nextVerification = null;
+
+        if (headers.last_verification) {
+          const cellVal = row.getCell(headers.last_verification).value;
+          if (cellVal instanceof Date) lastVerification = cellVal.toISOString().split('T')[0];
+          else if (typeof cellVal === 'string') lastVerification = cellVal.trim();
+        }
+
+        if (headers.next_verification) {
+          const cellVal = row.getCell(headers.next_verification).value;
+          if (cellVal instanceof Date) nextVerification = cellVal.toISOString().split('T')[0];
+          else if (typeof cellVal === 'string') nextVerification = cellVal.trim();
+        }
+
+        // Auto-calculate next_verification if not provided
+        if (lastVerification && !nextVerification) {
+          const d = new Date(lastVerification);
+          d.setFullYear(d.getFullYear() + 1);
+          nextVerification = d.toISOString().split('T')[0];
+        }
+
+        if (!lastVerification) {
+          lastVerification = new Date().toISOString().split('T')[0];
+        }
+        if (!nextVerification) {
+          const d = new Date();
+          d.setFullYear(d.getFullYear() + 1);
+          nextVerification = d.toISOString().split('T')[0];
+        }
+
+        rows.push({
+          serial_number: serial,
+          type_id: typeId,
+          last_verification: lastVerification,
+          next_verification: nextVerification,
+          status: 'На складе',
+          location_id: locationId
+        });
+      });
+
+      if (rows.length === 0) {
+        return res.status(400).json({ error: 'Файл не содержит данных для импорта' });
+      }
+
+      // Insert in batches of 50
+      let imported = 0;
+      let skipped = 0;
+      for (let i = 0; i < rows.length; i += 50) {
+        const batch = rows.slice(i, i + 50);
+        const { data, error } = await supabase.from('gauges').upsert(batch, { 
+          onConflict: 'serial_number',
+          ignoreDuplicates: true 
+        }).select();
+
+        if (error) {
+          errors.push(`Строки ${i + 2}-${i + batch.length + 1}: ${error.message}`);
+          skipped += batch.length;
+        } else {
+          imported += (data || []).length;
+        }
+      }
+
+      res.json({
+        message: `Импорт завершён`,
+        imported,
+        skipped,
+        total: rows.length,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } catch (error) {
+      console.error('Error importing gauges:', error);
+      res.status(500).json({ error: `Ошибка импорта: ${error.message}` });
     }
   },
 
@@ -85,7 +288,8 @@ const gaugeController = {
         is_defective, 
         status, 
         locomotive_id,
-        photo_url
+        photo_url,
+        certificate_url
       } = req.body;
 
       const { data, error } = await supabase

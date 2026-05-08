@@ -7,6 +7,25 @@ const { requireAuth, requireAdmin } = require('../middlewares/auth');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+async function incrementUserPoints(userId, amount) {
+    try {
+        const { data: user } = await supabase.from('users').select('total_points').eq('id', userId).single();
+        if (user) {
+            const newPoints = Math.max(0, (user.total_points || 0) + amount);
+            await supabase.from('users').update({ total_points: newPoints }).eq('id', userId);
+        }
+    } catch (e) {
+        console.error("Failed to update user points:", e);
+    }
+}
+
+async function checkInstanceCompletion(instanceId, userId) {
+    const { data: items } = await supabase.from('checklist_instance_items').select('is_completed').eq('instance_id', instanceId);
+    if (items && items.every(i => i.is_completed)) {
+        await supabase.from('checklist_instances').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', instanceId);
+    }
+}
+
 // --- TEMPLATES (Admin) ---
 
 // 1. Get all templates (with item counts)
@@ -58,9 +77,7 @@ router.get('/templates/:id', requireAuth, async (req, res) => {
 
 // 3. Create a new template
 router.post('/templates', requireAuth, requireAdmin, async (req, res) => {
-    // Requires admin privileges - assuming checking in frontend, but could add middleware
     if (!req.session.user?.is_global_admin) {
-        // Allowing for now, adapt if needed
     }
 
     const { series, repair_type_id } = req.body;
@@ -70,7 +87,6 @@ router.post('/templates', requireAuth, requireAdmin, async (req, res) => {
     }
 
     try {
-        // Fetch repair type name for the template name
         const { data: rt } = await supabase.from('repair_types').select('name').eq('id', repair_type_id).single();
         const rtName = rt ? rt.name : `Type ${repair_type_id}`;
         const name = `${series} — ${rtName}`;
@@ -82,7 +98,7 @@ router.post('/templates', requireAuth, requireAdmin, async (req, res) => {
             .single();
 
         if (error) {
-            if (error.code === '23505') { // Unique violation
+            if (error.code === '23505') {
                 return res.status(400).json({ error: 'Шаблон для этой серии и типа ремонта уже существует' });
             }
             throw error;
@@ -98,10 +114,9 @@ router.post('/templates', requireAuth, requireAdmin, async (req, res) => {
 // 4. Update template items manually
 router.put('/templates/:id/items', requireAuth, async (req, res) => {
     const templateId = req.params.id;
-    const items = req.body.items; // Array of items
+    const items = req.body.items;
 
     try {
-        // Simple approach: delete existing and re-insert to handle re-ordering and deletions easily
         const { error: deleteError } = await supabase
             .from('checklist_template_items')
             .delete()
@@ -149,7 +164,6 @@ router.post('/templates/:id/import', requireAuth, upload.single('file'), async (
 
         const data = [];
         worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
-            // ExcelJS row.values is 1-indexed, values[0] is empty. We map to 0-indexed for consistency with original logic.
             const rowValues = [];
             if (Array.isArray(row.values)) {
                 for (let i = 1; i < row.values.length; i++) {
@@ -163,17 +177,14 @@ router.post('/templates/:id/import', requireAuth, upload.single('file'), async (
             return res.status(400).json({ error: 'Excel file is empty or only contains headers' });
         }
 
-        // Identify columns (robust parsing by header names if possible, or fallback to fixed indices)
         const headers = data[0].map(h => typeof h === 'string' ? h.toLowerCase().trim() : '');
 
-        // Find indices
         let colGroup = headers.findIndex(h => h.includes('группа'));
         let colShortDesc = headers.findIndex(h => h.includes('краткое') || h === 'описание');
         let colFullDesc = headers.findIndex(h => h === 'описание' && headers.indexOf(h) !== colShortDesc);
         let colExec = headers.findIndex(h => h.includes('исполнитель'));
         let colCtrl = headers.findIndex(h => h.includes('контроль'));
 
-        // Fallbacks based on user screenshot if headers don't strictly match
         if (colGroup === -1) colGroup = 0;
         if (colShortDesc === -1) colShortDesc = 1;
         if (colFullDesc === -1) colFullDesc = 2;
@@ -186,7 +197,6 @@ router.post('/templates/:id/import', requireAuth, upload.single('file'), async (
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
 
-            // Skip empty rows (must have at least a short description)
             if (!row[colShortDesc] && !row[colFullDesc]) continue;
 
             itemsToInsert.push({
@@ -201,10 +211,8 @@ router.post('/templates/:id/import', requireAuth, upload.single('file'), async (
             });
         }
 
-        // Delete existing items
         await supabase.from('checklist_template_items').delete().eq('template_id', templateId);
 
-        // Insert new ones
         if (itemsToInsert.length > 0) {
             const { error: insertError } = await supabase.from('checklist_template_items').insert(itemsToInsert);
             if (insertError) throw insertError;
@@ -276,7 +284,6 @@ router.get('/active', requireAuth, async (req, res) => {
     try {
         const locationId = req.session.user.active_location_id;
 
-        // 1. Get all active instances linked to an active repair session
         const { data: instances, error: instancesError } = await supabase
             .from('checklist_instances')
             .select(`
@@ -295,25 +302,21 @@ router.get('/active', requireAuth, async (req, res) => {
 
         if (!instances || instances.length === 0) return res.json([]);
 
-        // 2. Filter by location in Node.js
         const filteredInstances = instances.filter(i => !locationId || i.locomotive?.location_id === locationId);
 
         if (filteredInstances.length === 0) return res.json([]);
 
-        // 3. Fetch pre-calculated progress from view for ONLY the filtered IDs
         const instanceIds = filteredInstances.map(i => i.id);
         const { data: progressData, error: progressError } = await supabase
             .from('view_active_checklist_progress')
             .select('*')
             .in('instance_id', instanceIds);
 
-        // If view doesn't exist yet or has error, handle gracefully
         const progressMap = (progressData || []).reduce((acc, p) => {
             acc[p.instance_id] = p;
             return acc;
         }, {});
 
-        // 4. Combine results
         const result = filteredInstances.map(i => ({
             id: i.id,
             status: i.status,
@@ -336,13 +339,11 @@ router.get('/locomotive/:locomotiveId', requireAuth, async (req, res) => {
     try {
         const locomotiveId = req.params.locomotiveId;
 
-        // Find the active instance for this locomotive in the current active session
         const { data: instance, error: instanceError } = await supabase
             .from('checklist_instances')
             .select('*, template:template_id(name), repair_sessions!inner(status)')
             .eq('locomotive_id', locomotiveId)
             .eq('repair_sessions.status', 'active')
-            // Just get the most recent one if multiple exist
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -353,7 +354,6 @@ router.get('/locomotive/:locomotiveId', requireAuth, async (req, res) => {
             return res.json({ instance: null, items: [] });
         }
 
-        // Fetch items
         const { data: items, error: itemsError } = await supabase
             .from('checklist_instance_items')
             .select(`
@@ -384,7 +384,6 @@ router.post('/instances/bulk-complete', requireAuth, async (req, res) => {
     }
 
     try {
-        // 1. Get all incomplete items for these instances
         const { data: items, error: fetchError } = await supabase
             .from('checklist_instance_items')
             .select('id, instance_id, template_item:template_item_id(points)')
@@ -397,7 +396,6 @@ router.post('/instances/bulk-complete', requireAuth, async (req, res) => {
             const itemIds = items.map(it => it.id);
             const totalPoints = items.reduce((sum, it) => sum + (it.template_item?.points || 5), 0);
 
-            // 2. Update items
             const { error: updateError } = await supabase
                 .from('checklist_instance_items')
                 .update({
@@ -409,10 +407,8 @@ router.post('/instances/bulk-complete', requireAuth, async (req, res) => {
 
             if (updateError) throw updateError;
 
-            // 3. Award points
-            await supabase.rpc('increment_user_points', { user_id: userId, amount: totalPoints });
+            await incrementUserPoints(userId, totalPoints);
 
-            // 4. Log history (batch insert)
             const historyToInsert = items.map(it => ({
                 item_id: it.id,
                 user_id: userId,
@@ -422,7 +418,6 @@ router.post('/instances/bulk-complete', requireAuth, async (req, res) => {
             await supabase.from('checklist_item_history').insert(historyToInsert);
         }
 
-        // 5. Update instance statuses
         for (const instanceId of instanceIds) {
             await checkInstanceCompletion(instanceId, userId);
         }
@@ -444,7 +439,6 @@ router.patch('/items/complete-batch', requireAuth, async (req, res) => {
     }
 
     try {
-        // 1. Fetch items to get points and instance IDs
         const { data: items, error: fetchError } = await supabase
             .from('checklist_instance_items')
             .select('*, template_item:template_item_id(points)')
@@ -453,19 +447,8 @@ router.patch('/items/complete-batch', requireAuth, async (req, res) => {
         if (fetchError) throw fetchError;
         if (!items || items.length === 0) return res.json([]);
 
-        // group by instance_id to check completion later
         const instanceIds = [...new Set(items.map(it => it.instance_id))];
 
-        // 2. Calculate points
-        const totalPoints = items.reduce((sum, it) => {
-            // Only count if it was not already in the target state
-            if (it.is_completed !== is_completed) {
-                return sum + (it.template_item?.points || 5);
-            }
-            return sum;
-        }, 0);
-
-        // 3. Perform Update
         const updates = {
             is_completed,
             completed_by: is_completed ? userId : null,
@@ -485,26 +468,36 @@ router.patch('/items/complete-batch', requireAuth, async (req, res) => {
 
         if (updateError) throw updateError;
 
-        // 4. Update Points if changed
-        if (totalPoints !== 0) {
-            await supabase.rpc('increment_user_points', { 
-                user_id: userId, 
-                amount: is_completed ? totalPoints : -totalPoints 
+        if (is_completed) {
+            let totalPointsEarned = 0;
+            const historyData = updatedItems.map(it => {
+                const pts = it.template_item?.points || 5;
+                totalPointsEarned += pts;
+                return {
+                    item_id: it.id,
+                    user_id: userId,
+                    action: 'completed',
+                    details: `Групповое выполнение (+${pts} б.)`
+                };
             });
+            await incrementUserPoints(userId, totalPointsEarned);
+            await supabase.from('checklist_item_history').insert(historyData);
+        } else {
+            let totalPointsLost = 0;
+            const historyData = items.map(it => {
+                const pts = it.template_item?.points || 5;
+                totalPointsLost += pts;
+                return {
+                    item_id: it.id,
+                    user_id: userId,
+                    action: 'reopened',
+                    details: `Групповая отмена (-${pts} б.)`
+                };
+            });
+            await incrementUserPoints(userId, -totalPointsLost);
+            await supabase.from('checklist_item_history').insert(historyData);
         }
 
-        // 5. Log History
-        const historyData = items.map(it => ({
-            item_id: it.id,
-            user_id: userId,
-            action: is_completed ? 'completed' : 'reopened',
-            details: is_completed 
-                ? `Групповое выполнение (+${it.template_item?.points || 5} б.)` 
-                : `Групповая отмена (-${it.template_item?.points || 5} б.)`
-        }));
-        await supabase.from('checklist_item_history').insert(historyData);
-
-        // 6. Check Instance Completions
         for (const instanceId of instanceIds) {
             await checkInstanceCompletion(instanceId, userId);
         }
@@ -557,9 +550,9 @@ router.patch('/items/:id/complete', requireAuth, async (req, res) => {
         const userId = req.session.user.id;
 
         if (is_completed) {
-            await supabase.rpc('increment_user_points', { user_id: userId, amount: pointsToAward });
+            await incrementUserPoints(userId, pointsToAward);
         } else {
-            await supabase.rpc('increment_user_points', { user_id: userId, amount: -pointsToAward });
+            await incrementUserPoints(userId, -pointsToAward);
         }
 
         await supabase.from('checklist_item_history').insert({

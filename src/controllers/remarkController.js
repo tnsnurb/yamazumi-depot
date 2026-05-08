@@ -1,6 +1,18 @@
 const supabase = require('../../db');
 const { resolveLocoId, getOrCreateActiveSession } = require('../services/locomotiveService');
 
+async function incrementUserPoints(userId, amount) {
+    try {
+        const { data: user } = await supabase.from('users').select('total_points').eq('id', userId).single();
+        if (user) {
+            const newPoints = Math.max(0, (user.total_points || 0) + amount);
+            await supabase.from('users').update({ total_points: newPoints }).eq('id', userId);
+        }
+    } catch (e) {
+        console.error("Failed to update user points:", e);
+    }
+}
+
 /**
  * Remarks Controller
  * Handles business logic for locomotive remarks
@@ -251,6 +263,75 @@ const remarkController = {
     },
 
     /**
+     * Create remarks from catalog items
+     */
+    createFromCatalog: async (req, res) => {
+        try {
+            const locoId = await resolveLocoId(req.params.id);
+            if (!locoId) return res.status(404).json({ error: 'Локомотив не найден' });
+
+            const { catalog_ids, custom_texts } = req.body;
+            if (!catalog_ids || !Array.isArray(catalog_ids) || catalog_ids.length === 0) {
+                return res.status(400).json({ error: 'Необходим массив ID из каталога' });
+            }
+
+            // Fetch catalog items
+            const { data: catalogItems, error: catError } = await supabase
+                .from('remark_catalog')
+                .select('id, code, category, description_ru, description_en, has_placeholder')
+                .in('id', catalog_ids);
+
+            if (catError) throw catError;
+            if (!catalogItems || catalogItems.length === 0) {
+                return res.status(404).json({ error: 'Записи каталога не найдены' });
+            }
+
+            const { data: loco } = await supabase.from('locomotives').select('number').eq('id', locoId).maybeSingle();
+            const sessionId = await getOrCreateActiveSession(locoId, req.session.user.id, null);
+
+            // Build remark payloads
+            const customTextsMap = custom_texts || {};
+            const payload = catalogItems.map(item => {
+                let text = item.description_ru || item.description_en;
+                // Apply custom text if provided (e.g. replace #___ with actual number)
+                if (customTextsMap[item.id]) {
+                    text = customTextsMap[item.id];
+                }
+                return {
+                    locomotive_id: locoId,
+                    session_id: sessionId,
+                    text: `[${item.code}] ${text}`,
+                    priority: 'medium',
+                    category: item.category || null,
+                    created_by: req.session.user.id
+                };
+            });
+
+            const { data, error } = await supabase
+                .from('locomotive_remarks')
+                .insert(payload)
+                .select('*, created_by:users!locomotive_remarks_created_by_fkey(full_name, username)');
+
+            if (error) throw error;
+
+            // Log movement
+            if (loco) {
+                await supabase.from('movements').insert({
+                    locomotive_id: locoId,
+                    locomotive_number: loco.number,
+                    action: `remark_added_from_catalog: ${catalogItems.length} замечаний`,
+                    moved_by: req.session.user.full_name || req.session.user.username
+                });
+            }
+
+            res.json(data);
+        } catch (err) {
+            console.error('API Error (createFromCatalog):', err);
+            res.status(500).json({ error: err.message });
+        }
+    },
+
+    /**
      * Bulk create remarks
      */
     bulkCreate: async (req, res) => {
@@ -348,6 +429,18 @@ const remarkController = {
         const { is_completed } = req.body;
 
         try {
+            // Get current point value to award/deduct
+            const { data: remarkInfo } = await supabase
+                .from('locomotive_remarks')
+                .select('points, is_completed')
+                .eq('id', remarkId)
+                .maybeSingle();
+
+            if (remarkInfo && remarkInfo.is_completed !== is_completed) {
+                const points = remarkInfo.points || 10; // Default 10 points for a remark
+                await incrementUserPoints(req.session.user.id, is_completed ? points : -points);
+            }
+
             const { data, error } = await supabase
                 .from('locomotive_remarks')
                 .update({
@@ -438,6 +531,18 @@ const remarkController = {
         }
 
         try {
+            // Fetch remarks to calculate total points to award
+            const { data: remarksInfo } = await supabase
+                .from('locomotive_remarks')
+                .select('points')
+                .in('id', remark_ids)
+                .eq('is_completed', false); // Only count those that are not yet completed
+
+            if (remarksInfo && remarksInfo.length > 0) {
+                const totalPoints = remarksInfo.reduce((sum, r) => sum + (r.points || 10), 0);
+                await incrementUserPoints(req.session.user.id, totalPoints);
+            }
+
             const { data: updatedRemarks, error: updateErr } = await supabase
                 .from('locomotive_remarks')
                 .update({
