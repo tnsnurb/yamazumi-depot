@@ -188,6 +188,7 @@ export default function LocomotiveRemarks() {
                     </div>
                 </div>
 
+                {/* 
                 <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-white border border-slate-200 p-5 rounded-2xl">
                         <div className="text-slate-500 text-xs font-medium mb-1">Всего замечаний</div>
@@ -208,6 +209,7 @@ export default function LocomotiveRemarks() {
                         </div>
                     </div>
                 </div>
+                */}
 
                 <div className="bg-white border border-slate-200 p-4 rounded-2xl mb-6 flex flex-col md:flex-row items-center gap-4">
                     <div className="relative flex-1 w-full">
@@ -237,7 +239,7 @@ export default function LocomotiveRemarks() {
                 </div>
 
                 {/* Main List */}
-                <div className="space-y-4">
+                <div className="space-y-2">
                     {isLoading ? (
                         <RemarkSkeleton />
                     ) : filteredRemarks.length === 0 ? (

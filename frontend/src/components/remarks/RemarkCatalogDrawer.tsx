@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useCallback } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { remarkApi, type CatalogItem } from "@/api/remarkService"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -17,6 +18,13 @@ import {
     DialogTitle,
     DialogFooter,
 } from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -40,6 +48,7 @@ interface RemarkCatalogDrawerProps {
 export function RemarkCatalogDrawer({ open, onOpenChange, locomotiveId }: RemarkCatalogDrawerProps) {
     const queryClient = useQueryClient()
     const searchRef = useRef<HTMLInputElement>(null)
+    const parentRef = useRef<HTMLDivElement>(null)
 
     // State
     const [searchQuery, setSearchQuery] = useState("")
@@ -87,6 +96,14 @@ export function RemarkCatalogDrawer({ open, onOpenChange, locomotiveId }: Remark
 
         return items
     }, [catalogItems, activeCategory, searchQuery])
+
+    // Virtualizer
+    const virtualizer = useVirtualizer({
+        count: filteredItems.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize: () => 72, // Estimated height of a single item button + spacing
+        overscan: 5,
+    })
 
     // Mutation
     const addMutation = useMutation({
@@ -199,42 +216,45 @@ export function RemarkCatalogDrawer({ open, onOpenChange, locomotiveId }: Remark
                         </div>
                     </div>
 
-                    {/* Category chips - Multi-line (all visible) */}
+                    {/* Category selection */}
                     <div className="px-5 pb-4 border-b border-slate-50 bg-slate-50/50 pt-2">
-                        <div className="flex flex-wrap gap-1.5">
-                            <button
-                                onClick={() => setActiveCategory(null)}
-                                className={cn(
-                                    "shrink-0 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-all border",
-                                    !activeCategory
-                                        ? "bg-slate-900 text-white border-slate-900 shadow-sm"
-                                        : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
-                                )}
-                            >
-                                ВСЕ ({catalogItems.length})
-                            </button>
-                            {categories.map(cat => (
-                                <button
-                                    key={cat.name}
-                                    onClick={() => setActiveCategory(activeCategory === cat.name ? null : cat.name)}
-                                    className={cn(
-                                        "shrink-0 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-all border whitespace-nowrap",
-                                        activeCategory === cat.name
-                                            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
-                                            : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
-                                    )}
-                                >
-                                    {cat.name.toUpperCase()} ({cat.count})
-                                </button>
-                            ))}
-                        </div>
+                        <Select 
+                            value={activeCategory || "all"} 
+                            onValueChange={(val) => setActiveCategory(val === "all" ? null : val)}
+                        >
+                            <SelectTrigger className="w-full bg-white">
+                                <SelectValue placeholder="Выберите категорию" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">ВСЕ ({catalogItems.length})</SelectItem>
+                                {categories.map(cat => (
+                                    <SelectItem key={cat.name} value={cat.name}>
+                                        {cat.name.toUpperCase()} ({cat.count})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     {/* Items list */}
-                    <div className="flex-1 overflow-y-auto px-5 pb-24">
+                    <div ref={parentRef} className="flex-1 overflow-y-auto px-5 pb-24">
                         {isLoading ? (
-                            <div className="flex items-center justify-center py-20">
-                                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                            <div className="space-y-[6px]">
+                                {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                                    <div key={i} className="w-full flex items-start gap-3 p-3 rounded-xl border bg-white border-slate-100">
+                                        <div className="mt-0.5 w-5 h-5 rounded-md border-2 shrink-0 border-slate-100 bg-slate-50 animate-pulse"></div>
+                                        <div className="flex-1 min-w-0 space-y-2 py-0.5">
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-3 w-12 bg-slate-100 rounded animate-pulse"></div>
+                                                <div className="h-4 w-20 bg-slate-100 rounded-full animate-pulse"></div>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <div className="h-3.5 w-full bg-slate-100 rounded animate-pulse"></div>
+                                                <div className="h-3.5 w-2/3 bg-slate-100 rounded animate-pulse"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         ) : filteredItems.length === 0 ? (
                             <div className="text-center py-16 text-slate-400">
@@ -242,54 +262,70 @@ export function RemarkCatalogDrawer({ open, onOpenChange, locomotiveId }: Remark
                                 <p className="text-sm">Ничего не найдено</p>
                             </div>
                         ) : (
-                            <div className="space-y-1.5">
-                                {filteredItems.map(item => {
+                            <div
+                                className="relative w-full"
+                                style={{ height: `${virtualizer.getTotalSize()}px` }}
+                            >
+                                {virtualizer.getVirtualItems().map(virtualItem => {
+                                    const item = filteredItems[virtualItem.index]
                                     const isSelected = selectedIds.has(item.id)
                                     const displayText = customTexts[item.id] || item.description_ru || item.description_en || ""
 
                                     return (
-                                        <button
-                                            key={item.id}
-                                            onClick={() => toggleItem(item)}
-                                            className={cn(
-                                                "w-full text-left flex items-start gap-3 p-3 rounded-xl transition-all border",
-                                                isSelected
-                                                    ? "bg-emerald-50 border-emerald-200"
-                                                    : "bg-white border-slate-100 hover:bg-slate-50 hover:border-slate-200"
-                                            )}
+                                        <div
+                                            key={virtualItem.key}
+                                            style={{
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                width: '100%',
+                                                height: `${virtualItem.size}px`,
+                                                transform: `translateY(${virtualItem.start}px)`,
+                                                paddingBottom: '6px' // space-y-1.5 equivalent
+                                            }}
                                         >
-                                            <div className={cn(
-                                                "mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors",
-                                                isSelected
-                                                    ? "bg-emerald-600 border-emerald-600"
-                                                    : "border-slate-300"
-                                            )}>
-                                                {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
-                                            </div>
-
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-0.5">
-                                                    <span className="text-[10px] font-mono font-bold text-slate-400">
-                                                        {item.code}
-                                                    </span>
-                                                    {!activeCategory && (
-                                                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-medium text-slate-400 border-slate-200">
-                                                            {item.category}
-                                                        </Badge>
-                                                    )}
-                                                    {item.has_placeholder && (
-                                                        <Hash className="w-3 h-3 text-amber-500" />
-                                                    )}
+                                            <button
+                                                onClick={() => toggleItem(item)}
+                                                className={cn(
+                                                    "w-full h-full text-left flex items-start gap-3 p-3 rounded-xl transition-all border",
+                                                    isSelected
+                                                        ? "bg-emerald-50 border-emerald-200"
+                                                        : "bg-white border-slate-100 hover:bg-slate-50 hover:border-slate-200"
+                                                )}
+                                            >
+                                                <div className={cn(
+                                                    "mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors",
+                                                    isSelected
+                                                        ? "bg-emerald-600 border-emerald-600"
+                                                        : "border-slate-300"
+                                                )}>
+                                                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
                                                 </div>
-                                                <p className="text-sm text-slate-800 leading-snug">
-                                                    {displayText}
-                                                </p>
-                                            </div>
 
-                                            {item.has_placeholder && !isSelected && (
-                                                <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 mt-1" />
-                                            )}
-                                        </button>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                        <span className="text-[10px] font-mono font-bold text-slate-400">
+                                                            {item.code}
+                                                        </span>
+                                                        {!activeCategory && (
+                                                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-medium text-slate-400 border-slate-200">
+                                                                {item.category}
+                                                            </Badge>
+                                                        )}
+                                                        {item.has_placeholder && (
+                                                            <Hash className="w-3 h-3 text-amber-500" />
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-slate-800 leading-snug line-clamp-2">
+                                                        {displayText}
+                                                    </p>
+                                                </div>
+
+                                                {item.has_placeholder && !isSelected && (
+                                                    <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 mt-1" />
+                                                )}
+                                            </button>
+                                        </div>
                                     )
                                 })}
                             </div>
