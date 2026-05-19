@@ -11,9 +11,9 @@ const profileController = {
     updatePassword: async (req, res) => {
         const { currentPassword, newPassword } = req.body;
 
-        // In many recovery scenarios (Magic Link, Reset Password link), 
-        // the user might not have/know their "current" password.
-        const isRecoveryFlow = req.headers['x-auth-recovery'] === 'true';
+        // Recovery flow is only valid when the server session was explicitly
+        // set during a Supabase password recovery callback — not via a client header.
+        const isRecoveryFlow = req.session && req.session.is_recovery === true;
 
         if (!newPassword || newPassword.length < 4) {
             return res.status(400).json({ error: 'Новый пароль должен быть минимум 4 символа' });

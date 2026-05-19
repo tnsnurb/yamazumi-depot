@@ -58,5 +58,5 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`🚂 Yamazumi Depot Server running at http://localhost:${PORT}`);
-    console.log(`📦 Database: Supabase (${process.env.SUPABASE_URL})`);
+    console.log(`📦 Database: Supabase (connected)`);
 });

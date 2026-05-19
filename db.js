@@ -1,5 +1,9 @@
 require('dotenv').config();
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+// TLS bypass only in development (e.g., behind corporate proxies like Cisco Umbrella)
+if (process.env.NODE_ENV === 'development') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
 const { createClient } = require('@supabase/supabase-js');
 
 const supabaseUrl = process.env.SUPABASE_URL;

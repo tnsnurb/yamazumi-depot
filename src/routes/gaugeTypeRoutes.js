@@ -2,7 +2,19 @@ const express = require('express');
 const router = express.Router();
 const gaugeTypeController = require('../controllers/gaugeTypeController');
 const { requireAuth, requireAdmin } = require('../middlewares/auth');
-const upload = require('multer')({ storage: require('multer').memoryStorage() });
+const path = require('path');
+const upload = require('multer')({
+    storage: require('multer').memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowed = /jpeg|jpg|png|gif|webp|heic/;
+        if (allowed.test(path.extname(file.originalname).toLowerCase())) {
+            cb(null, true);
+        } else {
+            cb(new Error('Недопустимый формат файла'));
+        }
+    }
+});
 
 // Все маршруты справочника требуют авторизации
 router.get('/', requireAuth, gaugeTypeController.getAll);

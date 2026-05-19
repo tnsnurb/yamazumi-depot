@@ -2,10 +2,22 @@ const express = require('express');
 const multer = require('multer');
 const ExcelJS = require('exceljs');
 const supabase = require('../../db');
-const { requireAuth, requireAdmin } = require('../middlewares/auth');
+const { requireAuth, requireAdmin, requirePermission } = require('../middlewares/auth');
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const path = require('path');
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    fileFilter: (req, file, cb) => {
+        const allowed = /jpeg|jpg|png|gif|webp|heic|xlsx|xls/;
+        if (allowed.test(path.extname(file.originalname).toLowerCase())) {
+            cb(null, true);
+        } else {
+            cb(new Error('Недопустимый формат файла'));
+        }
+    }
+});
 
 async function incrementUserPoints(userId, amount) {
     try {
@@ -112,7 +124,7 @@ router.post('/templates', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // 4. Update template items manually
-router.put('/templates/:id/items', requireAuth, async (req, res) => {
+router.put('/templates/:id/items', requireAuth, requireAdmin, async (req, res) => {
     const templateId = req.params.id;
     const items = req.body.items;
 
@@ -151,7 +163,7 @@ router.put('/templates/:id/items', requireAuth, async (req, res) => {
 });
 
 // 5. Import from Excel
-router.post('/templates/:id/import', requireAuth, upload.single('file'), async (req, res) => {
+router.post('/templates/:id/import', requireAuth, requireAdmin, upload.single('file'), async (req, res) => {
     const templateId = req.params.id;
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
@@ -226,7 +238,7 @@ router.post('/templates/:id/import', requireAuth, upload.single('file'), async (
 });
 
 // 6. Delete template
-router.delete('/templates/:id', requireAuth, async (req, res) => {
+router.delete('/templates/:id', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { error } = await supabase
             .from('checklist_templates')
@@ -375,7 +387,7 @@ router.get('/locomotive/:locomotiveId', requireAuth, async (req, res) => {
 });
 
 // Bulk complete multiple checklist instances
-router.post('/instances/bulk-complete', requireAuth, async (req, res) => {
+router.post('/instances/bulk-complete', requireAuth, requirePermission('can_complete_checklist'), async (req, res) => {
     const { instanceIds } = req.body;
     const userId = req.session.user.id;
 
@@ -430,7 +442,7 @@ router.post('/instances/bulk-complete', requireAuth, async (req, res) => {
 });
 
 // Bulk complete items in a checklist
-router.patch('/items/complete-batch', requireAuth, async (req, res) => {
+router.patch('/items/complete-batch', requireAuth, requirePermission('can_complete_checklist'), async (req, res) => {
     const { itemIds, is_completed } = req.body;
     const userId = req.session.user.id;
 
@@ -573,7 +585,7 @@ router.patch('/items/:id/complete', requireAuth, async (req, res) => {
 });
 
 // Verify item (Master role usually)
-router.patch('/items/:id/verify', requireAuth, async (req, res) => {
+router.patch('/items/:id/verify', requireAuth, requirePermission('can_verify_checklist'), async (req, res) => {
     try {
         const itemId = req.params.id;
         const { is_verified } = req.body;
@@ -612,7 +624,7 @@ router.patch('/items/:id/verify', requireAuth, async (req, res) => {
 });
 
 // Reject item (Master returns to worker)
-router.put('/items/:id/reject', requireAuth, async (req, res) => {
+router.put('/items/:id/reject', requireAuth, requirePermission('can_verify_checklist'), async (req, res) => {
     try {
         const itemId = req.params.id;
         const { comment } = req.body;

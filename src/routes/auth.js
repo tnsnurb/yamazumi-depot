@@ -2,10 +2,28 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
 const supabase = require('../../db');
 const { requireAuth } = require('../middlewares/auth');
 
 const router = express.Router();
+
+// Rate Limiters for auth endpoints (Brute-force protection)
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 минут
+    max: 10,                  // максимум 10 попыток
+    message: { error: 'Слишком много попыток входа. Попробуйте через 15 минут.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+const profileLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { error: 'Слишком много попыток. Попробуйте через 15 минут.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
 
 // Multer Setup for Avatar Uploads
 const storage = multer.memoryStorage();
@@ -39,7 +57,7 @@ router.get('/me', (req, res) => {
 });
 
 // POST /api/login/terminal
-router.post('/login/terminal', async (req, res) => {
+router.post('/login/terminal', loginLimiter, async (req, res) => {
     try {
         const { username, pin_code } = req.body;
 
@@ -93,7 +111,7 @@ router.post('/login/terminal', async (req, res) => {
 });
 
 // POST /api/login (Supabase Auth handler)
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     const { token, user } = req.body;
     console.log(`[DEBUG] /api/login attempt for user: ${user?.email || user?.id}`);
 
@@ -156,16 +174,11 @@ router.post('/login', async (req, res) => {
 
 // POST /api/logout
 router.post('/logout', (req, res) => {
-    const user = req.session.user ? req.session.user.username : 'Unknown';
-    req.session.destroy(err => {
-        if (err) {
-            console.error("Session destroy error:", err);
-            return res.status(500).json({ error: 'Could not log out' });
-        }
-        res.clearCookie('connect.sid');
-        console.log(`[AUTH] User ${user} logged out`);
-        return res.status(200).json({ message: 'Logged out successfully' });
-    });
+    const user = req.session && req.session.user ? req.session.user.username : 'Unknown';
+    req.session = null; // cookie-session uses null assignment instead of destroy()
+    res.clearCookie('session');
+    console.log(`[AUTH] User ${user} logged out`);
+    return res.status(200).json({ message: 'Logged out successfully' });
 });
 
 // Switch active location (for Global Admins)
@@ -231,13 +244,13 @@ router.post('/profile/avatar', requireAuth, upload.single('avatar'), async (req,
 });
 
 // Update own profile (PIN code, password)
-router.put('/profile', requireAuth, async (req, res) => {
+router.put('/profile', requireAuth, profileLimiter, async (req, res) => {
     const userId = req.session.user.id;
     const { password, pin_code } = req.body;
 
     const updates = {};
     if (password) updates.password = bcrypt.hashSync(password, 10);
-    if (pin_code !== undefined) updates.pin_code = pin_code || null; // allow clearing PIN
+    if (pin_code !== undefined) updates.pin_code = pin_code ? bcrypt.hashSync(pin_code, 10) : null;
 
     if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'Нет данных для обновления' });
@@ -279,8 +292,7 @@ router.get('/public/users', async (req, res) => {
                 username,
                 full_name,
                 role,
-                avatar_url,
-                email
+                avatar_url
             `)
             .order('full_name', { ascending: true });
 
@@ -302,7 +314,7 @@ router.get('/public/users', async (req, res) => {
 });
 
 // POST /api/login/barcode
-router.post('/login/barcode', async (req, res) => {
+router.post('/login/barcode', loginLimiter, async (req, res) => {
     const { barcode } = req.body;
     if (!barcode) return res.status(400).json({ error: 'Штрих-код обязателен' });
 

@@ -13,7 +13,6 @@ router.get('/public', async (req, res) => {
             id,
             username,
             full_name,
-            email,
             role,
             avatar_url
         `)

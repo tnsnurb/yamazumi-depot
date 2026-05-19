@@ -333,7 +333,26 @@ const gaugeController = {
   updateGauge: async (req, res) => {
     try {
       const { id } = req.params;
-      const updates = req.body;
+      
+      // Whitelist: только разрешённые поля (защита от Mass Assignment)
+      const { serial_number, type_id, last_verification, next_verification, 
+              is_defective, status, locomotive_id, photo_url, certificate_url, location_id } = req.body;
+      
+      const updates = {};
+      if (serial_number !== undefined) updates.serial_number = serial_number;
+      if (type_id !== undefined) updates.type_id = type_id;
+      if (last_verification !== undefined) updates.last_verification = last_verification;
+      if (next_verification !== undefined) updates.next_verification = next_verification;
+      if (is_defective !== undefined) updates.is_defective = is_defective;
+      if (status !== undefined) updates.status = status;
+      if (locomotive_id !== undefined) updates.locomotive_id = locomotive_id;
+      if (photo_url !== undefined) updates.photo_url = photo_url;
+      if (certificate_url !== undefined) updates.certificate_url = certificate_url;
+      if (location_id !== undefined) updates.location_id = location_id;
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'Нет данных для обновления' });
+      }
 
       // Получаем предыдущее состояние для истории
       const { data: previousGauge } = await supabase
