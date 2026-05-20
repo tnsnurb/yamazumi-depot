@@ -25,7 +25,11 @@ module.exports = function(app) {
 
     // 2. CORS configuration (Белый список)
     const allowedOrigins = process.env.NODE_ENV === 'production' 
-        ? [process.env.FRONTEND_URL || 'https://ваш-домен.com'] // Укажите тут ваш реальный домен
+        ? [
+            process.env.FRONTEND_URL, 
+            'https://yamazumi.tech', 
+            'https://www.yamazumi.tech'
+          ].filter(Boolean)
         : ['http://localhost:5173', 'http://localhost:3000']; // Разрешаем локальную разработку
 
     app.use(cors({
@@ -34,7 +38,8 @@ module.exports = function(app) {
             if (!origin || allowedOrigins.includes(origin)) {
                 callback(null, true);
             } else {
-                callback(new Error('Not allowed by CORS'));
+                // Возвращаем false вместо new Error, чтобы не вызывать 500 ошибку сервера
+                callback(null, false);
             }
         },
         credentials: true // Важно для работы cookie-session
