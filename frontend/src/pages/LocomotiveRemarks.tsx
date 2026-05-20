@@ -68,11 +68,7 @@ export default function LocomotiveRemarks() {
 
     const { data: remarks = [], isLoading, isFetching, refetch } = useQuery<Remark[]>({
         queryKey: ['remarks', locomotiveId],
-        queryFn: async () => {
-            // Artificial delay to show the beautiful skeleton loader
-            await new Promise(resolve => setTimeout(resolve, 800))
-            return remarkApi.getByLocomotiveId(locomotiveId!)
-        },
+        queryFn: () => remarkApi.getByLocomotiveId(locomotiveId!),
         enabled: !!locomotiveId
     })
 
@@ -85,7 +81,8 @@ export default function LocomotiveRemarks() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
             toast.success("Все замечания отмечены как выполненные")
-        }
+        },
+        onError: () => toast.error("Ошибка при массовом выполнении")
     })
 
     const manualAddMutation = useMutation({
@@ -105,7 +102,8 @@ export default function LocomotiveRemarks() {
             queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
             setRejectDialog(null)
             toast.success("Замечание отклонено")
-        }
+        },
+        onError: () => toast.error("Ошибка при отклонении замечания")
     })
 
     // --- DERIVED DATA ---
@@ -170,6 +168,7 @@ export default function LocomotiveRemarks() {
                         <Button
                             onClick={() => exportRemarksToExcel(remarks, locomotive!, 'all')}
                             variant="outline"
+                            disabled={!locomotive}
                             className="bg-white border-slate-200 h-11 px-3 md:px-4 shrink-0"
                             title="Экспорт в Excel"
                         >
@@ -179,6 +178,7 @@ export default function LocomotiveRemarks() {
                         <Button
                             onClick={() => exportRemarksToPDF(remarks, locomotive!, 'all')}
                             variant="outline"
+                            disabled={!locomotive}
                             className="bg-white border-slate-200 h-11 px-3 md:px-4 shrink-0"
                             title="Экспорт в PDF"
                         >
@@ -188,28 +188,6 @@ export default function LocomotiveRemarks() {
                     </div>
                 </div>
 
-                {/* 
-                <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-white border border-slate-200 p-5 rounded-2xl">
-                        <div className="text-slate-500 text-xs font-medium mb-1">Всего замечаний</div>
-                        <div className="text-3xl font-semibold text-slate-900">{stats.total}</div>
-                    </div>
-                    <div className="bg-white border border-slate-200 p-5 rounded-2xl">
-                        <div className="text-slate-500 text-xs font-medium mb-1">Выполнено</div>
-                        <div className="text-3xl font-semibold text-emerald-600">{stats.done}</div>
-                    </div>
-                    <div className="bg-white border border-slate-200 p-5 rounded-2xl">
-                        <div className="text-slate-500 text-xs font-medium mb-1">В работе</div>
-                        <div className="text-3xl font-semibold text-amber-600">{stats.pending}</div>
-                    </div>
-                    <div className="bg-white border border-slate-200 p-5 rounded-2xl">
-                        <div className="text-slate-500 text-xs font-medium mb-1">Прогресс</div>
-                        <div className="text-3xl font-semibold text-slate-900">
-                            {stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0}%
-                        </div>
-                    </div>
-                </div>
-                */}
 
                 <div className="bg-white border border-slate-200 p-4 rounded-2xl mb-6 flex flex-col md:flex-row items-center gap-4">
                     <div className="relative flex-1 w-full">

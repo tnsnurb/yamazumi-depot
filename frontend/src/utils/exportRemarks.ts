@@ -2,6 +2,20 @@ import type { Remark } from '../types/remark';
 import type { Locomotive } from '../types/locomotive';
 
 /**
+ * Escape HTML entities to prevent XSS in generated HTML documents
+ */
+function escapeHtml(text: string): string {
+    const map: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+/**
  * Exports remarks to an Excel file using exceljs
  */
 export const exportRemarksToExcel = async (
@@ -73,7 +87,7 @@ export const exportRemarksToPDF = (
     if (filter === 'incomplete') filteredData = data.filter(r => !r.is_completed);
 
     const filterTitle = filter === 'all' ? 'Все замечания' : filter === 'completed' ? 'Выполненные' : 'Невыполненные';
-    const locoNum = locomotive?.number || '';
+    const locoNum = escapeHtml(locomotive?.number || '');
 
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Замечания ${locoNum}</title>
@@ -97,7 +111,7 @@ export const exportRemarksToPDF = (
   @media print { body { padding: 10px; } }
 </style></head><body>
 <h1>Наряд-Задание (Замечания) — Локомотив #${locoNum}</h1>
-<div class="subtitle">${filterTitle} • ${new Date().toLocaleDateString('ru-RU')} • Всего: ${filteredData.length}</div>
+<div class="subtitle">${escapeHtml(filterTitle)} • ${new Date().toLocaleDateString('ru-RU')} • Всего: ${filteredData.length}</div>
 <table>
   <thead><tr>
     <th style="width:30px">№</th>
@@ -116,10 +130,10 @@ export const exportRemarksToPDF = (
           ${r.priority === 'high' ? 'Высокий' : r.priority === 'low' ? 'Низкий' : 'Средний'}
         </span>
       </td>
-      <td class="${r.is_completed ? 'completed' : ''}">${r.text}</td>
-      <td><span class="category">${r.category || 'Без категории'}</span></td>
+      <td class="${r.is_completed ? 'completed' : ''}">${escapeHtml(r.text)}</td>
+      <td><span class="category">${escapeHtml(r.category || 'Без категории')}</span></td>
       <td class="${r.is_completed ? 'status-done' : 'status-open'}">${r.is_completed ? '✓ Выполнено' : '○ Открыто'}</td>
-      <td>${r.is_completed && r.completed_by ? r.completed_by.full_name : '—'}</td>
+      <td>${r.is_completed && r.completed_by ? escapeHtml(r.completed_by.full_name) : '—'}</td>
       <td>${r.completed_at ? new Date(r.completed_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
     </tr>`).join('')}
   </tbody>

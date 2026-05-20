@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import type { Remark, RemarkComment, RemarkPhoto, RemarkHistory, CreateRemarkDTO } from '../types/remark';
+import type { Remark, RemarkComment, RemarkPhoto, RemarkHistoryEntry, CreateRemarkDTO } from '../types/remark';
 
 export const remarkApi = {
     /**
@@ -18,14 +18,14 @@ export const remarkApi = {
      * Bulk create remarks from text lines
      */
     bulkCreate: (locomotiveId: string | number, texts: string[]) =>
-        apiClient.post<any>(`/api/locomotives/${locomotiveId}/remarks/bulk`, { texts }),
+        apiClient.post<Remark[]>(`/api/locomotives/${locomotiveId}/remarks/bulk`, { texts }),
 
     /**
      * Add multiple remarks from templates
      */
     addFromTemplates: (locomotiveId: string | number, templateIds: number[]) =>
         Promise.all(templateIds.map(templateId => 
-            apiClient.post<any>(`/api/locomotives/${locomotiveId}/remarks/template`, { template_id: templateId })
+            apiClient.post<Remark>(`/api/locomotives/${locomotiveId}/remarks/template`, { template_id: templateId })
         )),
 
     /**
@@ -82,7 +82,8 @@ export const remarkApi = {
     uploadPhoto: (remarkId: string, formData: FormData) =>
         fetch(`/api/remarks/${remarkId}/photos`, {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'include'
         }).then(res => {
             if (!res.ok) throw new Error('Photo upload failed');
             return res.json();
@@ -92,7 +93,7 @@ export const remarkApi = {
      * Get history log for a remark
      */
     getHistory: (remarkId: string) =>
-        apiClient.get<RemarkHistory[]>(`/api/remarks/${remarkId}/history`),
+        apiClient.get<RemarkHistoryEntry[]>(`/api/remarks/${remarkId}/history`),
 
     /**
      * General update for remark fields

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useRef, useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { remarkApi } from "@/api/remarkService"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,16 @@ export function RemarkPhotos({ remarkId }: RemarkPhotosProps) {
     const queryClient = useQueryClient()
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [isPreviewOpen, setIsPreviewOpen] = useState<string | null>(null)
+
+    // Close preview on Escape key
+    useEffect(() => {
+        if (!isPreviewOpen) return
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsPreviewOpen(null)
+        }
+        document.addEventListener('keydown', handler)
+        return () => document.removeEventListener('keydown', handler)
+    }, [isPreviewOpen])
 
     const { data: photos = [], isLoading } = useQuery({
         queryKey: ['remark-photos', remarkId],

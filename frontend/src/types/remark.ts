@@ -19,7 +19,7 @@ export interface RemarkPhoto {
     user_id: RemarkUser | null;
 }
 
-export interface RemarkHistory {
+export interface RemarkHistoryEntry {
     id: string;
     action: string;
     details: string;

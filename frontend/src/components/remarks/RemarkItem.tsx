@@ -67,7 +67,8 @@ export function RemarkItem({ remark, locomotiveId, onReject }: RemarkItemProps) 
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['remarks', locomotiveId] })
             toast.success("Замечание принято")
-        }
+        },
+        onError: () => toast.error("Ошибка при проверке замечания")
     })
 
     const handlePriorityChange = (priority: "low" | "medium" | "high") => {

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { remarkApi } from "@/api/remarkService"
-import type { RemarkHistory } from "@/types/remark"
+import type { RemarkHistoryEntry } from "@/types/remark"
 import { History, GitCommit } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 

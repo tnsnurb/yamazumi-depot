@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { Search, ChevronRight, Train, MessageSquare } from "lucide-react"
 import { Link } from "react-router-dom"
-import { toast } from "sonner"
 import {
     Item,
     ItemGroup,
@@ -26,28 +26,16 @@ interface ActiveRemarkStat {
 }
 
 export default function ActiveRemarks() {
-    const [stats, setStats] = useState<ActiveRemarkStat[]>([])
-    const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
 
-    useEffect(() => {
-        fetchActiveRemarks()
-    }, [])
-
-    const fetchActiveRemarks = async () => {
-        try {
-            setIsLoading(true)
-            const res = await fetch('/api/remarks/active')
-            if (res.ok) {
-                const data = await res.json()
-                setStats(data)
-            }
-        } catch (e) {
-            toast.error("Ошибка загрузки замечаний")
-        } finally {
-            setIsLoading(false)
-        }
-    }
+    const { data: stats = [], isLoading } = useQuery<ActiveRemarkStat[]>({
+        queryKey: ['remarks-active-stats'],
+        queryFn: async () => {
+            const res = await fetch('/api/remarks/active', { credentials: 'include' })
+            if (!res.ok) throw new Error('Failed to load active remarks')
+            return res.json()
+        },
+    })
 
     const filtered = stats.filter(s =>
         s.locomotive.number.toLowerCase().includes(searchQuery.toLowerCase()) ||

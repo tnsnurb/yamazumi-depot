@@ -31,7 +31,7 @@ const remarkController = {
                 .from('locomotive_remarks')
                 .select(`
                     *,
-                    locomotive:locomotives(number, location_id),
+                    locomotive:locomotives!inner(number, location_id),
                     assigned_user:users!locomotive_remarks_assigned_to_fkey (full_name, username, specialization),
                     completed_by:users!locomotive_remarks_completed_by_fkey (full_name, username),
                     created_by:users!locomotive_remarks_created_by_fkey (full_name, username)
@@ -45,17 +45,12 @@ const remarkController = {
                 query = query.eq('assigned_to', assigned_to === 'me' ? req.session.user.id : assigned_to);
             }
 
-            const { data: remarks, error } = await query.order('created_at', { ascending: false });
-            if (error) throw error;
-
-            let filteredResults = remarks || [];
-
-            // Filter by location
+            // Filter by location in the DB query instead of JS
             if (!isGlobalAdmin && activeLocationId) {
-                filteredResults = filteredResults.filter(r => r.locomotive?.location_id === activeLocationId);
+                query = query.eq('locomotive.location_id', activeLocationId);
             }
 
-            // Filter by specialization
+            // Filter by specialization categories in the DB query
             if (specialization === 'me') {
                 const userSpec = req.session.user.specialization;
                 const SPECIALIZATION_CATEGORIES = {
@@ -66,11 +61,14 @@ const remarkController = {
                 };
                 const categories = SPECIALIZATION_CATEGORIES[userSpec];
                 if (categories && categories.length > 0) {
-                    filteredResults = filteredResults.filter(r => categories.includes(r.category));
+                    query = query.in('category', categories);
                 }
             }
 
-            res.json(filteredResults);
+            const { data: remarks, error } = await query.order('created_at', { ascending: false });
+            if (error) throw error;
+
+            res.json(remarks || []);
         } catch (err) {
             console.error("API Error:", err);
             res.status(500).json({ error: err.message });
@@ -83,22 +81,29 @@ const remarkController = {
     getActiveStats: async (req, res) => {
         try {
             const locationId = req.session.user.active_location_id;
+            const isGlobalAdmin = req.session.user.is_global_admin;
 
-            const { data: remarks, error } = await supabase
+            let query = supabase
                 .from('locomotive_remarks')
                 .select(`
                     id, is_completed, is_verified,
-                    locomotive:locomotives (id, number, series, location_id),
+                    locomotive:locomotives!inner(id, number, series, location_id),
                     repair_sessions!inner(status)
                 `)
                 .eq('is_completed', false)
                 .eq('repair_sessions.status', 'active');
 
+            // Filter by location in the DB query instead of JS
+            if (!isGlobalAdmin && locationId) {
+                query = query.eq('locomotive.location_id', locationId);
+            }
+
+            const { data: remarks, error } = await query;
             if (error) throw error;
 
             const stats = (remarks || []).reduce((acc, remark) => {
                 const loco = remark.locomotive;
-                if (!loco || (locationId && loco.location_id !== locationId)) return acc;
+                if (!loco) return acc;
 
                 if (!acc[loco.id]) {
                     acc[loco.id] = { locomotive: loco, total_remarks: 0, completed_remarks: 0 };
@@ -490,6 +495,19 @@ const remarkController = {
     reject: async (req, res) => {
         const { comment } = req.body;
         try {
+            // Fetch the remark before resetting to deduct points from the original completer
+            const { data: remarkInfo } = await supabase
+                .from('locomotive_remarks')
+                .select('points, is_completed, completed_by')
+                .eq('id', req.params.id)
+                .maybeSingle();
+
+            // Deduct points from the user who completed it
+            if (remarkInfo && remarkInfo.is_completed && remarkInfo.completed_by) {
+                const points = remarkInfo.points || 10;
+                await incrementUserPoints(remarkInfo.completed_by, -points);
+            }
+
             const { data, error } = await supabase
                 .from('locomotive_remarks')
                 .update({
@@ -513,6 +531,14 @@ const remarkController = {
                     text: comment
                 });
             }
+
+            // Log the rejection in history
+            await supabase.from('remark_history').insert({
+                remark_id: req.params.id,
+                user_id: req.session.user.id,
+                action: 'rejected',
+                details: comment || 'Замечание возвращено в работу'
+            });
 
             res.json(data);
         } catch (err) {
